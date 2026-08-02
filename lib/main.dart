@@ -1,0 +1,79 @@
+// BU Gate2Eat — Main Entry Point
+// Initializes Firebase, SharedPreferences, and launches the app
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'core/constants/app_constants.dart';
+import 'core/providers.dart';
+import 'core/router.dart';
+import 'core/theme/app_theme.dart';
+import 'services/local_storage_service.dart';
+import 'services/seed_data_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Lock orientation to portrait
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Set system UI overlay style
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: AppColors.surface,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
+
+  // Initialize Firebase
+  try {
+    final firebaseApp = await Firebase.initializeApp();
+    debugPrint('🔥 Firebase Initialized Successfully! App Name: ${firebaseApp.name}');
+  } catch (e, stack) {
+    debugPrint('❌ Firebase Initialization Error: $e\n$stack');
+  }
+
+  // Seed sample shop and menu data if database is empty (non-blocking)
+  SeedDataService.seedInitialData().catchError((Object e) {
+    debugPrint('Seed data note: $e');
+  });
+
+  // Initialize local storage
+  final localStorageService = await LocalStorageService.create();
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        // Override the local storage provider with the initialized instance
+        localStorageServiceProvider.overrideWithValue(localStorageService),
+      ],
+      child: const BUGate2EatApp(),
+    ),
+  );
+}
+
+/// Root widget of the BU Gate2Eat application.
+class BUGate2EatApp extends ConsumerWidget {
+  const BUGate2EatApp({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+
+    return MaterialApp.router(
+      title: AppConfig.appName,
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
+      routerConfig: appRouter,
+    );
+  }
+}

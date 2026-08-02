@@ -1,0 +1,55 @@
+name: bugate2eat_app
+description: "BU Gate2Eat — Everything around Bennett. One app. One tap."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.10+1
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+
+  # State Management
+  flutter_riverpod: ^2.5.1
+
+  # Navigation
+  go_router: ^14.2.7
+
+  # Firebase
+  firebase_core: ^3.4.1
+  cloud_firestore: ^5.4.1
+  firebase_storage: ^12.3.0
+
+  # Networking
+  connectivity_plus: ^6.0.5
+
+  # Local Storage
+  shared_preferences: ^2.3.2
+
+  # Utilities
+  intl: ^0.19.0
+  url_launcher: ^6.3.0
+  package_info_plus: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Linting
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/fonts/

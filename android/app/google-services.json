@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "657799719042",
+    "project_id": "bu-gate2eat",
+    "storage_bucket": "bu-gate2eat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:657799719042:android:0a58db10f7be5f05156c9b",
+        "android_client_info": {
+          "package_name": "com.bugate2eat.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0M9efTmOQFzHFxiva7NZcwPuTHJJuB8c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
