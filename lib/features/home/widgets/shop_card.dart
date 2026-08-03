@@ -1,5 +1,5 @@
-// BU Gate2Eat — Modern Shop Card Widget (Variant 3)
-// 16:9 Banner, Floating Status Pill, Operating Hours, Slate Footer with Contact & Pickup Note
+// BU Gate2Eat — Refined Modern Shop Card Widget
+// Compact 2.1:1 Banner, Premium Glass Open Pill (🟢 Open • Till 11:30 PM), Readable Timings, Compact Slate Footer
 
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
@@ -20,7 +20,7 @@ class ShopCard extends StatelessWidget {
     final isOpen = shop.isOpen;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm + 4),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -32,11 +32,11 @@ class ShopCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. 16:9 Shop Banner Image with Floating Status Pill
+            // 1. Banner Image (25% shorter: 2.1 / 1 ratio) with Glass Open Pill
             Stack(
               children: [
                 AspectRatio(
-                  aspectRatio: 16 / 9,
+                  aspectRatio: 2.1 / 1,
                   child: shop.bannerUrl.isNotEmpty
                       ? Image.network(
                           shop.bannerUrl,
@@ -47,20 +47,24 @@ class ShopCard extends StatelessWidget {
                       : _buildPlaceholder(),
                 ),
 
-                // Floating Glassmorphic Status Pill (Top-Left)
+                // Premium Glassmorphic Status Pill (Top-Left)
                 Positioned(
-                  top: 12,
-                  left: 12,
+                  top: 10,
+                  left: 10,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 9,
+                      vertical: 3.5,
                     ),
                     decoration: BoxDecoration(
                       color: isOpen
-                          ? AppColors.vegGreen.withValues(alpha: 0.9)
+                          ? Colors.black.withValues(alpha: 0.55)
                           : AppColors.nonVegRed.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(AppRadius.full),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        width: 0.8,
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.15),
@@ -73,21 +77,23 @@ class ShopCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: isOpen ? AppColors.vegGreen : Colors.white,
                             shape: BoxShape.circle,
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         Text(
-                          isOpen ? 'OPEN' : 'CLOSED',
+                          isOpen
+                              ? 'Open • Till ${shop.closeTime}'
+                              : 'Closed • Opens ${shop.openTime}',
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ],
@@ -97,13 +103,16 @@ class ShopCard extends StatelessWidget {
               ],
             ),
 
-            // 2. Main Content Area
+            // 2. Main Content Area (Compact Spacing)
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: 8,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title Row: Shop Name + Operating Hours
+                  // Title Row: Shop Name + Clock Timings
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -116,6 +125,7 @@ class ShopCard extends StatelessWidget {
                               ?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: const Color(0xFF1F2937),
+                                fontSize: 16,
                               ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -123,23 +133,24 @@ class ShopCard extends StatelessWidget {
                       ),
                       const SizedBox(width: AppSpacing.sm),
 
-                      // Operating Hours Badge
+                      // Clock Timings Badge
                       Row(
                         children: [
                           const Icon(
                             Icons.schedule,
-                            size: 14,
+                            size: 13,
                             color: AppColors.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${shop.openTime} - ${shop.closeTime}',
+                            '${shop.openTime} – ${shop.closeTime}',
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall
                                 ?.copyWith(
                                   color: AppColors.textSecondary,
                                   fontWeight: FontWeight.w500,
+                                  fontSize: 11.5,
                                 ),
                           ),
                         ],
@@ -147,13 +158,14 @@ class ShopCard extends StatelessWidget {
                     ],
                   ),
 
-                  // One-line Description
+                  // One-line Description (Exact)
                   if (shop.description.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.xs),
+                    const SizedBox(height: 2),
                     Text(
                       shop.description,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: AppColors.textSecondary,
+                            fontSize: 12,
                           ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -163,12 +175,12 @@ class ShopCard extends StatelessWidget {
               ),
             ),
 
-            // 3. Light Slate Footer Container (Contact & Pickup Note)
+            // 3. Compact Light Slate Footer Container (Contact & Pickup Note)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
+                vertical: 6,
               ),
               decoration: const BoxDecoration(
                 color: Color(0xFFF8FAFC),
@@ -185,7 +197,7 @@ class ShopCard extends StatelessWidget {
                       children: [
                         const Icon(
                           Icons.phone_outlined,
-                          size: 13,
+                          size: 12,
                           color: AppColors.textHint,
                         ),
                         const SizedBox(width: 4),
@@ -194,28 +206,28 @@ class ShopCard extends StatelessWidget {
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: AppColors.textHint,
-                                    fontSize: 11,
+                                    fontSize: 10.5,
                                   ),
                         ),
                       ],
                     ),
 
-                  // Pickup Note Pill
+                  // Pickup Note Pill (Premium Soft Amber)
                   if (shop.deliveryNote.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.sm,
-                        vertical: 3,
+                        vertical: 2.5,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
+                        color: AppColors.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(AppRadius.full),
                       ),
                       child: Row(
                         children: [
                           const Icon(
                             Icons.storefront_outlined,
-                            size: 12,
+                            size: 11,
                             color: AppColors.primary,
                           ),
                           const SizedBox(width: 4),
@@ -226,7 +238,7 @@ class ShopCard extends StatelessWidget {
                                 .bodySmall
                                 ?.copyWith(
                                   color: AppColors.primary,
-                                  fontSize: 11,
+                                  fontSize: 10.5,
                                   fontWeight: FontWeight.w600,
                                 ),
                           ),
@@ -248,10 +260,11 @@ class ShopCard extends StatelessWidget {
       child: const Center(
         child: Icon(
           Icons.storefront_rounded,
-          size: 40,
+          size: 36,
           color: AppColors.textHint,
         ),
       ),
     );
   }
 }
+
