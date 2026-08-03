@@ -6,6 +6,7 @@
 |---|---|
 | **App Version** | `1.0.1+2` |
 | **Current Branch** | `main` |
+| **Latest Commit** | `c4038fd` (`origin/main`) |
 | **Build Status** | ✅ Release APK Working (`BU_Gate2Eat_v1.apk`) |
 | **UI Design System** | ✅ Google Stitch MCP Integrated & Active |
 | **Active Shop Card** | ✅ Variant 3 (Modern Split Row: 16:9 Banner, Floating Open Badge, Timings, Slate Footer) |
