@@ -8,8 +8,9 @@
 | **Current Branch** | `main` |
 | **Latest Commit** | `c4038fd` (`origin/main`) |
 | **Build Status** | ✅ Release APK Working (`BU_Gate2Eat_v1.apk`) |
-| **UI Design System** | ✅ Google Stitch MCP Integrated & Active |
-| **Active Shop Card** | ✅ Variant 3 (Modern Split Row: 16:9 Banner, Floating Open Badge, Timings, Slate Footer) |
+| **UI Design System** | ✅ Google Stitch MCP Integrated & Active (Project `6396413867463778857`) |
+| **Active Shop Card** | ✅ Exact Pixel Replica of Reference Screenshots (Light & Dark modes, 2-line Glass Open Badge `🟢 OPEN / Till 11:30 PM`, Rounded Contact & Pickup Footer Chips, Borderless Search Input) |
+| **Local Web Server** | ✅ Live on `http://localhost:8080` |
 | **Firestore Database** | ✅ Frozen Schema Active & 100% Single Source of Truth (`bu-gate2eat`) |
 | **Static Code Health** | ✅ `flutter analyze` — 0 Errors, 0 Warnings |
 | **Known Blocking Issues** | **None** |

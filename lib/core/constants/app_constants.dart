@@ -19,21 +19,21 @@ class AppColors {
   // Accent
   static const Color accent = Color(0xFFFD79A8);
 
-  // Neutrals
-  static const Color background = Color(0xFFF8F9FD);
+  // Neutrals (matching reference screenshot)
+  static const Color background = Color(0xFFF1F3F9);
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFF1F2F6);
-  static const Color textPrimary = Color(0xFF2D3436);
-  static const Color textSecondary = Color(0xFF636E72);
-  static const Color textHint = Color(0xFFB2BEC3);
-  static const Color divider = Color(0xFFDFE6E9);
+  static const Color surfaceVariant = Color(0xFFEDEFF6);
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color textHint = Color(0xFF94A3B8);
+  static const Color divider = Color(0xFFE2E8F0);
 
-  // Dark mode
-  static const Color darkBackground = Color(0xFF0F0F1A);
-  static const Color darkSurface = Color(0xFF1A1A2E);
-  static const Color darkSurfaceVariant = Color(0xFF252540);
-  static const Color darkTextPrimary = Color(0xFFF5F6FA);
-  static const Color darkTextSecondary = Color(0xFFB2BEC3);
+  // Dark mode (matching reference screenshot)
+  static const Color darkBackground = Color(0xFF0D0E20);
+  static const Color darkSurface = Color(0xFF181832);
+  static const Color darkSurfaceVariant = Color(0xFF222246);
+  static const Color darkTextPrimary = Color(0xFFFFFFFF);
+  static const Color darkTextSecondary = Color(0xFF9EA3C0);
 
   // Semantic
   static const Color success = Color(0xFF00B894);
