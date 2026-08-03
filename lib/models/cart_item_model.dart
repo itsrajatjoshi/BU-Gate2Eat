@@ -20,7 +20,7 @@ class CartItem {
   final String shopName;
 
   /// Total price for this cart item (price × quantity).
-  double get totalPrice => menuItem.price * quantity;
+  double get totalPrice => (menuItem.price * quantity).toDouble();
 
   /// Formatted total price string.
   String get formattedTotalPrice => '₹${totalPrice.toStringAsFixed(0)}';

@@ -11,28 +11,13 @@ import '../../models/shop_model.dart';
 import '../../models/category_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../models/cart_item_model.dart';
-import '../../services/whatsapp_service.dart';
 import '../cart/cart_provider.dart';
 
 /// Provider that fetches shop details by ID.
 final shopDetailProvider =
     FutureProvider.family<Shop?, String>((ref, shopId) async {
-  final firestoreService = ref.read(firestoreServiceProvider);
+  final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.getShop(shopId);
-});
-
-/// Provider that fetches categories for a shop.
-final categoriesProvider =
-    FutureProvider.family<List<Category>, String>((ref, shopId) async {
-  final firestoreService = ref.read(firestoreServiceProvider);
-  return firestoreService.getCategories(shopId);
-});
-
-/// Provider that fetches menu items for a shop.
-final menuItemsProvider =
-    FutureProvider.family<List<MenuItem>, String>((ref, shopId) async {
-  final firestoreService = ref.read(firestoreServiceProvider);
-  return firestoreService.getMenuItems(shopId);
 });
 
 /// Filter state for veg/non-veg.
@@ -61,8 +46,8 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final shopAsync = ref.watch(shopDetailProvider(widget.shopId));
-    final categoriesAsync = ref.watch(categoriesProvider(widget.shopId));
-    final menuItemsAsync = ref.watch(menuItemsProvider(widget.shopId));
+    final categoriesAsync = ref.watch(shopCategoriesProvider(widget.shopId));
+    final menuItemsAsync = ref.watch(shopMenuItemsProvider(widget.shopId));
     final cartItems = ref.watch(cartProvider);
 
     // Count items in cart for badge
@@ -76,38 +61,6 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           loading: () => const Text('Loading...'),
           error: (_, __) => const Text('Shop'),
         ),
-        actions: [
-          // Call button
-          shopAsync.when(
-            data: (shop) {
-              if (shop == null) return const SizedBox.shrink();
-              return IconButton(
-                icon: const Icon(Icons.phone_outlined),
-                onPressed: () =>
-                    WhatsAppService.launchPhoneCall(shop.phoneNumber),
-                tooltip: 'Call shop',
-              );
-            },
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-          ),
-          // WhatsApp button (direct chat, not order)
-          shopAsync.when(
-            data: (shop) {
-              if (shop == null) return const SizedBox.shrink();
-              return IconButton(
-                icon: const Icon(Icons.chat_outlined),
-                onPressed: () => WhatsAppService.launchWhatsApp(
-                  whatsappNumber: shop.whatsappNumber,
-                  message: 'Hi!',
-                ),
-                tooltip: 'WhatsApp',
-              );
-            },
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-          ),
-        ],
       ),
       // Cart FAB
       floatingActionButton: cartItemCount > 0
@@ -117,7 +70,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
               icon: const Icon(Icons.shopping_cart_rounded, color: Colors.white),
               label: Text(
                 '$cartItemCount item${cartItemCount > 1 ? 's' : ''} in cart',
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             )
           : null,
@@ -135,12 +88,12 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
           return Column(
             children: [
-              // Shop header with image
-              if (shop.imageUrl.isNotEmpty)
+              // Shop banner image
+              if (shop.bannerUrl.isNotEmpty)
                 AspectRatio(
                   aspectRatio: 16 / 9,
                   child: Image.network(
-                    shop.imageUrl,
+                    shop.bannerUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
                       color: AppColors.surfaceVariant,
@@ -150,7 +103,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                   ),
                 ),
 
-              // Shop info bar
+              // Shop info section
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Column(
@@ -164,6 +117,16 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                             Theme.of(context).textTheme.bodyMedium?.copyWith(
                                   color: AppColors.textSecondary,
                                 ),
+                      ),
+                    const SizedBox(height: AppSpacing.xs),
+
+                    // Contact Number (plain text display only)
+                    if (shop.contactNumber.isNotEmpty)
+                      Text(
+                        'Contact: ${shop.contactNumber}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.textHint,
+                            ),
                       ),
                     const SizedBox(height: AppSpacing.sm),
 
@@ -196,7 +159,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                           ),
                         ),
                         const SizedBox(width: AppSpacing.sm),
-                        Icon(Icons.access_time_rounded,
+                        const Icon(Icons.access_time_rounded,
                             size: 14, color: AppColors.textHint),
                         const SizedBox(width: AppSpacing.xs),
                         Text(
@@ -237,7 +200,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                     isDense: true,
                   ),
                   onChanged: (value) =>
-                      setState(() => _searchQuery = value),
+                      setState(() => _searchQuery = value.trim().toLowerCase()),
                 ),
               ),
 
@@ -276,7 +239,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
               const SizedBox(height: AppSpacing.sm),
 
-              // Menu items
+              // Menu items list
               Expanded(
                 child: menuItemsAsync.when(
                   loading: () =>
@@ -286,15 +249,13 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                   ),
                   data: (menuItems) {
                     // Apply filters
-                    var filtered = menuItems.where((item) {
-                      // Search filter
+                    final filtered = menuItems.where((item) {
                       if (_searchQuery.isNotEmpty &&
                           !item.name
                               .toLowerCase()
-                              .contains(_searchQuery.toLowerCase())) {
+                              .contains(_searchQuery)) {
                         return false;
                       }
-                      // Veg/Non-Veg filter
                       if (_foodFilter == FoodFilter.veg && !item.isVeg) {
                         return false;
                       }
@@ -503,18 +464,15 @@ class _MenuItemCard extends ConsumerWidget {
                       item.name,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    if (item.description.isNotEmpty)
+                    if (item.details.isNotEmpty)
                       Padding(
-                        padding:
-                            const EdgeInsets.only(top: AppSpacing.xs),
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
                         child: Text(
-                          item.description,
+                          item.details,
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
                               ?.copyWith(color: AppColors.textSecondary),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     const SizedBox(height: AppSpacing.sm),
@@ -527,14 +485,16 @@ class _MenuItemCard extends ConsumerWidget {
                     ),
                     if (!item.isAvailable)
                       Padding(
-                        padding:
-                            const EdgeInsets.only(top: AppSpacing.xs),
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
                         child: Text(
-                          'Currently Unavailable',
+                          'Out of Stock',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
-                              ?.copyWith(color: AppColors.error),
+                              ?.copyWith(
+                                color: AppColors.error,
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                       ),
                   ],
@@ -659,3 +619,4 @@ class _MenuItemCard extends ConsumerWidget {
     }
   }
 }
+

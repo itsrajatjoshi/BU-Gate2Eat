@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## [1.0.1] — 2026-08-03
+
+### Changed & Refactored
+- **Google Stitch Design System & Shop Card Variant 3**:
+  - Integrated Google Stitch MCP (`StitchMCP`) and established BU Gate2Eat Design System.
+  - Implemented modular `ShopCard` widget (`lib/features/home/widgets/shop_card.dart`) based on **Variant 3 (Modern Split Row)**:
+    - 16:9 banner image with top-left floating glassmorphic **OPEN** / **CLOSED** status pill.
+    - Title header row displaying shop name & operational hours (`08:00 AM - 11:30 PM`).
+    - One-line shop description.
+    - Light slate footer container (`#F8FAFC`) grouping non-clickable contact text (`Contact: 8295643910`) and pickup note (`Pickup from Gate 2`).
+    - Zero ratings, zero reviews, zero distance, zero ETA, zero fees, zero call/whatsapp buttons.
+- **Frozen Canonical Firestore Database Schema**:
+  - `shops`: `name`, `description`, `bannerUrl`, `contactNumber`, `orderNumber`, `openTime`, `closeTime`, `isClosedOverride`, `isActive`, `sortOrder`, `searchKeywords`, `deliveryNote`, `createdAt`, `updatedAt`.
+  - `categories`: `name`, `sortOrder`.
+  - `menuItems`: `name`, `details`, `price` (as integer), `imageUrl`, `categoryId`, `isVeg`, `isAvailable`, `isRecommended`, `sortOrder`.
+- **100% Dynamic Data Architecture**: Removed all hardcoded fallback mock arrays from `FirestoreService`.
+- **Offline Persistence & Riverpod Caching**: Enabled `FirebaseFirestore.instance.settings = Settings(persistenceEnabled: true)` and created cached Riverpod providers (`shopsProvider`, `shopCategoriesProvider`, `shopMenuItemsProvider`, `recommendedMenuItemsProvider`).
+- **UI & Shop Detail Refinement**:
+  - Added **"You may also like"** recommendation section in Cart Screen for same-shop items (`isRecommended == true`).
+
 ## [1.0.0] — 2026-08-01
 
 ### Added
@@ -21,4 +41,5 @@
 ### Build
 - Generated fresh standalone release APK: `C:\Users\rajat\Downloads\BU_Gate2Eat_v1.apk` (50.9 MB).
 - Tested live on Motorola Edge 60 Fusion.
+
 

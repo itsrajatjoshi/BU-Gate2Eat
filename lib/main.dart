@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/constants/app_constants.dart';
 import 'core/providers.dart';
 import 'core/router.dart';
 import 'core/theme/app_theme.dart';
+import 'firebase_options.dart';
 import 'services/local_storage_service.dart';
 import 'services/seed_data_service.dart';
 
@@ -34,7 +36,9 @@ void main() async {
 
   // Initialize Firebase
   try {
-    final firebaseApp = await Firebase.initializeApp();
+    final firebaseApp = await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     debugPrint('🔥 Firebase Initialized Successfully! App Name: ${firebaseApp.name}');
   } catch (e, stack) {
     debugPrint('❌ Firebase Initialization Error: $e\n$stack');

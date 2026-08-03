@@ -1,15 +1,46 @@
 // BU Gate2Eat — Core Providers
 // Global Riverpod providers for services and shared state
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../models/category_model.dart';
+import '../models/menu_item_model.dart';
+import '../models/shop_model.dart';
 import '../services/firestore_service.dart';
-import '../services/local_storage_service.dart';
 import '../services/force_update_service.dart';
+import '../services/local_storage_service.dart';
 
 /// Provider for the Firestore service (singleton).
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService();
+});
+
+/// Cached provider for fetching active shops list.
+final shopsProvider = FutureProvider<List<Shop>>((ref) async {
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  return firestoreService.getShops();
+});
+
+/// Cached provider for fetching shop categories by shop ID.
+final shopCategoriesProvider =
+    FutureProvider.family<List<Category>, String>((ref, shopId) async {
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  return firestoreService.getCategories(shopId);
+});
+
+/// Cached provider for lazy-loading menu items by shop ID.
+final shopMenuItemsProvider =
+    FutureProvider.family<List<MenuItem>, String>((ref, shopId) async {
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  return firestoreService.getMenuItems(shopId);
+});
+
+/// Cached provider for fetching recommended items for Cart "You may also like".
+final recommendedMenuItemsProvider =
+    FutureProvider.family<List<MenuItem>, String>((ref, shopId) async {
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  return firestoreService.getRecommendedMenuItems(shopId);
 });
 
 /// Provider for the LocalStorage service.
@@ -64,3 +95,4 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
     }
   }
 }
+

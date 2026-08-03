@@ -7,13 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
-import '../../models/shop_model.dart';
-
-/// Provider that fetches and caches the list of shops.
-final shopsProvider = FutureProvider<List<Shop>>((ref) async {
-  final firestoreService = ref.read(firestoreServiceProvider);
-  return firestoreService.getShops();
-});
+import 'widgets/shop_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -54,7 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search shops...',
+                hintText: 'Search shops or food (e.g. momos)...',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -66,7 +60,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       )
                     : null,
               ),
-              onChanged: (value) => setState(() => _searchQuery = value),
+              onChanged: (value) => setState(() => _searchQuery = value.trim().toLowerCase()),
             ),
           ),
 
@@ -115,14 +109,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 );
               },
               data: (shops) {
-                // Filter shops by search query
+                // Filter shops by search query (name or searchKeywords)
                 final filteredShops = _searchQuery.isEmpty
                     ? shops
-                    : shops
-                        .where((shop) => shop.name
-                            .toLowerCase()
-                            .contains(_searchQuery.toLowerCase()))
-                        .toList();
+                    : shops.where((shop) {
+                        final nameMatches = shop.name.toLowerCase().contains(_searchQuery);
+                        final keywordMatches = shop.searchKeywords.any(
+                          (k) => k.toLowerCase().contains(_searchQuery),
+                        );
+                        return nameMatches || keywordMatches;
+                      }).toList();
 
                 if (filteredShops.isEmpty) {
                   return Center(
@@ -138,7 +134,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         Text(
                           _searchQuery.isEmpty
                               ? 'No shops available'
-                              : 'No shops found',
+                              : 'No shops found for "$_searchQuery"',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ],
@@ -157,7 +153,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     itemCount: filteredShops.length,
                     itemBuilder: (context, index) {
                       final shop = filteredShops[index];
-                      return _ShopCard(shop: shop);
+                      return ShopCard(
+                        shop: shop,
+                        onTap: () => context.push('/shop/${shop.id}'),
+                      );
                     },
                   ),
                 );
@@ -170,133 +169,4 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-/// A card widget displaying shop info on the home screen.
-class _ShopCard extends StatelessWidget {
-  final Shop shop;
 
-  const _ShopCard({required this.shop});
-
-  @override
-  Widget build(BuildContext context) {
-    final isOpen = shop.isOpen;
-
-    return Opacity(
-      opacity: isOpen ? 1.0 : 0.5,
-      child: Card(
-        margin: const EdgeInsets.only(bottom: AppSpacing.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => context.push('/shop/${shop.id}'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Shop image
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: shop.imageUrl.isNotEmpty
-                    ? Image.network(
-                        shop.imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: AppColors.surfaceVariant,
-                          child: const Icon(
-                            Icons.store_rounded,
-                            size: 48,
-                            color: AppColors.textHint,
-                          ),
-                        ),
-                      )
-                    : Container(
-                        color: AppColors.surfaceVariant,
-                        child: const Icon(
-                          Icons.store_rounded,
-                          size: 48,
-                          color: AppColors.textHint,
-                        ),
-                      ),
-              ),
-
-              // Shop details
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Name and status
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            shop.name,
-                            style: Theme.of(context).textTheme.titleLarge,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isOpen
-                                ? AppColors.success.withValues(alpha: 0.1)
-                                : AppColors.error.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
-                          ),
-                          child: Text(
-                            isOpen ? 'Open' : 'Closed',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: isOpen
-                                          ? AppColors.success
-                                          : AppColors.error,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-
-                    // Description
-                    if (shop.description.isNotEmpty)
-                      Text(
-                        shop.description,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-
-                    const SizedBox(height: AppSpacing.xs),
-
-                    // Timing
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.access_time_rounded,
-                          size: 14,
-                          color: AppColors.textHint,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        Text(
-                          '${shop.openTime} – ${shop.closeTime}',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textHint,
-                                  ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

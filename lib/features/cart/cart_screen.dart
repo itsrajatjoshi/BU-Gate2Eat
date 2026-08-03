@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/cart_item_model.dart';
+import '../../models/menu_item_model.dart';
 import '../../services/whatsapp_service.dart';
 import 'cart_provider.dart';
 
@@ -32,7 +33,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final localStorage = ref.read(localStorageServiceProvider);
     final shopName = cartItems.first.shopName;
 
-    // Find the shop's WhatsApp number
+    // Find the shop's order number
     final firestoreService = ref.read(firestoreServiceProvider);
     final shop = await firestoreService.getShop(cartItems.first.shopId);
     if (shop == null) {
@@ -43,6 +44,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       }
       return;
     }
+
+    final targetNumber = shop.orderNumber.isNotEmpty
+        ? shop.orderNumber
+        : shop.contactNumber;
 
     // Generate the message
     final message = WhatsAppService.generateOrderMessage(
@@ -55,7 +60,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     // Launch WhatsApp
     final success = await WhatsAppService.launchWhatsApp(
-      whatsappNumber: shop.whatsappNumber,
+      whatsappNumber: targetNumber,
       message: message,
     );
 
@@ -85,6 +90,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     final grandTotal =
         cartItems.fold<double>(0, (sum, item) => sum + item.totalPrice);
+
+    final shopId = cartItems.isNotEmpty ? cartItems.first.shopId : '';
+    final recommendedAsync = shopId.isNotEmpty
+        ? ref.watch(recommendedMenuItemsProvider(shopId))
+        : const AsyncValue<List<MenuItem>>.data([]);
 
     return Scaffold(
       appBar: AppBar(
@@ -141,11 +151,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   ),
                 ),
 
-                // Cart items list
+                // Cart items list & recommendations
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.all(AppSpacing.md),
-                    itemCount: cartItems.length + 1, // +1 for special instructions
+                    itemCount: cartItems.length + 2, // +1 instructions, +1 recommendations
                     itemBuilder: (context, index) {
                       if (index < cartItems.length) {
                         final item = cartItems[index];
@@ -160,25 +170,148 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         );
                       }
 
-                      // Special instructions field
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            'Special Instructions (optional)',
-                            style: Theme.of(context).textTheme.labelLarge,
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          TextField(
-                            controller: _specialInstructionsController,
-                            maxLines: 2,
-                            maxLength: AppConfig.maxSpecialInstructionsLength,
-                            decoration: const InputDecoration(
-                              hintText: 'e.g., Extra spicy, No onion...',
+                      // Index = cartItems.length -> Special instructions field
+                      if (index == cartItems.length) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: AppSpacing.md),
+                            Text(
+                              'Special Instructions (optional)',
+                              style: Theme.of(context).textTheme.labelLarge,
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: AppSpacing.sm),
+                            TextField(
+                              controller: _specialInstructionsController,
+                              maxLines: 2,
+                              maxLength: AppConfig.maxSpecialInstructionsLength,
+                              decoration: const InputDecoration(
+                                hintText: 'e.g., Extra spicy, No onion...',
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+
+                      // Index = cartItems.length + 1 -> "You may also like" section
+                      return recommendedAsync.when(
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (recItems) {
+                          // Filter out items already in cart
+                          final availableRecs = recItems
+                              .where((r) => !cartItems.any((c) => c.menuItem.id == r.id))
+                              .toList();
+
+                          if (availableRecs.isEmpty) return const SizedBox.shrink();
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: AppSpacing.lg),
+                              Text(
+                                'You may also like',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'Recommended items from ${cartItems.first.shopName}',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
+                              ),
+                              const SizedBox(height: AppSpacing.sm),
+                              SizedBox(
+                                height: 130,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: availableRecs.length,
+                                  itemBuilder: (context, rIndex) {
+                                    final recItem = availableRecs[rIndex];
+                                    return Container(
+                                      width: 150,
+                                      margin: const EdgeInsets.only(right: AppSpacing.sm),
+                                      child: Card(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(AppSpacing.sm),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    recItem.name,
+                                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                  if (recItem.details.isNotEmpty)
+                                                    Text(
+                                                      recItem.details,
+                                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                            color: AppColors.textHint,
+                                                            fontSize: 11,
+                                                          ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                ],
+                                              ),
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    recItem.formattedPrice,
+                                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                  ),
+                                                  InkWell(
+                                                    onTap: () {
+                                                      cartNotifier.addItem(
+                                                        recItem,
+                                                        cartItems.first.shopId,
+                                                        cartItems.first.shopName,
+                                                      );
+                                                    },
+                                                    child: Container(
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: AppSpacing.sm,
+                                                        vertical: 4,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: AppColors.primary,
+                                                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                                                      ),
+                                                      child: const Text(
+                                                        'ADD',
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       );
                     },
                   ),
@@ -365,3 +498,4 @@ class _CartItemTile extends StatelessWidget {
     );
   }
 }
+

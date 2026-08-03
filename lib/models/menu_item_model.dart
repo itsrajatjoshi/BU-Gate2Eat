@@ -9,12 +9,13 @@ class MenuItem {
   const MenuItem({
     required this.id,
     required this.name,
-    required this.description,
+    required this.details,
     required this.price,
     required this.imageUrl,
     required this.categoryId,
     required this.isVeg,
     required this.isAvailable,
+    required this.isRecommended,
     required this.sortOrder,
   });
 
@@ -24,40 +25,44 @@ class MenuItem {
     return MenuItem(
       id: doc.id,
       name: (data['name'] as String?) ?? '',
-      description: (data['description'] as String?) ?? '',
-      price: ((data['price'] as num?) ?? 0).toDouble(),
+      details: (data['details'] as String?) ?? (data['description'] as String?) ?? '',
+      price: ((data['price'] as num?) ?? 0).toInt(),
       imageUrl: (data['imageUrl'] as String?) ?? '',
       categoryId: (data['categoryId'] as String?) ?? '',
       isVeg: (data['isVeg'] as bool?) ?? true,
       isAvailable: (data['isAvailable'] as bool?) ?? true,
+      isRecommended: (data['isRecommended'] as bool?) ?? false,
       sortOrder: (data['sortOrder'] as int?) ?? 0,
     );
   }
 
   final String id;
   final String name;
-  final String description;
-  final double price;
+  final String details;
+  final int price;
   final String imageUrl;
   final String categoryId;
   final bool isVeg;
   final bool isAvailable;
+  final bool isRecommended;
   final int sortOrder;
 
   /// Converts MenuItem to a Firestore-compatible map.
   Map<String, dynamic> toFirestore() {
     return {
       'name': name,
-      'description': description,
+      'details': details,
       'price': price,
       'imageUrl': imageUrl,
       'categoryId': categoryId,
       'isVeg': isVeg,
       'isAvailable': isAvailable,
+      'isRecommended': isRecommended,
       'sortOrder': sortOrder,
     };
   }
 
   /// Formatted price string with rupee symbol.
-  String get formattedPrice => '₹${price.toStringAsFixed(0)}';
+  String get formattedPrice => '₹$price';
 }
+
