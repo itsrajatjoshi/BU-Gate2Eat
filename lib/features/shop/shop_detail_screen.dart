@@ -809,13 +809,6 @@ class _MenuItemCard extends ConsumerWidget {
                           : _buildImagePlaceholder(context),
                     ),
                   ),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _buildImagePlaceholder(context),
-                            )
-                          : _buildImagePlaceholder(context),
-                    ),
-                  ),
 
                   // Floating Veg/Non-Veg Badge (Top-Left)
                   Positioned(
