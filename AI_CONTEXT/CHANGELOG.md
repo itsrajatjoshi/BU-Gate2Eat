@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [1.0.2] — 2026-08-07
+
+### Upgraded
+- **Flutter SDK Upgrade**: Upgraded Flutter framework from `3.44.8` to `3.44.9` (Stable Channel).
+- **Shop Card UI**: Design frozen as final per user sign-off (`06_DECISIONS.md`).
+
 ## [1.0.1] — 2026-08-03
 
 ### Changed & Refactored

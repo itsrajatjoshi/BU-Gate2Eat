@@ -24,3 +24,8 @@
 
 6. **Manual Firestore Price Protection**:
    - `SeedDataService` must NEVER overwrite existing Firestore documents or manually edited prices on app startup.
+
+7. **Shop Card UI Layout Frozen**:
+   - `ShopCard` widget (`lib/features/home/widgets/shop_card.dart`) design is 100% final.
+   - No further modifications to Shop Card UI styling, layout, badges, or footer chips without explicit instructions.
+
