@@ -31,16 +31,21 @@ Do not ask me to explain previous work unless documentation is inconsistent.
 
 ## 📌 Handover Log: August 9, 2026 (Antigravity AI Session)
 
-- **Latest Commit Pushed:** `53488b7` (`origin/main`)
+- **Latest Commit Pushed:** `b807ad8` (`origin/main`)
 - **App Version:** `1.0.4`
 - **Completed Today:**
-  1. Generated HD Visual UI/UX mockups for Home, Menu/WhatsApp Cart, and Onboarding screens ([ui_ux_design_concepts.md](file:///C:/Users/rajat/.gemini/antigravity-ide/brain/28da7d16-0fbb-4943-b7b4-14ff0996fcd2/ui_ux_design_concepts.md)).
+  1. Generated HD Visual UI/UX mockups for Home, Menu/WhatsApp Cart, and Onboarding screens.
   2. Implemented pixel-perfect Shop Menu Category Navigation UI in `ShopDetailScreen`:
      - Circular category food dish photographs with labels underneath (`All`, `Momos`, `Pizzas`, `Burgers`, `Biryani`, `Thali`, `Snacks`).
      - Selected state: Orange ring border, orange checkmark badge at top-right, bold orange label text.
      - Sticky pinning behavior: Category navigation pins at top on scroll while menu cards slide underneath using `SliverPersistentHeader(pinned: true)`.
-     - Real-time category filtering: Tapping a category filters menu items dynamically.
-  3. Code Health: `flutter analyze` — 0 Errors, 0 Warnings.
-  4. Web Release Build: Compiled and verified.
-  5. Git: Staged, committed, and pushed to `main` branch on GitHub.
+  3. Implemented Domino's / Swiggy Style Scroll-Spy Category Sync:
+     - Vertical menu list and horizontal category navigation bar are synced in real time using `GlobalKey` offset tracking on section headers.
+     - Auto-detects active category section on scroll and updates top category chip state.
+     - Auto-scrolls top category bar to center active category chip.
+     - Smoothly scrolls main menu list directly to category section header when a top category chip is tapped.
+  4. Tracked complete project files: unignored and pushed [`lib/firebase_options.dart`](file:///d:/app/BUGate2Eat%20App%20v1/lib/firebase_options.dart) and [`pubspec.lock`](file:///d:/app/BUGate2Eat%20App%20v1/pubspec.lock).
+  5. Code Health: `flutter analyze` — 0 Errors, 0 Warnings.
+  6. Web Release Build: Compiled and verified.
+  7. Git: 100% committed and pushed to `main` branch on GitHub (`b807ad8`).
 
