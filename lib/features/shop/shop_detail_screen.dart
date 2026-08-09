@@ -1123,7 +1123,7 @@ class _StickyCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.child,
   });
 
-  static const double _headerHeight = 142.0;
+  static const double _headerHeight = 100.0;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
@@ -1175,227 +1175,100 @@ class _CategoryNavWidget extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const primaryColor = Color(0xFFE65100); // Warm orange matching reference screenshot
 
-    return Column(
-      children: [
-        // Sub-Tab Row: :: ALL | STUDENT REWARDS | OFFERS | EATRIGHT
-        Container(
-          height: 38,
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
-                width: 0.8,
-              ),
-            ),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _SubTabItem(
-                  iconWidget: const Icon(
-                    Icons.apps_rounded,
-                    size: 15,
-                    color: primaryColor,
-                  ),
-                  label: 'ALL',
-                  isSelected: true,
-                  activeColor: primaryColor,
-                ),
-                const SizedBox(width: 16),
-                _SubTabItem(
-                  iconWidget: Icon(
-                    Icons.school_outlined,
-                    size: 15,
-                    color: isDark ? Colors.white60 : Colors.grey[600],
-                  ),
-                  label: 'STUDENT REWARDS',
-                  isSelected: false,
-                ),
-                const SizedBox(width: 16),
-                _SubTabItem(
-                  iconWidget: Icon(
-                    Icons.local_offer_outlined,
-                    size: 15,
-                    color: isDark ? Colors.white60 : Colors.grey[600],
-                  ),
-                  label: 'OFFERS',
-                  isSelected: false,
-                ),
-                const SizedBox(width: 16),
-                _SubTabItem(
-                  iconWidget: Icon(
-                    Icons.favorite_outline_rounded,
-                    size: 15,
-                    color: isDark ? Colors.white60 : Colors.grey[600],
-                  ),
-                  label: 'EATRIGHT',
-                  isSelected: false,
-                ),
-              ],
-            ),
-          ),
-        ),
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      itemCount: categories.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 16),
+      itemBuilder: (context, index) {
+        final cat = categories[index];
+        final isSelected = selectedCategoryId == cat.id;
 
-        // Horizontal Category Photographs Scroll View
-        Expanded(
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            itemCount: categories.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 16),
-            itemBuilder: (context, index) {
-              final cat = categories[index];
-              final isSelected = selectedCategoryId == cat.id;
-
-              return GestureDetector(
-                onTap: () => onCategorySelected(cat.id),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Circular category photo container
-                        Container(
-                          width: 58,
-                          height: 58,
-                          padding: const EdgeInsets.all(2.5),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected
-                                  ? primaryColor
-                                  : Colors.transparent,
-                              width: isSelected ? 2.5 : 0,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: CachedNetworkImage(
-                              imageUrl: cat.imageUrl,
-                              width: 53,
-                              height: 53,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: isDark ? Colors.grey[850] : Colors.grey[200],
-                                child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: isDark ? Colors.grey[850] : Colors.grey[200],
-                                child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // Selected checkmark badge (Orange circle with white check icon at top-right)
-                        if (isSelected)
-                          Positioned(
-                            top: 0,
-                            right: 0,
-                            child: Container(
-                              width: 18,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: primaryColor,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Theme.of(context).scaffoldBackgroundColor,
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.check_rounded,
-                                  size: 11,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-
-                    // Category Name Label
-                    Text(
-                      cat.name,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        return GestureDetector(
+          onTap: () => onCategorySelected(cat.id),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Circular category photo container
+                  Container(
+                    width: 58,
+                    height: 58,
+                    padding: const EdgeInsets.all(2.5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
                         color: isSelected
                             ? primaryColor
-                            : (isDark ? Colors.white70 : Colors.black87),
+                            : Colors.transparent,
+                        width: isSelected ? 2.5 : 0,
                       ),
                     ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
+                    child: ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: cat.imageUrl,
+                        width: 53,
+                        height: 53,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: isDark ? Colors.grey[850] : Colors.grey[200],
+                          child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: isDark ? Colors.grey[850] : Colors.grey[200],
+                          child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                  ),
 
-/// Sub-tab item for top sub-navigation bar
-class _SubTabItem extends StatelessWidget {
-  final Widget iconWidget;
-  final String label;
-  final bool isSelected;
-  final Color? activeColor;
-
-  const _SubTabItem({
-    required this.iconWidget,
-    required this.label,
-    required this.isSelected,
-    this.activeColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final color = isSelected
-        ? (activeColor ?? const Color(0xFFE65100))
-        : (isDark ? Colors.white60 : Colors.grey[600]);
-
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Row(
-          children: [
-            iconWidget,
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                color: color,
-                letterSpacing: 0.3,
+                  // Selected checkmark badge (Orange circle with white check icon at top-right)
+                  if (isSelected)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: primaryColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Theme.of(context).scaffoldBackgroundColor,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.check_rounded,
+                            size: 11,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ),
-          ],
-        ),
-        if (isSelected) ...[
-          const SizedBox(height: 4),
-          Container(
-            height: 2.5,
-            width: 32,
-            decoration: BoxDecoration(
-              color: activeColor ?? const Color(0xFFE65100),
-              borderRadius: BorderRadius.circular(2),
-            ),
+              const SizedBox(height: 6),
+
+              // Category Name Label
+              Text(
+                cat.name,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected
+                      ? primaryColor
+                      : (isDark ? Colors.white70 : Colors.black87),
+                ),
+              ),
+            ],
           ),
-        ],
-      ],
+        );
+      },
     );
   }
 }
