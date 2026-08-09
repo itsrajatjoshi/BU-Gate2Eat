@@ -7,8 +7,10 @@
 | **App Version** | `1.0.4` |
 | **Flutter SDK** | ✅ Upgraded to `3.44.9` (Stable Channel) |
 | **Current Branch** | `main` |
+| **Latest Commit** | `53488b7` (`origin/main`) |
 | **Category Navigation UI** | ✅ Implemented & Pinned Sticky (`ShopDetailScreen`) |
-| **Build Status** | ✅ Web Release Built & Running Live (`http://localhost:8085`) |
+| **Scroll-Spy Sync** | ✅ Domino's / Swiggy Style Auto Scroll & Active Section Highlighting |
+| **Build Status** | ✅ Web Release Built & Running Live (`http://localhost:8089`) |
 | **UI Design System** | ✅ Google Stitch MCP Integrated & Full Spec Created (`DESIGN.md`) |
 | **Active Shop Card** | ✅ Locked & Final (Variant 3 Modern Split Row) |
 | **Firestore Database** | ✅ Frozen Schema Active & 100% Single Source of Truth (`bu-gate2eat`) |

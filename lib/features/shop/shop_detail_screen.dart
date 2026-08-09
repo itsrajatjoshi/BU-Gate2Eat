@@ -37,9 +37,116 @@ class ShopDetailScreen extends ConsumerStatefulWidget {
 
 class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   final _searchController = TextEditingController();
+  final ScrollController _mainScrollController = ScrollController();
+  final ScrollController _categoryScrollController = ScrollController();
+  final Map<String, GlobalKey> _categoryKeys = {};
+
   String _searchQuery = '';
   FoodFilter _foodFilter = FoodFilter.all;
   String _selectedCategoryId = 'all';
+  bool _isManualCategoryTap = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _mainScrollController.addListener(_onMainScroll);
+  }
+
+  @override
+  void dispose() {
+    _mainScrollController.removeListener(_onMainScroll);
+    _mainScrollController.dispose();
+    _categoryScrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  GlobalKey _getCategoryKey(String catId) {
+    return _categoryKeys.putIfAbsent(catId, () => GlobalKey());
+  }
+
+  /// Detects active section on main list scroll and syncs top category tab (Domino's / Zomato style)
+  void _onMainScroll() {
+    if (_isManualCategoryTap || !_mainScrollController.hasClients) return;
+
+    String? newlyVisibleCategory;
+    double minDistance = double.infinity;
+
+    for (final entry in _categoryKeys.entries) {
+      final keyContext = entry.value.currentContext;
+      if (keyContext != null) {
+        final box = keyContext.findRenderObject() as RenderBox?;
+        if (box != null && box.attached) {
+          final position = box.localToGlobal(Offset.zero);
+          final topOffset = position.dy;
+
+          const targetOffset = 220.0;
+          final distance = (topOffset - targetOffset).abs();
+
+          if (topOffset <= targetOffset + 140 && distance < minDistance) {
+            minDistance = distance;
+            newlyVisibleCategory = entry.key;
+          }
+        }
+      }
+    }
+
+    if (newlyVisibleCategory != null && newlyVisibleCategory != _selectedCategoryId) {
+      setState(() {
+        _selectedCategoryId = newlyVisibleCategory!;
+      });
+      _autoScrollCategoryTab(newlyVisibleCategory);
+    }
+  }
+
+  /// Centers the active category chip in top horizontal navigation bar
+  void _autoScrollCategoryTab(String catId) {
+    if (!_categoryScrollController.hasClients) return;
+    final categories = _getEffectiveCategories(widget.shopId, null);
+    final index = categories.indexWhere((c) => c.id == catId);
+    if (index != -1) {
+      const itemWidth = 74.0;
+      final screenWidth = MediaQuery.of(context).size.width;
+      final targetOffset = (index * itemWidth) - (screenWidth / 2) + (itemWidth / 2) + 14;
+      _categoryScrollController.animateTo(
+        targetOffset.clamp(0.0, _categoryScrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  /// Tapping a top category tab smoothly scrolls main menu list to that section
+  void _onCategoryTapped(String catId) {
+    setState(() {
+      _selectedCategoryId = catId;
+    });
+    _autoScrollCategoryTab(catId);
+
+    if (catId == 'all') {
+      _isManualCategoryTap = true;
+      _mainScrollController
+          .animateTo(
+            0,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOut,
+          )
+          .then((_) => _isManualCategoryTap = false);
+      return;
+    }
+
+    final key = _categoryKeys[catId];
+    final keyContext = key?.currentContext;
+    if (keyContext != null) {
+      _isManualCategoryTap = true;
+      Scrollable.ensureVisible(
+        keyContext,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+        alignment: 0.05,
+      ).then((_) => _isManualCategoryTap = false);
+    }
+  }
 
   /// Generates clean data-driven shop categories matching reference screenshots.
   List<Category> _getEffectiveCategories(String shopId, List<Category>? fetched) {
@@ -168,12 +275,6 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   }
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final shopAsync = ref.watch(shopDetailProvider(widget.shopId));
     final categoriesAsync = ref.watch(shopCategoriesProvider(widget.shopId));
@@ -215,6 +316,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           const double expandedHeaderHeight = 160.0;
 
           return CustomScrollView(
+            controller: _mainScrollController,
             physics: const BouncingScrollPhysics(),
             slivers: [
               // Premium Collapsing SliverAppBar
@@ -452,11 +554,8 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                       categoriesAsync.value,
                     ),
                     selectedCategoryId: _selectedCategoryId,
-                    onCategorySelected: (catId) {
-                      setState(() {
-                        _selectedCategoryId = catId;
-                      });
-                    },
+                    onCategorySelected: _onCategoryTapped,
+                    scrollController: _categoryScrollController,
                   ),
                 ),
               ),
@@ -521,48 +620,117 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           return true;
         }).toList();
 
-        // Apply selected category filter
-        if (selectedCategoryId != 'all') {
-          filtered = filtered.where((item) {
+        if (searchQuery.isNotEmpty) {
+          if (filtered.isEmpty) {
+            return [
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Text('No matching items found', style: TextStyle(color: AppColors.textHint)),
+                  ),
+                ),
+              ),
+            ];
+          }
+          return [
+            _buildFlatSliverList(filtered, shop, isOpen, cartItems),
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          ];
+        }
+
+        // Domino's / Zomato style Categorized Sections
+        final effectiveCategories = _getEffectiveCategories(shop.id, categoriesAsync.value);
+        final List<Widget> slivers = [];
+
+        for (final category in effectiveCategories) {
+          if (category.id == 'all') continue;
+
+          final categoryItems = filtered.where((item) {
             final catId = item.categoryId.toLowerCase();
             final nameLower = item.name.toLowerCase();
-            final target = selectedCategoryId.toLowerCase();
+            final target = category.id.toLowerCase();
 
             return catId == target ||
                 nameLower.contains(target) ||
                 (target == 'thalis' && (catId == 'thalis' || nameLower.contains('thali'))) ||
                 (target == 'momos' && (catId == 'momos' || nameLower.contains('momo')));
           }).toList();
-        }
 
-        if (filtered.isEmpty) {
-          return [
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.restaurant_menu_rounded, size: 44, color: AppColors.textHint),
-                      SizedBox(height: 12),
-                      Text(
-                        'No items available in this category',
-                        style: TextStyle(color: AppColors.textHint, fontSize: 14, fontWeight: FontWeight.w500),
+          if (categoryItems.isEmpty) continue;
+
+          // Section Title Header with GlobalKey for Scroll-Spy tracking
+          slivers.add(
+            SliverToBoxAdapter(
+              child: Padding(
+                key: _getCategoryKey(category.id),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.lg, AppSpacing.md, AppSpacing.sm),
+                child: Row(
+                  children: [
+                    Text(
+                      category.name,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ],
-                  ),
+                      child: Text(
+                        '${categoryItems.length}',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+          );
+
+          // 2-column Grid for Category Items
+          slivers.add(
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.77,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => _MenuItemCard(
+                    item: categoryItems[index],
+                    shop: shop,
+                    isShopOpen: isOpen,
+                    cartItems: cartItems,
+                  ),
+                  childCount: categoryItems.length,
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (slivers.isEmpty) {
+          return [
+            _buildFlatSliverList(filtered, shop, isOpen, cartItems),
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ];
         }
 
-        return [
-          _buildFlatSliverList(filtered, shop, isOpen, cartItems),
-          const SliverToBoxAdapter(child: SizedBox(height: 80)),
-        ];
+        slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 100)));
+        return slivers;
       },
     );
   }
@@ -1163,11 +1331,13 @@ class _CategoryNavWidget extends StatelessWidget {
   final List<Category> categories;
   final String selectedCategoryId;
   final ValueChanged<String> onCategorySelected;
+  final ScrollController scrollController;
 
   const _CategoryNavWidget({
     required this.categories,
     required this.selectedCategoryId,
     required this.onCategorySelected,
+    required this.scrollController,
   });
 
   @override
@@ -1176,6 +1346,7 @@ class _CategoryNavWidget extends StatelessWidget {
     const primaryColor = Color(0xFFE65100); // Warm orange matching reference screenshot
 
     return ListView.separated(
+      controller: scrollController,
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

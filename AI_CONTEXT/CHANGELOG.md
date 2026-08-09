@@ -3,14 +3,17 @@
 ## [1.0.4] — 2026-08-09
 
 ### Added & Implemented
+- **Domino's / Swiggy Style Scroll-Spy Category Sync (`ShopDetailScreen`)**:
+  - Implemented automatic scroll synchronization between vertical menu list and horizontal category navigation bar.
+  - Added `_onMainScroll()` listener with `GlobalKey` section offset tracking: as user scrolls vertically through menu items, active category chip (`Momos`, `Pizzas`, `Burgers`, `Biryani`, `Thali`, `Snacks`) automatically highlights.
+  - Added `_autoScrollCategoryTab()`: top category bar automatically scrolls horizontally to center active category chip.
+  - Added `_onCategoryTapped()`: tapping any top category chip smoothly scrolls main menu list directly to that section header.
+  - Updated categorized menu layout into structured sliver sections with item counters (`Momos (4)`, `Pizzas (3)`, etc.).
 - **Shop Menu Category Navigation UI (`ShopDetailScreen`)**:
   - Implemented pixel-perfect horizontal category navigation matching reference UI screenshots.
-  - Added data-driven `Category` model properties (`categoryName`, `displayOrder`, `imageUrl`, `isActive`, `shopId`).
-  - Added horizontal sub-navigation bar (`:: ALL`, `🎓 STUDENT REWARDS`, `🏷️ OFFERS`, `🖤 EATRIGHT`) with active orange underline indicator.
   - Added circular food dish photographs with dish labels (`All`, `Momos`, `Pizzas`, `Burgers`, `Biryani`, `Thali`, `Snacks`).
   - Implemented selected-state visual indicators: orange circular ring border, orange checkmark badge at top-right, and bold orange category label.
   - Implemented sticky pinning behavior using `SliverPersistentHeader(pinned: true)` — category navigation locks at top on scroll while menu items slide underneath.
-  - Added real-time category item filtering (tapping category filters menu items, tapping `All` shows all items).
   - Verified static code analysis (`flutter analyze` — 0 errors, 0 warnings).
 
 ## [1.0.3] — 2026-08-09
