@@ -83,14 +83,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: const Text('Settings'),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
         children: [
           // ─── Profile Section ────────────────────────
           Text(
             'Profile',
-            style: Theme.of(context).textTheme.titleLarge,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.lg),
 
           // Name
           TextField(
@@ -101,7 +104,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               prefixIcon: Icon(Icons.person_outline_rounded),
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.lg),
 
           // Phone
           TextField(
@@ -117,7 +120,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               prefixText: '+91 ',
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.lg),
 
           // Age
           TextField(
@@ -132,7 +135,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               prefixIcon: Icon(Icons.cake_outlined),
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.lg),
 
           SizedBox(
             width: double.infinity,
@@ -142,16 +145,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
 
-          const SizedBox(height: AppSpacing.xl),
+          const SizedBox(height: AppSpacing.lg),
           const Divider(),
           const SizedBox(height: AppSpacing.md),
 
           // ─── Theme Section ─────────────────────────
           Text(
             'Appearance',
-            style: Theme.of(context).textTheme.titleLarge,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.lg),
 
           // Theme mode selection
           _ThemeOption(
@@ -179,14 +185,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.dark),
           ),
 
-          const SizedBox(height: AppSpacing.xl),
+          const SizedBox(height: AppSpacing.lg),
           const Divider(),
           const SizedBox(height: AppSpacing.md),
 
           // ─── About Section ─────────────────────────
           Text(
             'About',
-            style: Theme.of(context).textTheme.titleLarge,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                ),
           ),
           const SizedBox(height: AppSpacing.md),
 
@@ -211,6 +220,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('App Version'),
             subtitle: const Text('1.0.0'),
           ),
+
+          // Safe area bottom spacing
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
       ),
     );

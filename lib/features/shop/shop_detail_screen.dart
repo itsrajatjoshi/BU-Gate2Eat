@@ -664,7 +664,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 key: _getCategoryKey(category.id),
-                padding: const EdgeInsets.fromLTRB(AppSpacing.md, 18, AppSpacing.md, 10),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.md, 24, AppSpacing.md, 14),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -705,9 +705,9 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 0.86,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.68,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => _MenuItemCard(
@@ -743,9 +743,9 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 0.86,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.68,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) => _MenuItemCard(
@@ -840,16 +840,16 @@ class _MenuItemCard extends ConsumerWidget {
 
   Widget _buildVegIcon() {
     return Container(
-      width: 13,
-      height: 13,
+      width: 15,
+      height: 15,
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF388E3C), width: 1.2),
+        border: Border.all(color: const Color(0xFF388E3C), width: 1.3),
         borderRadius: BorderRadius.circular(2.5),
       ),
       child: Center(
         child: Container(
-          width: 5,
-          height: 5,
+          width: 6,
+          height: 6,
           decoration: const BoxDecoration(
             color: Color(0xFF388E3C),
             shape: BoxShape.circle,
@@ -861,10 +861,10 @@ class _MenuItemCard extends ConsumerWidget {
 
   Widget _buildNonVegIcon() {
     return Container(
-      width: 13,
-      height: 13,
+      width: 15,
+      height: 15,
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFD32F2F), width: 1.2),
+        border: Border.all(color: const Color(0xFFD32F2F), width: 1.3),
         borderRadius: BorderRadius.circular(2.5),
       ),
       child: const Center(
@@ -1097,10 +1097,10 @@ class _MenuItemCard extends ConsumerWidget {
         child: Container(
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
-              width: 1.0,
+              width: 0.8,
             ),
             boxShadow: [
               BoxShadow(
@@ -1115,14 +1115,14 @@ class _MenuItemCard extends ConsumerWidget {
           children: [
             // 1. Food Image Container
             AspectRatio(
-              aspectRatio: 1.35,
+              aspectRatio: 1.3,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
                   Positioned.fill(
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(16),
+                        top: Radius.circular(18),
                       ),
                       child: displayImageUrl.isNotEmpty
                           ? Image.network(
@@ -1146,8 +1146,8 @@ class _MenuItemCard extends ConsumerWidget {
                             .toggleFavorite(item.id);
                       },
                       child: Container(
-                        width: 26,
-                        height: 26,
+                        width: 30,
+                        height: 30,
                         decoration: BoxDecoration(
                           color: Theme.of(context)
                               .cardColor
@@ -1165,7 +1165,7 @@ class _MenuItemCard extends ConsumerWidget {
                             isFavorite
                                 ? Icons.favorite_rounded
                                 : Icons.favorite_outline_rounded,
-                            size: 15,
+                            size: 16,
                             color: isFavorite
                                 ? const Color(0xFFE53935)
                                 : AppColors.textHint,
@@ -1181,7 +1181,7 @@ class _MenuItemCard extends ConsumerWidget {
             // 2. Card Content Body
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1195,7 +1195,7 @@ class _MenuItemCard extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 5),
                             Expanded(
                               child: Text(
                                 item.name,
@@ -1206,14 +1206,14 @@ class _MenuItemCard extends ConsumerWidget {
                                     .titleMedium
                                     ?.copyWith(
                                       fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                      height: 1.15,
+                                      fontSize: 14,
+                                      height: 1.2,
                                     ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 4),
 
                         // Description with clean "... more" (stripping duplicate dots)
                         Builder(
@@ -1222,20 +1222,24 @@ class _MenuItemCard extends ConsumerWidget {
                                 ? item.details
                                 : '${item.name} prepared fresh with authentic spices';
                             final cleanDetails = rawDetails.replaceAll(RegExp(r'\.+$'), '').trim();
+                            // Truncate to ensure "...more" is always visible
+                            final truncated = cleanDetails.length > 35
+                                ? '${cleanDetails.substring(0, 35)}...'
+                                : '$cleanDetails...';
                             return Text.rich(
                               TextSpan(
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
-                                  fontSize: 10.5,
-                                  height: 1.25,
+                                  fontSize: 11.5,
+                                  height: 1.35,
                                 ),
                                 children: [
-                                  TextSpan(text: '$cleanDetails... '),
+                                  TextSpan(text: '$truncated '),
                                   const TextSpan(
                                     text: 'more',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
-                                      color: Color(0xFF475569),
+                                      color: Color(0xFF5C59E5),
                                     ),
                                   ),
                                 ],
@@ -1257,7 +1261,7 @@ class _MenuItemCard extends ConsumerWidget {
                           item.formattedPrice,
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
-                            fontSize: 15,
+                            fontSize: 16,
                             color: Theme.of(context)
                                 .textTheme
                                 .bodyLarge
@@ -1301,7 +1305,7 @@ class _StickyCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.child,
   });
 
-  static const double _headerHeight = 100.0;
+  static const double _headerHeight = 112.0;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
@@ -1359,7 +1363,7 @@ class _CategoryNavWidget extends StatelessWidget {
       controller: scrollController,
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       itemCount: categories.length,
       separatorBuilder: (_, __) => const SizedBox(width: 16),
       itemBuilder: (context, index) {
@@ -1376,8 +1380,8 @@ class _CategoryNavWidget extends StatelessWidget {
                 children: [
                   // Circular category photo container
                   Container(
-                    width: 58,
-                    height: 58,
+                    width: 60,
+                    height: 60,
                     padding: const EdgeInsets.all(2.5),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
@@ -1438,8 +1442,11 @@ class _CategoryNavWidget extends StatelessWidget {
               // Category Name Label
               Text(
                 cat.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
+                  height: 1.2,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   color: isSelected
                       ? primaryColor
@@ -1522,7 +1529,7 @@ class _ItemDetailBottomSheet extends ConsumerWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 20,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1544,9 +1551,9 @@ class _ItemDetailBottomSheet extends ConsumerWidget {
           // Dish Header Photo Container with Favorite Button
           if (displayImageUrl.isNotEmpty)
             Container(
-              height: 200,
+              height: 220,
               width: double.infinity,
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Stack(
                 children: [
                   Positioned.fill(
@@ -1589,7 +1596,7 @@ class _ItemDetailBottomSheet extends ConsumerWidget {
             ),
 
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1609,7 +1616,7 @@ class _ItemDetailBottomSheet extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
 
                 // Full Detailed Description
                 Text(
@@ -1622,7 +1629,7 @@ class _ItemDetailBottomSheet extends ConsumerWidget {
                     color: isDark ? Colors.grey[300] : Colors.grey[700],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
                 // Price & Add Button Row
                 Row(
