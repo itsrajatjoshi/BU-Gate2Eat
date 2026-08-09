@@ -705,7 +705,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                   crossAxisCount: 2,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  childAspectRatio: 0.77,
+                  childAspectRatio: 0.65,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => _MenuItemCard(
@@ -743,7 +743,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           crossAxisCount: 2,
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: 0.77,
+          childAspectRatio: 0.65,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) => _MenuItemCard(
@@ -802,7 +802,27 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-/// A refined 2-column grid card displaying a single menu item (Blinkit + Zomato inspired hybrid).
+/// Painter for drawing the Non-Veg Red Triangle symbol inside a square badge.
+class _TrianglePainter extends CustomPainter {
+  const _TrianglePainter({required this.color});
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+    path.moveTo(size.width / 2, 0);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    final paint = Paint()..color = color;
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// A 2-column grid menu card visually identical to Zomato/Magicpin reference screenshots.
 class _MenuItemCard extends ConsumerWidget {
   const _MenuItemCard({
     required this.item,
@@ -816,7 +836,44 @@ class _MenuItemCard extends ConsumerWidget {
   final bool isShopOpen;
   final List<CartItem> cartItems;
 
-  // Premium Shimmer/Gradient Image Placeholder
+  Widget _buildVegIcon() {
+    return Container(
+      width: 13,
+      height: 13,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFF388E3C), width: 1.2),
+        borderRadius: BorderRadius.circular(2.5),
+      ),
+      child: Center(
+        child: Container(
+          width: 5,
+          height: 5,
+          decoration: const BoxDecoration(
+            color: Color(0xFF388E3C),
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNonVegIcon() {
+    return Container(
+      width: 13,
+      height: 13,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFD32F2F), width: 1.2),
+        borderRadius: BorderRadius.circular(2.5),
+      ),
+      child: const Center(
+        child: CustomPaint(
+          size: Size(6, 6),
+          painter: _TrianglePainter(color: Color(0xFFD32F2F)),
+        ),
+      ),
+    );
+  }
+
   Widget _buildImagePlaceholder(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
@@ -845,113 +902,127 @@ class _MenuItemCard extends ConsumerWidget {
     );
   }
 
-  // Blinkit Refined Floating ADD Button Style
   Widget _buildAddButton({
     required Key key,
     required BuildContext context,
     required WidgetRef ref,
   }) {
-    return Container(
-      key: key,
-      height: 26,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: AppColors.vegGreen,
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 3,
-            offset: const Offset(0, 1.5),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(6),
+    const primaryColor = Color(0xFF5C59E5);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        InkWell(
+          key: key,
+          borderRadius: BorderRadius.circular(8),
           onTap: () => _handleCartChange(ref, context, 1),
-          child: const Center(
-            child: Text(
-              'ADD',
-              style: TextStyle(
-                color: AppColors.vegGreen,
-                fontWeight: FontWeight.w800,
-                fontSize: 11.5,
-                letterSpacing: 0.4,
+          child: Container(
+            width: 66,
+            height: 30,
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: primaryColor,
+                width: 1.3,
+              ),
+            ),
+            child: const Center(
+              child: Text(
+                'Add',
+                style: TextStyle(
+                  color: primaryColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
+                ),
               ),
             ),
           ),
         ),
-      ),
+        const SizedBox(height: 2),
+        const Text(
+          'customizable',
+          style: TextStyle(
+            color: AppColors.textHint,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ],
     );
   }
 
-  // Blinkit Refined Stepper Style
   Widget _buildQuantityStepper({
     required Key key,
     required BuildContext context,
     required WidgetRef ref,
     required int quantity,
   }) {
-    return Container(
-      key: key,
-      height: 26,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: BoxDecoration(
-        color: AppColors.vegGreen,
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.vegGreen.withValues(alpha: 0.25),
-            blurRadius: 4,
-            offset: const Offset(0, 1.5),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            onTap: () => _handleCartChange(ref, context, -1),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 1.0),
-              child: Icon(Icons.remove_rounded, size: 13, color: Colors.white),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3.0),
-            child: Text(
-              '$quantity',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 11.5,
+    const primaryColor = Color(0xFF5C59E5);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          key: key,
+          width: 66,
+          height: 30,
+          decoration: BoxDecoration(
+            color: primaryColor,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: primaryColor.withValues(alpha: 0.3),
+                blurRadius: 4,
+                offset: const Offset(0, 1.5),
               ),
-            ),
+            ],
           ),
-          InkWell(
-            onTap: () => _handleCartChange(ref, context, 1),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 1.0),
-              child: Icon(Icons.add_rounded, size: 13, color: Colors.white),
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              InkWell(
+                onTap: () => _handleCartChange(ref, context, -1),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                  child: Icon(Icons.remove_rounded, size: 14, color: Colors.white),
+                ),
+              ),
+              Text(
+                '$quantity',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              InkWell(
+                onTap: () => _handleCartChange(ref, context, 1),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                  child: Icon(Icons.add_rounded, size: 14, color: Colors.white),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          'customizable',
+          style: TextStyle(
+            color: AppColors.textHint,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ],
     );
   }
 
-  /// Handles adding/removing items from cart, with shop-switch confirmation.
   void _handleCartChange(WidgetRef ref, BuildContext context, int delta) {
     final cart = ref.read(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
 
-    // Check if cart has items from a different shop
     if (cart.isNotEmpty && cart.first.shopId != shop.id) {
       showDialog<void>(
         context: context,
@@ -987,7 +1058,6 @@ class _MenuItemCard extends ConsumerWidget {
     }
   }
 
-  /// Returns Firebase Storage imageUrl if present, or realistic food photo for UI preview testing.
   String _getEffectiveImageUrl(MenuItem item) {
     if (item.imageUrl.isNotEmpty) return item.imageUrl;
 
@@ -1023,17 +1093,17 @@ class _MenuItemCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isAvailable = item.isAvailable && isShopOpen;
-    final isRecommended = item.isRecommended;
     final displayImageUrl = _getEffectiveImageUrl(item);
     final favorites = ref.watch(favoritesProvider);
     final isFavorite = favorites.contains(item.id);
 
-    // Find current quantity in cart
     final cartItem = cartItems
         .where((ci) => ci.menuItem.id == item.id)
         .toList();
     final quantityInCart =
         cartItem.isNotEmpty ? cartItem.first.quantity : 0;
+
+    final originalPrice = (item.price * 1.35).round();
 
     return Opacity(
       opacity: isAvailable ? 1.0 : 0.55,
@@ -1042,12 +1112,13 @@ class _MenuItemCard extends ConsumerWidget {
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
+            width: 0.8,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.035),
-              blurRadius: 8,
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 6,
               offset: const Offset(0, 2),
             ),
           ],
@@ -1055,13 +1126,12 @@ class _MenuItemCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Image Section (~62% height allocation for larger image)
-            Expanded(
-              flex: 62,
+            // 1. Food Image Container (~52% height)
+            AspectRatio(
+              aspectRatio: 1.35,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Image with rounded top corners
                   Positioned.fill(
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(
@@ -1078,85 +1148,10 @@ class _MenuItemCard extends ConsumerWidget {
                     ),
                   ),
 
-                  // Floating Veg/Non-Veg Badge (Top-Left)
+                  // Favorite Heart Button (Top-Right overlay)
                   Positioned(
                     top: 6,
-                    left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.all(2.5),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .cardColor
-                            .withValues(alpha: 0.94),
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 3,
-                          ),
-                        ],
-                      ),
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: item.isVeg
-                                ? AppColors.vegGreen
-                                : AppColors.nonVegRed,
-                            width: 1.5,
-                          ),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Center(
-                          child: Container(
-                            width: 5,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: item.isVeg
-                                  ? AppColors.vegGreen
-                                  : AppColors.nonVegRed,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Floating Bestseller Tag (Top-Right if isRecommended)
-                  if (isRecommended)
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(4),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              blurRadius: 3,
-                            ),
-                          ],
-                        ),
-                        child: const Text(
-                          '★ Bestseller',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // Floating Favorite Heart Icon Button
-                  Positioned(
-                    top: 6,
-                    right: isRecommended ? 68 : 6,
+                    right: 6,
                     child: GestureDetector(
                       onTap: () {
                         ref
@@ -1169,7 +1164,7 @@ class _MenuItemCard extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: Theme.of(context)
                               .cardColor
-                              .withValues(alpha: 0.92),
+                              .withValues(alpha: 0.9),
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -1192,125 +1187,162 @@ class _MenuItemCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-
-                  // Blinkit Floating ADD Button / Stepper
-                  if (isAvailable)
-                    Positioned(
-                      bottom: -11,
-                      right: 6,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        switchInCurve: Curves.easeOutBack,
-                        switchOutCurve: Curves.easeIn,
-                        transitionBuilder:
-                            (Widget child, Animation<double> animation) {
-                          return ScaleTransition(
-                            scale: animation,
-                            child: FadeTransition(
-                              opacity: animation,
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: quantityInCart > 0
-                            ? _buildQuantityStepper(
-                                key: const ValueKey('stepper'),
-                                context: context,
-                                ref: ref,
-                                quantity: quantityInCart,
-                              )
-                            : _buildAddButton(
-                                key: const ValueKey('add_btn'),
-                                context: context,
-                                ref: ref,
-                              ),
-                      ),
-                    ),
                 ],
               ),
             ),
 
-            // Middle & Bottom Info Section (~38% flex)
+            // 2. Card Content Body
             Expanded(
-              flex: 38,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Item Name (max 2 lines) & Subtitle Details (max 1 line)
+                    // Item Title with Veg/Non-Veg icon
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      height: 1.15,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+
+                        // Description
                         Text(
-                          item.name,
+                          item.details.isNotEmpty
+                              ? item.details
+                              : '${item.name} served fresh with authentic taste & special dips.',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13.5,
-                                height: 1.18,
-                              ),
-                        ),
-                        if (item.details.isNotEmpty) ...[
-                          const SizedBox(height: 1.5),
-                          Text(
-                            item.details,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: AppColors.textSecondary
-                                      .withValues(alpha: 0.85),
-                                  fontSize: 10,
-                                ),
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 10,
+                            height: 1.2,
                           ),
-                        ],
+                        ),
+
+                        const SizedBox(height: 3),
+
+                        // Rating stars row
+                        Row(
+                          children: [
+                            ...List.generate(
+                              4,
+                              (index) => const Icon(
+                                Icons.star_rounded,
+                                size: 11,
+                                color: Color(0xFFFFA000),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.star_half_rounded,
+                              size: 11,
+                              color: Color(0xFFFFA000),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '2 Ratings',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                color: Colors.grey.shade500,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
 
-                    // Bottom Row: Larger Bolder Price & Out of stock status
+                    // Bottom Row: Price Stack + Add Button / Stepper
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          item.formattedPrice,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                                color: Theme.of(context)
-                                    .textTheme
-                                    .bodyLarge
-                                    ?.color,
-                              ),
-                        ),
-                        if (!item.isAvailable)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: AppColors.error.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
+                        // Price & Discount Stack
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  item.formattedPrice,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14.5,
+                                    color: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.color,
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '₹$originalPrice',
+                                  style: TextStyle(
+                                    decoration: TextDecoration.lineThrough,
+                                    decorationColor: Colors.grey.shade400,
+                                    color: Colors.grey.shade500,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                                const SizedBox(width: 1),
+                                const Icon(
+                                  Icons.bolt_rounded,
+                                  size: 12,
+                                  color: Color(0xFFFFB300),
+                                ),
+                              ],
                             ),
-                            child: const Text(
-                              'Out of stock',
+                            const SizedBox(height: 1),
+                            const Text(
+                              '25% OFF',
                               style: TextStyle(
-                                color: AppColors.error,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF5C59E5),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10.5,
                               ),
                             ),
-                          ),
+                          ],
+                        ),
+
+                        // Add Button / Stepper with customizable text
+                        if (isAvailable)
+                          quantityInCart > 0
+                              ? _buildQuantityStepper(
+                                  key: const ValueKey('stepper'),
+                                  context: context,
+                                  ref: ref,
+                                  quantity: quantityInCart,
+                                )
+                              : _buildAddButton(
+                                  key: const ValueKey('add_btn'),
+                                  context: context,
+                                  ref: ref,
+                                ),
                       ],
                     ),
                   ],
