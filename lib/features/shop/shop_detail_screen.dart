@@ -1082,7 +1082,6 @@ class _MenuItemCard extends ConsumerWidget {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         barrierColor: Colors.black.withValues(alpha: 0.55),
-        useSafeArea: true,
         builder: (ctx) => _ItemDetailBottomSheet(
           item: item,
           shop: shop,
@@ -1552,7 +1551,8 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     final bottomPadding = mediaQuery.padding.bottom;
     final maxHeight = mediaQuery.size.height * 0.88;
 
-    return Center(
+    return Align(
+      alignment: Alignment.bottomCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: 560,
@@ -1821,7 +1821,12 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
 
               // 3. Sticky Bottom Action Bar (Fixed at bottom)
               Container(
-                padding: EdgeInsets.fromLTRB(20, 14, 20, bottomPadding + 14),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  14,
+                  20,
+                  (bottomPadding > 0 ? bottomPadding : 16) + 12,
+                ),
                 decoration: BoxDecoration(
                   color: Theme.of(context).cardColor,
                   border: Border(
