@@ -3,17 +3,19 @@
 // Features a premium collapsing header (fade, blur, compact title transition)
 
 import 'dart:ui';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
-import '../../models/shop_model.dart';
+import '../../models/cart_item_model.dart';
 import '../../models/category_model.dart';
 import '../../models/menu_item_model.dart';
-import '../../models/cart_item_model.dart';
+import '../../models/shop_model.dart';
 import '../cart/cart_provider.dart';
 
 /// Provider that fetches shop details by ID.
@@ -27,9 +29,12 @@ final shopDetailProvider =
 enum FoodFilter { all, veg, nonVeg }
 
 class ShopDetailScreen extends ConsumerStatefulWidget {
-  final String shopId;
+  const ShopDetailScreen({
+    required this.shopId,
+    super.key,
+  });
 
-  const ShopDetailScreen({super.key, required this.shopId});
+  final String shopId;
 
   @override
   ConsumerState<ShopDetailScreen> createState() => _ShopDetailScreenState();
@@ -201,12 +206,11 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
   /// Generates clean data-driven shop categories fetching dynamically from Firestore.
   List<Category> _getEffectiveCategories(String shopId, List<Category>? fetched) {
-    final allCat = const Category(
+    const allCat = Category(
       id: 'all',
       name: 'All',
       sortOrder: 0,
       imageUrl: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=300&auto=format&fit=crop&q=80',
-      isActive: true,
     );
 
     final List<Category> list = [allCat];
@@ -240,7 +244,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           imageUrl: img,
           isActive: c.isActive,
           shopId: shopId,
-        ));
+        ),);
       }
     }
 
@@ -380,8 +384,11 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                                       fit: BoxFit.cover,
                                       errorBuilder: (_, __, ___) => Container(
                                         color: AppColors.surfaceVariant,
-                                        child: const Icon(Icons.store_rounded,
-                                            size: 48, color: AppColors.textHint),
+                                        child: const Icon(
+                                          Icons.store_rounded,
+                                          size: 48,
+                                          color: AppColors.textHint,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -460,8 +467,11 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                                 ),
                               ),
                               const SizedBox(width: AppSpacing.sm),
-                              const Icon(Icons.access_time_rounded,
-                                  size: 14, color: AppColors.textHint),
+                              const Icon(
+                                Icons.access_time_rounded,
+                                size: 14,
+                                color: AppColors.textHint,
+                              ),
                               const SizedBox(width: AppSpacing.xs),
                               Text(
                                 '${shop.openTime} – ${shop.closeTime}',
@@ -601,7 +611,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
       ],
       data: (menuItems) {
         // Apply search & veg filters
-        var filtered = menuItems.where((item) {
+        final filtered = menuItems.where((item) {
           if (searchQuery.isNotEmpty &&
               !item.name.toLowerCase().contains(searchQuery)) {
             return false;
@@ -666,7 +676,6 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                 key: _getCategoryKey(category.id),
                 padding: const EdgeInsets.fromLTRB(14, 20, 14, 10),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
                       category.name,
@@ -736,8 +745,12 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     );
   }
    /// Builds a flat SliverGrid.
-  Widget _buildFlatSliverList(List<MenuItem> items, Shop shop, bool isOpen,
-      List<CartItem> cartItems) {
+  Widget _buildFlatSliverList(
+    List<MenuItem> items,
+    Shop shop,
+    bool isOpen,
+    List<CartItem> cartItems,
+  ) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       sliver: SliverGrid(
@@ -1193,7 +1206,6 @@ class _MenuItemCard extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
                             const SizedBox(width: 5),
@@ -1256,7 +1268,6 @@ class _MenuItemCard extends ConsumerWidget {
                     // Bottom Row: Clean Price + Add Button / Stepper
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Text(
                           item.formattedPrice,
@@ -1300,11 +1311,11 @@ class _MenuItemCard extends ConsumerWidget {
 
 /// Delegate for pinning Category Navigation Header when scrolling
 class _StickyCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-
   const _StickyCategoryHeaderDelegate({
     required this.child,
   });
+
+  final Widget child;
 
   static const double _headerHeight = 114.0;
 
@@ -1343,17 +1354,17 @@ class _StickyCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
 
 /// Horizontal category navigation matching reference UI design
 class _CategoryNavWidget extends StatelessWidget {
-  final List<Category> categories;
-  final String selectedCategoryId;
-  final ValueChanged<String> onCategorySelected;
-  final ScrollController scrollController;
-
   const _CategoryNavWidget({
     required this.categories,
     required this.selectedCategoryId,
     required this.onCategorySelected,
     required this.scrollController,
   });
+
+  final List<Category> categories;
+  final String selectedCategoryId;
+  final ValueChanged<String> onCategorySelected;
+  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -1377,11 +1388,9 @@ class _CategoryNavWidget extends StatelessWidget {
             width: 74,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Center(
                   child: Stack(
-                    clipBehavior: Clip.none,
                     children: [
                       // Circular category photo container
                       Container(
@@ -1726,7 +1735,6 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                           children: [
                             // Veg/Non-Veg Tag + Shop Name Subtitle
                             Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 widget.item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
                                 const SizedBox(width: 8),
@@ -1832,7 +1840,6 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                   border: Border(
                     top: BorderSide(
                       color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
-                      width: 1.0,
                     ),
                   ),
                   boxShadow: [
@@ -1845,7 +1852,6 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // Price Section
                     Column(

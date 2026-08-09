@@ -15,13 +15,9 @@ class AppTheme {
       brightness: Brightness.light,
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
-        onPrimary: Colors.white,
         secondary: AppColors.secondary,
-        onSecondary: Colors.white,
-        surface: AppColors.surface,
         onSurface: AppColors.textPrimary,
         error: AppColors.error,
-        onError: Colors.white,
       ),
       scaffoldBackgroundColor: AppColors.background,
       textTheme: _textTheme(AppColors.textPrimary),
@@ -41,7 +37,7 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          side: const BorderSide(color: AppColors.divider, width: 1),
+          side: const BorderSide(color: AppColors.divider),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -107,9 +103,7 @@ class AppTheme {
         secondary: AppColors.secondary,
         onSecondary: AppColors.darkBackground,
         surface: AppColors.darkSurface,
-        onSurface: AppColors.darkTextPrimary,
         error: AppColors.error,
-        onError: Colors.white,
       ),
       scaffoldBackgroundColor: AppColors.darkBackground,
       textTheme: _textTheme(AppColors.darkTextPrimary),
@@ -129,9 +123,8 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          side: BorderSide(
+          side: const BorderSide(
             color: AppColors.darkSurfaceVariant,
-            width: 1,
           ),
         ),
       ),

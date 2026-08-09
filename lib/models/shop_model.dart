@@ -26,7 +26,7 @@ class Shop {
 
   /// Creates a Shop from a Firestore document snapshot.
   factory Shop.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data()! as Map<String, dynamic>;
+    final data = (doc.data() as Map<String, dynamic>?) ?? {};
     final rawKeywords = data['searchKeywords'] as List<dynamic>?;
     final keywords =
         rawKeywords != null ? rawKeywords.map((e) => e.toString()).toList() : <String>[];

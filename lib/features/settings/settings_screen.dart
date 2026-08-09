@@ -26,7 +26,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _nameController = TextEditingController(text: localStorage.userName);
     _phoneController = TextEditingController(text: localStorage.userPhone);
     _ageController = TextEditingController(
-        text: localStorage.userAge > 0 ? localStorage.userAge.toString() : '');
+      text: localStorage.userAge > 0 ? localStorage.userAge.toString() : '',
+    );
   }
 
   @override
@@ -215,10 +216,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               // TODO: Open terms of service URL
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.info_outline_rounded),
-            title: const Text('App Version'),
-            subtitle: const Text('1.0.0'),
+          const ListTile(
+            leading: Icon(Icons.info_outline_rounded),
+            title: Text('App Version'),
+            subtitle: Text('1.0.0'),
           ),
 
           // Safe area bottom spacing
@@ -231,12 +232,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
 /// A single theme option tile.
 class _ThemeOption extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
   const _ThemeOption({
     required this.title,
     required this.subtitle,
@@ -244,6 +239,12 @@ class _ThemeOption extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
   });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {

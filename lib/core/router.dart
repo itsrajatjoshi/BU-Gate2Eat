@@ -2,12 +2,13 @@
 // GoRouter setup with splash → onboarding → home flow
 
 import 'package:go_router/go_router.dart';
-import '../features/splash/splash_screen.dart';
-import '../features/onboarding/onboarding_screen.dart';
-import '../features/home/home_screen.dart';
-import '../features/shop/shop_detail_screen.dart';
+
 import '../features/cart/cart_screen.dart';
+import '../features/home/home_screen.dart';
+import '../features/onboarding/onboarding_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/shop/shop_detail_screen.dart';
+import '../features/splash/splash_screen.dart';
 
 /// App route paths.
 class AppRoutes {
@@ -40,7 +41,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.shopDetail,
       builder: (context, state) {
-        final shopId = state.pathParameters['shopId']!;
+        final shopId = state.pathParameters['shopId'] ?? '';
         return ShopDetailScreen(shopId: shopId);
       },
     ),

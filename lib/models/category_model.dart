@@ -17,7 +17,7 @@ class Category {
 
   /// Creates a Category from a Firestore document snapshot.
   factory Category.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data()! as Map<String, dynamic>;
+    final data = (doc.data() as Map<String, dynamic>?) ?? {};
     return Category(
       id: doc.id,
       name: (data['name'] as String?) ?? (data['categoryName'] as String?) ?? '',

@@ -6,14 +6,14 @@ import '../../../core/constants/app_constants.dart';
 import '../../../models/shop_model.dart';
 
 class ShopCard extends StatelessWidget {
-  final Shop shop;
-  final VoidCallback onTap;
-
   const ShopCard({
-    super.key,
     required this.shop,
     required this.onTap,
+    super.key,
   });
+
+  final Shop shop;
+  final VoidCallback onTap;
 
   /// Converts 24hr time string "23:30" to 12hr AM/PM format "11:30 PM".
   String _formatTime12hr(String time24) {

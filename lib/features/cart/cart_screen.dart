@@ -360,8 +360,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: _placeOrder,
-                            icon: const Icon(Icons.send_rounded,
-                                color: Colors.white),
+                            icon: const Icon(
+                              Icons.send_rounded,
+                              color: Colors.white,
+                            ),
                             label: const Text('Place Order'),
                           ),
                         ),
@@ -377,17 +379,17 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
 /// A single cart item row with quantity controls and swipe-to-delete.
 class _CartItemTile extends StatelessWidget {
-  final CartItem item;
-  final VoidCallback onIncrement;
-  final VoidCallback onDecrement;
-  final VoidCallback onDelete;
-
   const _CartItemTile({
     required this.item,
     required this.onIncrement,
     required this.onDecrement,
     required this.onDelete,
   });
+
+  final CartItem item;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -465,8 +467,11 @@ class _CartItemTile extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.remove,
-                          size: 18, color: AppColors.primary),
+                      icon: const Icon(
+                        Icons.remove,
+                        size: 18,
+                        color: AppColors.primary,
+                      ),
                       constraints:
                           const BoxConstraints(minWidth: 32, minHeight: 32),
                       padding: EdgeInsets.zero,
@@ -481,8 +486,11 @@ class _CartItemTile extends StatelessWidget {
                               ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.add,
-                          size: 18, color: AppColors.primary),
+                      icon: const Icon(
+                        Icons.add,
+                        size: 18,
+                        color: AppColors.primary,
+                      ),
                       constraints:
                           const BoxConstraints(minWidth: 32, minHeight: 32),
                       padding: EdgeInsets.zero,

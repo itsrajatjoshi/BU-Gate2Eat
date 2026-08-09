@@ -239,7 +239,7 @@ class SeedDataService {
                 'imageUrl': (data['imageUrl'] as String?)?.isNotEmpty == true ? data['imageUrl'] : cat['imageUrl'],
                 'isActive': data['isActive'] ?? true,
                 'sortOrder': data['sortOrder'] ?? cat['sortOrder'],
-              }, SetOptions(merge: true));
+              }, SetOptions(merge: true),);
             }
           }
         }

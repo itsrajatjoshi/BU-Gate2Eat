@@ -63,9 +63,9 @@ final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((r
 
 /// Manages the app's theme mode state.
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  final LocalStorageService _localStorage;
-
   ThemeModeNotifier(this._localStorage) : super(_parseThemeMode(_localStorage.themeMode));
+
+  final LocalStorageService _localStorage;
 
   /// Updates the theme mode and persists the choice.
   Future<void> setThemeMode(ThemeMode mode) async {
@@ -105,10 +105,10 @@ final favoritesProvider =
 
 /// Manages local user favorite menu item IDs.
 class FavoriteNotifier extends StateNotifier<Set<String>> {
-  final LocalStorageService _localStorage;
-
   FavoriteNotifier(this._localStorage)
       : super(_localStorage.favoriteItemIds.toSet());
+
+  final LocalStorageService _localStorage;
 
   /// Toggles favorite status for a given itemId and persists to SharedPreferences.
   Future<void> toggleFavorite(String itemId) async {
