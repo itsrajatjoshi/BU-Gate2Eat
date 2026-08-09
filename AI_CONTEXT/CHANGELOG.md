@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## [1.0.4] — 2026-08-09
+
+### Added & Implemented
+- **Shop Menu Category Navigation UI (`ShopDetailScreen`)**:
+  - Implemented pixel-perfect horizontal category navigation matching reference UI screenshots.
+  - Added data-driven `Category` model properties (`categoryName`, `displayOrder`, `imageUrl`, `isActive`, `shopId`).
+  - Added horizontal sub-navigation bar (`:: ALL`, `🎓 STUDENT REWARDS`, `🏷️ OFFERS`, `🖤 EATRIGHT`) with active orange underline indicator.
+  - Added circular food dish photographs with dish labels (`All`, `Momos`, `Pizzas`, `Burgers`, `Biryani`, `Thali`, `Snacks`).
+  - Implemented selected-state visual indicators: orange circular ring border, orange checkmark badge at top-right, and bold orange category label.
+  - Implemented sticky pinning behavior using `SliverPersistentHeader(pinned: true)` — category navigation locks at top on scroll while menu items slide underneath.
+  - Added real-time category item filtering (tapping category filters menu items, tapping `All` shows all items).
+  - Verified static code analysis (`flutter analyze` — 0 errors, 0 warnings).
+
+## [1.0.3] — 2026-08-09
+
+### Added
+- **Comprehensive Multi-Platform Design Specification (`DESIGN.md`)**:
+  - Created standalone, developer- and AI-friendly UI/UX design blueprint in [DESIGN.md](file:///d:/app/BUGate2Eat%20App%20v1/DESIGN.md).
+  - Outlined complete color system tokens (light/dark mode), typography scales, spacing, border radiuses, and shadow elevations.
+  - Specified screen-by-screen UX layouts (Splash, Onboarding, Home, Shop Menu, Cart Review, Settings).
+  - Defined WhatsApp deep-linking payload format (`https://wa.me/91...`) and zero-friction order text generation.
+  - Formatted data models (User Profile, Shop, Menu Item) with verified seed data for Rajat Shop and Nayan Shop.
+  - Included a Master AI Prompt for copy-pasting into multi-platform AI tools (v0.dev, Bolt.new, Cursor, Lovable, Claude, ChatGPT, Windsurf).
+
 ## [1.0.2] — 2026-08-07
 
 ### Upgraded

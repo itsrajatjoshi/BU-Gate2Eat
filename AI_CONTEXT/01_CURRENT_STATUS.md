@@ -1,17 +1,16 @@
 # 01 — Current Status
 
-## Project Status Snapshot (As of August 3, 2026)
+## Project Status Snapshot (As of August 9, 2026)
 
 | Parameter | Current Status |
 |---|---|
-| **App Version** | `1.0.1+2` |
+| **App Version** | `1.0.4` |
 | **Flutter SDK** | ✅ Upgraded to `3.44.9` (Stable Channel) |
 | **Current Branch** | `main` |
-| **Latest Commit** | `52b2569` (`origin/main`) |
-| **Build Status** | ✅ Release APK Working (`BU_Gate2Eat_v1.apk`) |
-| **UI Design System** | ✅ Google Stitch MCP Integrated & Active (Project `6396413867463778857`) |
+| **Category Navigation UI** | ✅ Implemented & Pinned Sticky (`ShopDetailScreen`) |
+| **Build Status** | ✅ Web Release Built & Running Live (`http://localhost:8085`) |
+| **UI Design System** | ✅ Google Stitch MCP Integrated & Full Spec Created (`DESIGN.md`) |
 | **Active Shop Card** | ✅ Locked & Final (Variant 3 Modern Split Row) |
-| **Local Web Server** | ✅ Running Live on `http://127.0.0.1:8080` |
 | **Firestore Database** | ✅ Frozen Schema Active & 100% Single Source of Truth (`bu-gate2eat`) |
 | **Static Code Health** | ✅ `flutter analyze` — 0 Errors, 0 Warnings |
 | **Known Blocking Issues** | **None** |
