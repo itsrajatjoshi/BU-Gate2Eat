@@ -71,6 +71,8 @@ class LocalStorageService {
     await _prefs.setInt(_keyAge, age);
   }
 
+  static const String _keyFavorites = 'favorite_item_ids';
+
   // ─── Theme ──────────────────────────────────────────────────
 
   /// Gets the stored theme mode: 'light', 'dark', or 'system'.
@@ -79,5 +81,16 @@ class LocalStorageService {
   /// Saves the selected theme mode.
   Future<void> setThemeMode(String mode) async {
     await _prefs.setString(_keyThemeMode, mode);
+  }
+
+  // ─── Favorites ──────────────────────────────────────────────
+
+  /// Gets the locally stored list of favorite menu item IDs.
+  List<String> get favoriteItemIds =>
+      _prefs.getStringList(_keyFavorites) ?? [];
+
+  /// Persists the list of favorite menu item IDs locally.
+  Future<void> saveFavoriteItemIds(List<String> ids) async {
+    await _prefs.setStringList(_keyFavorites, ids);
   }
 }

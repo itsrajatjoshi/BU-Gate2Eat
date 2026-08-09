@@ -118,6 +118,57 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
   /// Tapping a top category tab smoothly scrolls main menu list to that section
   void _onCategoryTapped(String catId) {
+    if (catId != 'all') {
+      final menuItems = ref.read(shopMenuItemsProvider(widget.shopId)).value ?? [];
+      final categories = ref.read(shopCategoriesProvider(widget.shopId)).value ?? [];
+      final effectiveCategories = _getEffectiveCategories(widget.shopId, categories);
+
+      final categoryObj = effectiveCategories.firstWhere(
+        (c) => c.id == catId,
+        orElse: () => Category(id: catId, name: catId, sortOrder: 0),
+      );
+
+      final hasItems = menuItems.any((item) {
+        final itemCat = item.categoryId.toLowerCase();
+        final target = catId.toLowerCase();
+        return itemCat == target ||
+            (target == 'thalis' && itemCat == 'thali') ||
+            (target == 'thali' && itemCat == 'thalis') ||
+            (target == 'momos' && itemCat == 'momo') ||
+            (target == 'momo' && itemCat == 'momos') ||
+            (target == 'pizzas' && itemCat == 'pizza') ||
+            (target == 'pizza' && itemCat == 'pizzas') ||
+            (target == 'burgers' && itemCat == 'burger') ||
+            (target == 'burger' && itemCat == 'burgers');
+      });
+
+      if (!hasItems) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'No items currently available in ${categoryObj.name}',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() {
       _selectedCategoryId = catId;
     });
@@ -148,7 +199,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     }
   }
 
-  /// Generates clean data-driven shop categories matching reference screenshots.
+  /// Generates clean data-driven shop categories fetching dynamically from Firestore.
   List<Category> _getEffectiveCategories(String shopId, List<Category>? fetched) {
     final allCat = const Category(
       id: 'all',
@@ -160,87 +211,9 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
     final List<Category> list = [allCat];
 
-    if (shopId == 'rajat_shop' || shopId.contains('rajat')) {
-      list.addAll([
-        const Category(
-          id: 'momos',
-          name: 'Momos',
-          sortOrder: 1,
-          imageUrl: 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'pizzas',
-          name: 'Pizzas',
-          sortOrder: 2,
-          imageUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'burgers',
-          name: 'Burgers',
-          sortOrder: 3,
-          imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'biryani',
-          name: 'Biryani',
-          sortOrder: 4,
-          imageUrl: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'thalis',
-          name: 'Thali',
-          sortOrder: 5,
-          imageUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'snacks',
-          name: 'Snacks',
-          sortOrder: 6,
-          imageUrl: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80',
-        ),
-      ]);
-      return list;
-    }
-
-    if (shopId == 'nayan_shop' || shopId.contains('nayan')) {
-      list.addAll([
-        const Category(
-          id: 'momos',
-          name: 'Momos',
-          sortOrder: 1,
-          imageUrl: 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'rolls',
-          name: 'Rolls',
-          sortOrder: 2,
-          imageUrl: 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'noodles',
-          name: 'Noodles',
-          sortOrder: 3,
-          imageUrl: 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'snacks',
-          name: 'Snacks',
-          sortOrder: 4,
-          imageUrl: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80',
-        ),
-        const Category(
-          id: 'thalis',
-          name: 'Thali',
-          sortOrder: 5,
-          imageUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80',
-        ),
-      ]);
-      return list;
-    }
-
     if (fetched != null && fetched.isNotEmpty) {
       for (final c in fetched) {
-        if (c.id == 'all') continue;
+        if (c.id == 'all' || !c.isActive) continue;
         String img = c.imageUrl;
         if (img.isEmpty) {
           final nameL = c.name.toLowerCase();
@@ -268,6 +241,28 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           isActive: c.isActive,
           shopId: shopId,
         ));
+      }
+    }
+
+    // If fetched is empty or loading, provide shop default fallback categories
+    if (list.length == 1) {
+      if (shopId == 'rajat_shop' || shopId.contains('rajat')) {
+        list.addAll([
+          const Category(id: 'momos', name: 'Momos', sortOrder: 1, imageUrl: 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'pizzas', name: 'Pizzas', sortOrder: 2, imageUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'burgers', name: 'Burgers', sortOrder: 3, imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'biryani', name: 'Biryani', sortOrder: 4, imageUrl: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'thalis', name: 'Thali', sortOrder: 5, imageUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'snacks', name: 'Snacks', sortOrder: 6, imageUrl: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80'),
+        ]);
+      } else if (shopId == 'nayan_shop' || shopId.contains('nayan')) {
+        list.addAll([
+          const Category(id: 'momos', name: 'Momos', sortOrder: 1, imageUrl: 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'rolls', name: 'Rolls', sortOrder: 2, imageUrl: 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'noodles', name: 'Noodles', sortOrder: 3, imageUrl: 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'snacks', name: 'Snacks', sortOrder: 4, imageUrl: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80'),
+          const Category(id: 'thalis', name: 'Thali', sortOrder: 5, imageUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80'),
+        ]);
       }
     }
 
@@ -649,13 +644,17 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
           final categoryItems = filtered.where((item) {
             final catId = item.categoryId.toLowerCase();
-            final nameLower = item.name.toLowerCase();
             final target = category.id.toLowerCase();
 
             return catId == target ||
-                nameLower.contains(target) ||
-                (target == 'thalis' && (catId == 'thalis' || nameLower.contains('thali'))) ||
-                (target == 'momos' && (catId == 'momos' || nameLower.contains('momo')));
+                (target == 'thalis' && catId == 'thali') ||
+                (target == 'thali' && catId == 'thalis') ||
+                (target == 'momos' && catId == 'momo') ||
+                (target == 'momo' && catId == 'momos') ||
+                (target == 'pizzas' && catId == 'pizza') ||
+                (target == 'pizza' && catId == 'pizzas') ||
+                (target == 'burgers' && catId == 'burger') ||
+                (target == 'burger' && catId == 'burgers');
           }).toList();
 
           if (categoryItems.isEmpty) continue;
@@ -1026,6 +1025,8 @@ class _MenuItemCard extends ConsumerWidget {
     final isAvailable = item.isAvailable && isShopOpen;
     final isRecommended = item.isRecommended;
     final displayImageUrl = _getEffectiveImageUrl(item);
+    final favorites = ref.watch(favoritesProvider);
+    final isFavorite = favorites.contains(item.id);
 
     // Find current quantity in cart
     final cartItem = cartItems
@@ -1151,6 +1152,46 @@ class _MenuItemCard extends ConsumerWidget {
                         ),
                       ),
                     ),
+
+                  // Floating Favorite Heart Icon Button
+                  Positioned(
+                    top: 6,
+                    right: isRecommended ? 68 : 6,
+                    child: GestureDetector(
+                      onTap: () {
+                        ref
+                            .read(favoritesProvider.notifier)
+                            .toggleFavorite(item.id);
+                      },
+                      child: Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .cardColor
+                              .withValues(alpha: 0.92),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 3,
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Icon(
+                            isFavorite
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_outline_rounded,
+                            size: 15,
+                            color: isFavorite
+                                ? const Color(0xFFE53935)
+                                : AppColors.textHint,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
 
                   // Blinkit Floating ADD Button / Stepper
                   if (isAvailable)

@@ -58,17 +58,22 @@ class FirestoreService {
 
   // ─── Categories ─────────────────────────────────────────────
 
-  /// Fetches all categories for a given shop, sorted by sortOrder.
+  /// Fetches all active categories for a given shop, sorted by sortOrder.
   Future<List<Category>> getCategories(String shopId) async {
     try {
       final snapshot = await _firestore
           .collection('shops')
           .doc(shopId)
           .collection('categories')
-          .orderBy('sortOrder')
           .get();
 
-      return snapshot.docs.map((doc) => Category.fromFirestore(doc)).toList();
+      final categories = snapshot.docs
+          .map((doc) => Category.fromFirestore(doc))
+          .where((c) => c.isActive)
+          .toList();
+
+      categories.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return categories;
     } catch (_) {
       return [];
     }

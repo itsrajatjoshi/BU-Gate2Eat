@@ -96,3 +96,33 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   }
 }
 
+/// Provider for managing user favorite item IDs stored locally.
+final favoritesProvider =
+    StateNotifierProvider<FavoriteNotifier, Set<String>>((ref) {
+  final localStorage = ref.read(localStorageServiceProvider);
+  return FavoriteNotifier(localStorage);
+});
+
+/// Manages local user favorite menu item IDs.
+class FavoriteNotifier extends StateNotifier<Set<String>> {
+  final LocalStorageService _localStorage;
+
+  FavoriteNotifier(this._localStorage)
+      : super(_localStorage.favoriteItemIds.toSet());
+
+  /// Toggles favorite status for a given itemId and persists to SharedPreferences.
+  Future<void> toggleFavorite(String itemId) async {
+    final updated = Set<String>.from(state);
+    if (updated.contains(itemId)) {
+      updated.remove(itemId);
+    } else {
+      updated.add(itemId);
+    }
+    state = updated;
+    await _localStorage.saveFavoriteItemIds(updated.toList());
+  }
+
+  /// Checks whether an item is favorited.
+  bool isFavorite(String itemId) => state.contains(itemId);
+}
+

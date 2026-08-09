@@ -4,13 +4,13 @@
 
 | Parameter | Current Status |
 |---|---|
-| **App Version** | `1.0.4` |
+| **App Version** | `1.0.5` |
 | **Flutter SDK** | ✅ Upgraded to `3.44.9` (Stable Channel) |
 | **Current Branch** | `main` |
-| **Latest Commit** | `b807ad8` (`origin/main`) |
-| **Category Navigation UI** | ✅ Implemented & Pinned Sticky (`ShopDetailScreen`) |
+| **Latest Commit** | Working Tree Updated |
+| **Category Navigation UI** | ✅ Pinned Sticky & 100% Connected to Cloud Firestore (`shops/{shopId}/categories`) |
 | **Scroll-Spy Sync** | ✅ Domino's / Swiggy Style Auto Scroll & Active Section Highlighting |
-| **Build Status** | ✅ Web Release Built & Running Live (`http://localhost:8090`) |
+| **Build Status** | ✅ Web Release Built & Running Live (`http://localhost:8080`) |
 | **UI Design System** | ✅ Google Stitch MCP Integrated & Full Spec Created (`DESIGN.md`) |
 | **Active Shop Card** | ✅ Locked & Final (Variant 3 Modern Split Row) |
 | **Firestore Database** | ✅ Frozen Schema Active & 100% Single Source of Truth (`bu-gate2eat`) |

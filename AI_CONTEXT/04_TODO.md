@@ -6,6 +6,9 @@
 - [x] Enable native Firestore disk persistence cache (`Settings(persistenceEnabled: true)`).
 - [x] Implement Riverpod `family` providers for lazy loading menu items and in-memory query caching.
 - [x] Implement Shop Menu Category Navigation UI in `ShopDetailScreen` (horizontal circular dish photos, selected state indicators, sticky pinning via `SliverPersistentHeader`, Domino's/Swiggy-style auto scroll-spy category sync on scroll).
+- [x] Connect Menu Category Selector to Cloud Firestore backend (`shops/{shopId}/categories`) for dynamic category addition, image updates, re-ordering, and active/inactive toggling without UI changes.
+- [x] Display friendly floating toast alert ("No items currently available in [Category]") when tapping a 0-item category while skipping empty sections in vertical scrolling list.
+- [x] Implement user-specific local Favorites feature on Menu Item Cards with `SharedPreferences` on-device persistence, Riverpod `favoritesProvider`, and zero Firestore writes.
 
 ## MEDIUM Priority (MVP UI & Order Flow Polish)
 - [x] Refine UI with Blinkit-inspired clean spacing, typography, and reusable component structure.

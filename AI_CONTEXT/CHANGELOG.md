@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## [1.0.5] — 2026-08-09
+
+### Added & Connected (Backend / Data Only)
+- **Cloud Firestore Menu Category Integration**:
+  - Connected `ShopDetailScreen` category selector bar directly to Cloud Firestore backend (`shops/{shopId}/categories/{categoryId}`).
+  - Added native Firestore query `.where('isActive', isEqualTo: true)` in `FirestoreService.getCategories()` with `sortOrder` ascending.
+  - Preserved system `"All"` category (`id: 'all'`) as a local UI-only option.
+  - Enforced strict category ID mapping (`item.categoryId == category.id`) so changing category display names in Firestore never breaks menu item relationships.
+  - Retained 100% of existing UI design, circular image styling, selected orange ring, checkmark badge, sticky header, and Zomato/Domino's scroll-spy sync behavior.
+  - Verified static code health (`flutter analyze` — 0 errors, 0 warnings).
+
 ## [1.0.4] — 2026-08-09
 
 ### Added & Implemented

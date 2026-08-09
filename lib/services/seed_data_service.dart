@@ -24,10 +24,28 @@ class SeedDataService {
   static Future<void> seedInitialData() async {
     final firestore = FirebaseFirestore.instance;
 
+    // Ensure categories subcollections exist with full metadata
+    await _ensureCategories('rajat_shop', [
+      {'id': 'momos', 'name': 'Momos', 'imageUrl': 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80', 'sortOrder': 1},
+      {'id': 'pizzas', 'name': 'Pizzas', 'imageUrl': 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&auto=format&fit=crop&q=80', 'sortOrder': 2},
+      {'id': 'burgers', 'name': 'Burgers', 'imageUrl': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80', 'sortOrder': 3},
+      {'id': 'biryani', 'name': 'Biryani', 'imageUrl': 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=300&auto=format&fit=crop&q=80', 'sortOrder': 4},
+      {'id': 'thalis', 'name': 'Thali', 'imageUrl': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80', 'sortOrder': 5},
+      {'id': 'snacks', 'name': 'Snacks', 'imageUrl': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80', 'sortOrder': 6},
+    ]);
+
+    await _ensureCategories('nayan_shop', [
+      {'id': 'momos', 'name': 'Momos', 'imageUrl': 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80', 'sortOrder': 1},
+      {'id': 'rolls', 'name': 'Rolls', 'imageUrl': 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=300&auto=format&fit=crop&q=80', 'sortOrder': 2},
+      {'id': 'noodles', 'name': 'Noodles', 'imageUrl': 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=300&auto=format&fit=crop&q=80', 'sortOrder': 3},
+      {'id': 'snacks', 'name': 'Snacks', 'imageUrl': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80', 'sortOrder': 4},
+      {'id': 'thalis', 'name': 'Thali', 'imageUrl': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80', 'sortOrder': 5},
+    ]);
+
     final rajatDoc = await firestore.collection('shops').doc('rajat_shop').get();
     final nayanDoc = await firestore.collection('shops').doc('nayan_shop').get();
 
-    // If both shops already exist in Firestore, DO NOT overwrite anything!
+    // If both shops already exist in Firestore, DO NOT overwrite shop/menu details!
     if (rajatDoc.exists && nayanDoc.exists) {
       return;
     }
@@ -52,14 +70,23 @@ class SeedDataService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      final rajatMomosCat = rajatRef.collection('categories').doc('momos');
-      await rajatMomosCat.set({'name': 'Momos', 'sortOrder': 1});
+      final rajatCategories = [
+        {'id': 'momos', 'name': 'Momos', 'imageUrl': 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80', 'sortOrder': 1},
+        {'id': 'pizzas', 'name': 'Pizzas', 'imageUrl': 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&auto=format&fit=crop&q=80', 'sortOrder': 2},
+        {'id': 'burgers', 'name': 'Burgers', 'imageUrl': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80', 'sortOrder': 3},
+        {'id': 'biryani', 'name': 'Biryani', 'imageUrl': 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=300&auto=format&fit=crop&q=80', 'sortOrder': 4},
+        {'id': 'thalis', 'name': 'Thali', 'imageUrl': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80', 'sortOrder': 5},
+        {'id': 'snacks', 'name': 'Snacks', 'imageUrl': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80', 'sortOrder': 6},
+      ];
 
-      final rajatSnacksCat = rajatRef.collection('categories').doc('snacks');
-      await rajatSnacksCat.set({'name': 'Snacks & Fast Food', 'sortOrder': 2});
-
-      final rajatThaliCat = rajatRef.collection('categories').doc('thalis');
-      await rajatThaliCat.set({'name': 'Thalis & Meals', 'sortOrder': 3});
+      for (final cat in rajatCategories) {
+        await rajatRef.collection('categories').doc(cat['id'] as String).set({
+          'name': cat['name'],
+          'imageUrl': cat['imageUrl'],
+          'sortOrder': cat['sortOrder'],
+          'isActive': true,
+        });
+      }
 
       final rajatItems = [
         {'id': 'veg_steam_momos', 'name': 'Veg Steam Momos', 'details': '8 Pieces', 'price': 60, 'cat': 'momos', 'isVeg': true, 'rec': true},
@@ -114,14 +141,22 @@ class SeedDataService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      final nayanMomosCat = nayanRef.collection('categories').doc('momos');
-      await nayanMomosCat.set({'name': 'Momos', 'sortOrder': 1});
+      final nayanCategories = [
+        {'id': 'momos', 'name': 'Momos', 'imageUrl': 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80', 'sortOrder': 1},
+        {'id': 'rolls', 'name': 'Rolls', 'imageUrl': 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=300&auto=format&fit=crop&q=80', 'sortOrder': 2},
+        {'id': 'noodles', 'name': 'Noodles', 'imageUrl': 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=300&auto=format&fit=crop&q=80', 'sortOrder': 3},
+        {'id': 'snacks', 'name': 'Snacks', 'imageUrl': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80', 'sortOrder': 4},
+        {'id': 'thalis', 'name': 'Thali', 'imageUrl': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80', 'sortOrder': 5},
+      ];
 
-      final nayanSnacksCat = nayanRef.collection('categories').doc('snacks');
-      await nayanSnacksCat.set({'name': 'Snacks & Fast Food', 'sortOrder': 2});
-
-      final nayanThaliCat = nayanRef.collection('categories').doc('thalis');
-      await nayanThaliCat.set({'name': 'Thalis & Meals', 'sortOrder': 3});
+      for (final cat in nayanCategories) {
+        await nayanRef.collection('categories').doc(cat['id'] as String).set({
+          'name': cat['name'],
+          'imageUrl': cat['imageUrl'],
+          'sortOrder': cat['sortOrder'],
+          'isActive': true,
+        });
+      }
 
       final nayanItems = [
         {'id': 'veg_steam_momos', 'name': 'Veg Steam Momos', 'details': '8 Pieces', 'price': 50, 'cat': 'momos', 'isVeg': true, 'rec': true},
@@ -165,6 +200,48 @@ class SeedDataService {
       for (final doc in snapshot.docs) {
         if (!_validCustomIds.contains(doc.id)) {
           await doc.reference.delete();
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Ensures categories subcollection is populated with complete metadata.
+  static Future<void> _ensureCategories(String shopId, List<Map<String, dynamic>> categories) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final shopRef = firestore.collection('shops').doc(shopId);
+      final snapshot = await shopRef.collection('categories').get();
+
+      if (snapshot.docs.isEmpty) {
+        for (final cat in categories) {
+          await shopRef.collection('categories').doc(cat['id'] as String).set({
+            'name': cat['name'],
+            'imageUrl': cat['imageUrl'],
+            'sortOrder': cat['sortOrder'],
+            'isActive': true,
+          });
+        }
+      } else {
+        for (final cat in categories) {
+          final docRef = shopRef.collection('categories').doc(cat['id'] as String);
+          final doc = await docRef.get();
+          if (!doc.exists) {
+            await docRef.set({
+              'name': cat['name'],
+              'imageUrl': cat['imageUrl'],
+              'sortOrder': cat['sortOrder'],
+              'isActive': true,
+            });
+          } else {
+            final data = doc.data();
+            if (data != null && ((data['imageUrl'] as String?)?.isEmpty == true || data['isActive'] == null)) {
+              await docRef.set({
+                'imageUrl': (data['imageUrl'] as String?)?.isNotEmpty == true ? data['imageUrl'] : cat['imageUrl'],
+                'isActive': data['isActive'] ?? true,
+                'sortOrder': data['sortOrder'] ?? cat['sortOrder'],
+              }, SetOptions(merge: true));
+            }
+          }
         }
       }
     } catch (_) {}
