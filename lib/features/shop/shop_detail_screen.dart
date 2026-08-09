@@ -908,47 +908,32 @@ class _MenuItemCard extends ConsumerWidget {
     required WidgetRef ref,
   }) {
     const primaryColor = Color(0xFF5C59E5);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        InkWell(
-          key: key,
+    return InkWell(
+      key: key,
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _handleCartChange(ref, context, 1),
+      child: Container(
+        width: 66,
+        height: 30,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(8),
-          onTap: () => _handleCartChange(ref, context, 1),
-          child: Container(
-            width: 66,
-            height: 30,
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: primaryColor,
-                width: 1.3,
-              ),
-            ),
-            child: const Center(
-              child: Text(
-                'Add',
-                style: TextStyle(
-                  color: primaryColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13.5,
-                ),
-              ),
+          border: Border.all(
+            color: primaryColor,
+            width: 1.3,
+          ),
+        ),
+        child: const Center(
+          child: Text(
+            'Add',
+            style: TextStyle(
+              color: primaryColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
             ),
           ),
         ),
-        const SizedBox(height: 2),
-        const Text(
-          'customizable',
-          style: TextStyle(
-            color: AppColors.textHint,
-            fontSize: 9.5,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -959,63 +944,48 @@ class _MenuItemCard extends ConsumerWidget {
     required int quantity,
   }) {
     const primaryColor = Color(0xFF5C59E5);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          key: key,
-          width: 66,
-          height: 30,
-          decoration: BoxDecoration(
-            color: primaryColor,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: primaryColor.withValues(alpha: 0.3),
-                blurRadius: 4,
-                offset: const Offset(0, 1.5),
-              ),
-            ],
+    return Container(
+      key: key,
+      width: 66,
+      height: 30,
+      decoration: BoxDecoration(
+        color: primaryColor,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withValues(alpha: 0.3),
+            blurRadius: 4,
+            offset: const Offset(0, 1.5),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              InkWell(
-                onTap: () => _handleCartChange(ref, context, -1),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-                  child: Icon(Icons.remove_rounded, size: 14, color: Colors.white),
-                ),
-              ),
-              Text(
-                '$quantity',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              InkWell(
-                onTap: () => _handleCartChange(ref, context, 1),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-                  child: Icon(Icons.add_rounded, size: 14, color: Colors.white),
-                ),
-              ),
-            ],
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          InkWell(
+            onTap: () => _handleCartChange(ref, context, -1),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+              child: Icon(Icons.remove_rounded, size: 14, color: Colors.white),
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        const Text(
-          'customizable',
-          style: TextStyle(
-            color: AppColors.textHint,
-            fontSize: 9.5,
-            fontWeight: FontWeight.w400,
+          Text(
+            '$quantity',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
           ),
-        ),
-      ],
+          InkWell(
+            onTap: () => _handleCartChange(ref, context, 1),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+              child: Icon(Icons.add_rounded, size: 14, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1103,32 +1073,47 @@ class _MenuItemCard extends ConsumerWidget {
     final quantityInCart =
         cartItem.isNotEmpty ? cartItem.first.quantity : 0;
 
-    final originalPrice = (item.price * 1.35).round();
+    void showItemDetail() {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => _ItemDetailBottomSheet(
+          item: item,
+          shop: shop,
+          isAvailable: isAvailable,
+          cartItems: cartItems,
+          displayImageUrl: displayImageUrl,
+        ),
+      );
+    }
 
     return Opacity(
       opacity: isAvailable ? 1.0 : 0.55,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
-            width: 0.8,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
+      child: GestureDetector(
+        onTap: showItemDetail,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
+              width: 0.8,
             ),
-          ],
-        ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 1. Food Image Container (~52% height)
             AspectRatio(
-              aspectRatio: 1.35,
+              aspectRatio: 1.25,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -1228,105 +1213,48 @@ class _MenuItemCard extends ConsumerWidget {
                         ),
                         const SizedBox(height: 2),
 
-                        // Description
-                        Text(
-                          item.details.isNotEmpty
-                              ? item.details
-                              : '${item.name} served fresh with authentic taste & special dips.',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 10,
-                            height: 1.2,
+                        // Description with "... more" matching reference screenshot
+                        Text.rich(
+                          TextSpan(
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 10,
+                              height: 1.2,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: item.details.isNotEmpty
+                                    ? item.details
+                                    : '${item.name} prepared fresh with authentic spices',
+                              ),
+                              const TextSpan(
+                                text: '... more',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF475569),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-
-                        const SizedBox(height: 3),
-
-                        // Rating stars row
-                        Row(
-                          children: [
-                            ...List.generate(
-                              4,
-                              (index) => const Icon(
-                                Icons.star_rounded,
-                                size: 11,
-                                color: Color(0xFFFFA000),
-                              ),
-                            ),
-                            const Icon(
-                              Icons.star_half_rounded,
-                              size: 11,
-                              color: Color(0xFFFFA000),
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '2 Ratings',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                color: Colors.grey.shade500,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
 
-                    // Bottom Row: Price Stack + Add Button / Stepper
+                    // Bottom Row: Clean Price + Add Button / Stepper
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Price & Discount Stack
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  item.formattedPrice,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14.5,
-                                    color: Theme.of(context)
-                                        .textTheme
-                                        .bodyLarge
-                                        ?.color,
-                                  ),
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  '₹$originalPrice',
-                                  style: TextStyle(
-                                    decoration: TextDecoration.lineThrough,
-                                    decorationColor: Colors.grey.shade400,
-                                    color: Colors.grey.shade500,
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                                const SizedBox(width: 1),
-                                const Icon(
-                                  Icons.bolt_rounded,
-                                  size: 12,
-                                  color: Color(0xFFFFB300),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 1),
-                            const Text(
-                              '25% OFF',
-                              style: TextStyle(
-                                color: Color(0xFF5C59E5),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10.5,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          item.formattedPrice,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.color,
+                          ),
                         ),
 
                         // Add Button / Stepper with customizable text
@@ -1352,8 +1280,9 @@ class _MenuItemCard extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 /// Delegate for pinning Category Navigation Header when scrolling
@@ -1513,6 +1442,257 @@ class _CategoryNavWidget extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Modern bottom sheet displaying full item details when clicking card or "... more".
+class _ItemDetailBottomSheet extends ConsumerWidget {
+  const _ItemDetailBottomSheet({
+    required this.item,
+    required this.shop,
+    required this.isAvailable,
+    required this.cartItems,
+    required this.displayImageUrl,
+  });
+
+  final MenuItem item;
+  final Shop shop;
+  final bool isAvailable;
+  final List<CartItem> cartItems;
+  final String displayImageUrl;
+
+  Widget _buildVegIcon() {
+    return Container(
+      width: 15,
+      height: 15,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFF388E3C), width: 1.5),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Center(
+        child: Container(
+          width: 6,
+          height: 6,
+          decoration: const BoxDecoration(
+            color: Color(0xFF388E3C),
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNonVegIcon() {
+    return Container(
+      width: 15,
+      height: 15,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFD32F2F), width: 1.5),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: const Center(
+        child: CustomPaint(
+          size: Size(7, 7),
+          painter: _TrianglePainter(color: Color(0xFFD32F2F)),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final favorites = ref.watch(favoritesProvider);
+    final isFavorite = favorites.contains(item.id);
+
+    final cartItem = cartItems.where((ci) => ci.menuItem.id == item.id).toList();
+    final quantityInCart = cartItem.isNotEmpty ? cartItem.first.quantity : 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle bar
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 8),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          // Dish Header Photo Container with Favorite Button
+          if (displayImageUrl.isNotEmpty)
+            Container(
+              height: 200,
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        displayImageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: isDark ? Colors.grey[850] : Colors.grey[200],
+                          child: const Icon(Icons.restaurant_menu_rounded, size: 40, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: GestureDetector(
+                      onTap: () {
+                        ref.read(favoritesProvider.notifier).toggleFavorite(item.id);
+                      },
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isFavorite ? Icons.favorite_rounded : Icons.favorite_outline_rounded,
+                          size: 18,
+                          color: isFavorite ? const Color(0xFFE53935) : AppColors.textHint,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title with Veg/Non-Veg icon
+                Row(
+                  children: [
+                    item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Full Detailed Description
+                Text(
+                  item.details.isNotEmpty
+                      ? item.details
+                      : '${item.name} is cooked fresh using authentic ingredients, rich aromatics, and served hot with delicious house-made dips.',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    height: 1.45,
+                    color: isDark ? Colors.grey[300] : Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Price & Add Button Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      item.formattedPrice,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                      ),
+                    ),
+
+                    if (isAvailable)
+                      quantityInCart > 0
+                          ? _buildQuantityStepper(context, ref, quantityInCart)
+                          : _buildAddButton(context, ref),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddButton(BuildContext context, WidgetRef ref) {
+    const primaryColor = Color(0xFF5C59E5);
+    return ElevatedButton(
+      onPressed: () {
+        ref.read(cartProvider.notifier).addItem(item, shop.id, shop.name);
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 0,
+      ),
+      child: const Text('Add to Cart', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+    );
+  }
+
+  Widget _buildQuantityStepper(BuildContext context, WidgetRef ref, int quantity) {
+    const primaryColor = Color(0xFF5C59E5);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: primaryColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: () => ref.read(cartProvider.notifier).removeItem(item.id),
+            icon: const Icon(Icons.remove_rounded, size: 16, color: Colors.white),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Text(
+              '$quantity',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+          ),
+          IconButton(
+            onPressed: () => ref.read(cartProvider.notifier).addItem(item, shop.id, shop.name),
+            icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+          ),
+        ],
+      ),
     );
   }
 }
