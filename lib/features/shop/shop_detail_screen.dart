@@ -664,29 +664,31 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 key: _getCategoryKey(category.id),
-                padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.lg, AppSpacing.md, AppSpacing.sm),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.md, 18, AppSpacing.md, 10),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
                       category.name,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                             fontSize: 18,
+                            letterSpacing: -0.2,
                           ),
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
+                        color: const Color(0xFF5C59E5).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '${categoryItems.length}',
                         style: const TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF5C59E5),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -703,9 +705,9 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.65,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 0.86,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => _MenuItemCard(
@@ -741,9 +743,9 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 0.65,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 0.86,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) => _MenuItemCard(
@@ -1062,6 +1064,7 @@ class _MenuItemCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isAvailable = item.isAvailable && isShopOpen;
     final displayImageUrl = _getEffectiveImageUrl(item);
     final favorites = ref.watch(favoritesProvider);
@@ -1082,7 +1085,6 @@ class _MenuItemCard extends ConsumerWidget {
           item: item,
           shop: shop,
           isAvailable: isAvailable,
-          cartItems: cartItems,
           displayImageUrl: displayImageUrl,
         ),
       );
@@ -1097,23 +1099,23 @@ class _MenuItemCard extends ConsumerWidget {
             color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
-              width: 0.8,
+              color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
+              width: 1.0,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2.5),
               ),
             ],
           ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Food Image Container (~52% height)
+            // 1. Food Image Container
             AspectRatio(
-              aspectRatio: 1.25,
+              aspectRatio: 1.35,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -1213,29 +1215,35 @@ class _MenuItemCard extends ConsumerWidget {
                         ),
                         const SizedBox(height: 2),
 
-                        // Description with "... more" matching reference screenshot
-                        Text.rich(
-                          TextSpan(
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 10,
-                              height: 1.2,
-                            ),
-                            children: [
+                        // Description with clean "... more" (stripping duplicate dots)
+                        Builder(
+                          builder: (context) {
+                            final rawDetails = item.details.isNotEmpty
+                                ? item.details
+                                : '${item.name} prepared fresh with authentic spices';
+                            final cleanDetails = rawDetails.replaceAll(RegExp(r'\.+$'), '').trim();
+                            return Text.rich(
                               TextSpan(
-                                text: item.details.isNotEmpty
-                                    ? item.details
-                                    : '${item.name} prepared fresh with authentic spices',
-                              ),
-                              const TextSpan(
-                                text: '... more',
                                 style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF475569),
+                                  color: Colors.grey.shade600,
+                                  fontSize: 10.5,
+                                  height: 1.25,
                                 ),
+                                children: [
+                                  TextSpan(text: '$cleanDetails... '),
+                                  const TextSpan(
+                                    text: 'more',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF475569),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -1452,14 +1460,12 @@ class _ItemDetailBottomSheet extends ConsumerWidget {
     required this.item,
     required this.shop,
     required this.isAvailable,
-    required this.cartItems,
     required this.displayImageUrl,
   });
 
   final MenuItem item;
   final Shop shop;
   final bool isAvailable;
-  final List<CartItem> cartItems;
   final String displayImageUrl;
 
   Widget _buildVegIcon() {
@@ -1506,8 +1512,9 @@ class _ItemDetailBottomSheet extends ConsumerWidget {
     final favorites = ref.watch(favoritesProvider);
     final isFavorite = favorites.contains(item.id);
 
-    final cartItem = cartItems.where((ci) => ci.menuItem.id == item.id).toList();
-    final quantityInCart = cartItem.isNotEmpty ? cartItem.first.quantity : 0;
+    final liveCart = ref.watch(cartProvider);
+    final cartMatch = liveCart.where((ci) => ci.menuItem.id == item.id).toList();
+    final quantityInCart = cartMatch.isNotEmpty ? cartMatch.first.quantity : 0;
 
     return Container(
       decoration: BoxDecoration(
