@@ -6,7 +6,6 @@
 build/
 .pub-cache/
 .pub/
-pubspec.lock
 
 # IDE
 .idea/
@@ -69,7 +68,6 @@ coverage/
 .env.*
 *.env
 secrets/
-**/firebase_options.dart
 
 # Generated files
 *.freezed.dart
