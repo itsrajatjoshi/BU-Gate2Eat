@@ -23,7 +23,6 @@ class CartScreen extends ConsumerStatefulWidget {
 
 class _CartScreenState extends ConsumerState<CartScreen> {
   final _specialInstructionsController = TextEditingController();
-  bool _showNoteInput = false;
 
   @override
   void dispose() {
@@ -267,102 +266,25 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
                   const SizedBox(height: 20),
 
-                  // 3. Add Note Section
-                  if (!_showNoteInput && _specialInstructionsController.text.isEmpty)
-                    InkWell(
-                      onTap: () => setState(() => _showNoteInput = true),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        width: double.infinity,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-                            width: 1.2,
-                          ),
-                        ),
-                        child: Center(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.edit_note_rounded,
-                                size: 20,
-                                color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Add Note',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14.5,
-                                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
-                                ),
-                              ),
-                            ],
-                          ),
+                  // 3. Special Instructions Section (Exact previous implementation)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Special Instructions (optional)',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      TextField(
+                        controller: _specialInstructionsController,
+                        maxLines: 2,
+                        maxLength: AppConfig.maxSpecialInstructionsLength,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g., Extra spicy, No onion...',
                         ),
                       ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFF5C59E5).withValues(alpha: 0.3),
-                          width: 1.2,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.edit_note_rounded, size: 18, color: Color(0xFF5C59E5)),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Special Note for Shop',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13.5,
-                                      color: Color(0xFF5C59E5),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _specialInstructionsController.clear();
-                                    _showNoteInput = false;
-                                  });
-                                },
-                                child: const Icon(Icons.close_rounded, size: 18, color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _specialInstructionsController,
-                            maxLines: 2,
-                            maxLength: AppConfig.maxSpecialInstructionsLength,
-                            style: const TextStyle(fontSize: 13.5),
-                            decoration: const InputDecoration(
-                              hintText: 'e.g., Extra spicy, No onions, Less oil...',
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                              isDense: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
+                  ),
                 ],
               ),
             ),
