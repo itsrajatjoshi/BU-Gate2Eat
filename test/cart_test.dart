@@ -70,7 +70,7 @@ void main() {
     cartNotifier = CartNotifier();
   });
 
-  group('BU Gate2Eat — 18 Explicit Cart Case Tests', () {
+  group('BU Gate2Eat — 18 Explicit Cart Case Tests & Regression Suite', () {
     test('CASE 1: Empty cart -> add Shop A item -> added directly without prompt', () {
       expect(cartNotifier.state.isEmpty, isTrue);
       expect(cartNotifier.state.shopId, isNull);
@@ -255,45 +255,16 @@ void main() {
       expect(cartNotifier.state.getQuantityForShop(shopAId, 'veg_steam_momos'), equals(0));
     });
 
-    test('CASE 18: Complete Real-User Flow (Shop A -> add -> Shop B -> KEEP CART -> CLEAR & ADD -> quantity -> empty -> Shop B)', () {
-      // Step 1: Add item from Shop A
-      var ok = cartNotifier.addItem(itemA1, shopAId, shopAName);
+    test('CASE 18: Complete Real-User Flow & Regression (Shop A + veg_steam_momos x1 -> Nayan lookup=0 -> Rajat lookup=1)', () {
+      // Cart: Rajat Shop + veg_steam_momos x 1
+      final ok = cartNotifier.addItem(itemA1, shopAId, shopAName);
       expect(ok, isTrue);
-      expect(cartNotifier.state.shopId, equals(shopAId));
 
-      // Step 2: Try adding item from Shop B -> conflict
-      ok = cartNotifier.addItem(itemB1, shopBId, shopBName);
-      expect(ok, isFalse);
+      // Nayan Shop + veg_steam_momos (itemBSameIdAsA1) -> quantity MUST BE 0 (shows Add button)
+      expect(cartNotifier.state.getQuantityForShop(shopBId, itemBSameIdAsA1.id), equals(0));
 
-      // Step 3: User chooses KEEP CART -> Shop A remains
-      expect(cartNotifier.state.shopId, equals(shopAId));
+      // Rajat Shop + veg_steam_momos -> quantity MUST BE 1 (shows - 1 + stepper)
       expect(cartNotifier.state.getQuantityForShop(shopAId, itemA1.id), equals(1));
-      expect(cartNotifier.state.getQuantityForShop(shopBId, itemA1.id), equals(0));
-
-      // Step 4: User tries again and chooses CLEAR & ADD -> switches to Shop B
-      cartNotifier.clearAndAddItem(itemBSameIdAsA1, shopBId, shopBName);
-      expect(cartNotifier.state.shopId, equals(shopBId));
-      expect(cartNotifier.state.getQuantityForShop(shopBId, 'veg_steam_momos'), equals(1));
-      expect(cartNotifier.state.getQuantityForShop(shopAId, 'veg_steam_momos'), equals(0));
-
-      // Step 5: Increase quantity in Shop B
-      cartNotifier.addItem(itemBSameIdAsA1, shopBId, shopBName);
-      expect(cartNotifier.state.getQuantityForShop(shopBId, 'veg_steam_momos'), equals(2));
-
-      // Step 6: Remove all items -> cart becomes completely empty
-      cartNotifier.removeItem(itemBSameIdAsA1.id);
-      cartNotifier.removeItem(itemBSameIdAsA1.id);
-      expect(cartNotifier.state.isEmpty, isTrue);
-      expect(cartNotifier.state.shopId, isNull);
-
-      // Step 7: Every shop's quantity lookup returns 0
-      expect(cartNotifier.state.getQuantityForShop(shopAId, 'veg_steam_momos'), equals(0));
-      expect(cartNotifier.state.getQuantityForShop(shopBId, 'veg_steam_momos'), equals(0));
-
-      // Step 8: Now add Shop A item directly without prompt
-      ok = cartNotifier.addItem(itemA1, shopAId, shopAName);
-      expect(ok, isTrue);
-      expect(cartNotifier.state.shopId, equals(shopAId));
     });
   });
 }

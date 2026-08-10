@@ -34,8 +34,9 @@ class CartNotifier extends StateNotifier<CartState> {
       return false; // Conflict! UI must prompt for clear & add.
     }
 
-    final existingIndex =
-        state.items.indexWhere((item) => item.menuItem.id == menuItem.id);
+    final existingIndex = state.items.indexWhere(
+      (item) => item.shopId == shopId && item.menuItem.id == menuItem.id,
+    );
 
     if (existingIndex >= 0) {
       // Increment quantity
@@ -81,9 +82,10 @@ class CartNotifier extends StateNotifier<CartState> {
   }
 
   /// Decrements quantity or removes item completely if quantity becomes 0.
-  void removeItem(String menuItemId) {
-    final existingIndex =
-        state.items.indexWhere((item) => item.menuItem.id == menuItemId);
+  void removeItem(String menuItemId, [String? shopId]) {
+    final existingIndex = state.items.indexWhere(
+      (item) => (shopId == null || item.shopId == shopId) && item.menuItem.id == menuItemId,
+    );
 
     if (existingIndex < 0) return;
 
@@ -107,9 +109,11 @@ class CartNotifier extends StateNotifier<CartState> {
   }
 
   /// Removes an item completely from the cart.
-  void deleteItem(String menuItemId) {
-    final updated =
-        state.items.where((item) => item.menuItem.id != menuItemId).toList();
+  void deleteItem(String menuItemId, [String? shopId]) {
+    final updated = state.items
+        .where((item) =>
+            !((shopId == null || item.shopId == shopId) && item.menuItem.id == menuItemId),)
+        .toList();
     if (updated.isEmpty) {
       state = const CartState();
     } else {
@@ -119,14 +123,15 @@ class CartNotifier extends StateNotifier<CartState> {
   }
 
   /// Updates the quantity of a specific item.
-  void updateQuantity(String menuItemId, int quantity) {
+  void updateQuantity(String menuItemId, int quantity, [String? shopId]) {
     if (quantity <= 0) {
-      deleteItem(menuItemId);
+      deleteItem(menuItemId, shopId);
       return;
     }
 
-    final existingIndex =
-        state.items.indexWhere((item) => item.menuItem.id == menuItemId);
+    final existingIndex = state.items.indexWhere(
+      (item) => (shopId == null || item.shopId == shopId) && item.menuItem.id == menuItemId,
+    );
     if (existingIndex < 0) return;
 
     final updated = [...state.items];
@@ -142,31 +147,12 @@ class CartNotifier extends StateNotifier<CartState> {
     state = const CartState();
   }
 
-  /// Safety guard: Enforces strict single-shop invariant.
+  /// Internal invariant enforcer to ensure state state consistency.
   void _enforceInvariant() {
-    if (state.isEmpty) {
+    if (state.items.isEmpty) {
       if (state.shopId != null || state.shopName != null) {
         state = const CartState();
       }
-      return;
-    }
-
-    final activeShopId = state.shopId;
-    if (activeShopId != null) {
-      final validItems =
-          state.items.where((i) => i.shopId == activeShopId).toList();
-      if (validItems.length != state.items.length) {
-        if (validItems.isEmpty) {
-          state = const CartState();
-        } else {
-          state = state.copyWith(items: validItems);
-        }
-      }
     }
   }
-
-  /// Helper getters for backwards compatibility
-  List<CartItem> get items => state.items;
-  double get grandTotal => state.grandTotal;
-  int get totalItemCount => state.totalItemCount;
 }

@@ -56,6 +56,25 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   void initState() {
     super.initState();
     _mainScrollController.addListener(_onMainScroll);
+    _checkAndEnforceShopBoundary();
+  }
+
+  @override
+  void didUpdateWidget(ShopDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.shopId != widget.shopId) {
+      _checkAndEnforceShopBoundary();
+    }
+  }
+
+  void _checkAndEnforceShopBoundary() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final cartState = ref.read(cartProvider);
+      if (cartState.isNotEmpty && cartState.shopId != widget.shopId) {
+        ref.read(cartProvider.notifier).clearCart();
+      }
+    });
   }
 
   @override
@@ -285,19 +304,25 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     // Count items in cart for badge (sum of quantities)
     final cartItemCount = cartState.totalItemCount;
 
-    return Scaffold(
-      // Cart FAB
-      floatingActionButton: cartItemCount > 0
-          ? FloatingActionButton.extended(
-              onPressed: () => context.push(AppRoutes.cart),
-              backgroundColor: AppColors.primary,
-              icon: const Icon(Icons.shopping_cart_rounded, color: Colors.white),
-              label: Text(
-                '$cartItemCount item${cartItemCount > 1 ? 's' : ''} in cart',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            )
-          : null,
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          ref.read(cartProvider.notifier).clearCart();
+        }
+      },
+      child: Scaffold(
+        // Cart FAB
+        floatingActionButton: cartItemCount > 0
+            ? FloatingActionButton.extended(
+                onPressed: () => context.push(AppRoutes.cart),
+                backgroundColor: AppColors.primary,
+                icon: const Icon(Icons.shopping_cart_rounded, color: Colors.white),
+                label: Text(
+                  '$cartItemCount item${cartItemCount > 1 ? 's' : ''} in cart',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              )
+            : null,
       body: shopAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Scaffold(
@@ -582,8 +607,9 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           );
         },
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Builds slivers for menu items list (categorized or flat).
   List<Widget> _buildMenuSlivers({
@@ -721,10 +747,10 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => _MenuItemCard(
+                    key: ValueKey('${shop.id}_${categoryItems[index].id}'),
                     item: categoryItems[index],
                     shop: shop,
                     isShopOpen: isOpen,
-                    cartItems: cartItems,
                   ),
                   childCount: categoryItems.length,
                 ),
@@ -763,10 +789,10 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) => _MenuItemCard(
+            key: ValueKey('${shop.id}_${items[index].id}'),
             item: items[index],
             shop: shop,
             isShopOpen: isOpen,
-            cartItems: cartItems,
           ),
           childCount: items.length,
         ),
@@ -844,13 +870,12 @@ class _MenuItemCard extends ConsumerWidget {
     required this.item,
     required this.shop,
     required this.isShopOpen,
-    required this.cartItems,
+    super.key,
   });
 
   final MenuItem item;
   final Shop shop;
   final bool isShopOpen;
-  final List<CartItem> cartItems;
 
   Widget _buildVegIcon() {
     return Container(
@@ -1061,6 +1086,10 @@ class _MenuItemCard extends ConsumerWidget {
 
     final cartState = ref.watch(cartProvider);
     final quantityInCart = cartState.getQuantityForShop(shop.id, item.id);
+
+    if (item.id == 'veg_steam_momos') {
+      debugPrint('[CARD AUDIT] Shop: ${shop.id} (${shop.name}) | Item: ${item.id} (${item.name}, ₹${item.price}) | CartShop: ${cartState.shopId} | quantityInCart: $quantityInCart');
+    }
 
     void showItemDetail() {
       showModalBottomSheet<void>(

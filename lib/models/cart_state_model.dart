@@ -39,20 +39,18 @@ class CartState {
   String get formattedGrandTotal => '₹${grandTotal.toStringAsFixed(0)}';
 
   /// Returns quantity of a menu item ONLY if the cart belongs to targetShopId.
-  /// If cart is empty or belongs to a different shop, returns 0.
+  /// Scoped strictly by BOTH shopId AND menuItemId.
   int getQuantityForShop(String targetShopId, String menuItemId) {
     if (isEmpty || shopId != targetShopId) return 0;
-    final match = items.where((i) => i.menuItem.id == menuItemId).toList();
+    final match = items
+        .where((i) => i.shopId == targetShopId && i.menuItem.id == menuItemId)
+        .toList();
     return match.isNotEmpty ? match.first.quantity : 0;
   }
 
-  /// Helper to get current quantity of a specific item by ID, with optional shopId scoping.
-  int getQuantity(String menuItemId, {String? shopId}) {
-    if (shopId != null) {
-      return getQuantityForShop(shopId, menuItemId);
-    }
-    final match = items.where((i) => i.menuItem.id == menuItemId).toList();
-    return match.isNotEmpty ? match.first.quantity : 0;
+  /// Convenience wrapper requiring currentShopId for safe shop-scoped quantity lookup.
+  int getQuantity(String menuItemId, String currentShopId) {
+    return getQuantityForShop(currentShopId, menuItemId);
   }
 
   /// Creates a copy of this CartState with optional updated fields.
