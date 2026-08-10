@@ -1,8 +1,12 @@
 // BU Gate2Eat — Cart Screen
-// Review order, adjust quantities, add special instructions, place order via WhatsApp
+// Redesigned to match premium order overview design reference
+// Resolves live backend/Firestore menu item images dynamically.
+// Bill summary & Place Order button pinned safely at bottom via bottomNavigationBar + SafeArea.
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/cart_item_model.dart';
@@ -19,6 +23,7 @@ class CartScreen extends ConsumerStatefulWidget {
 
 class _CartScreenState extends ConsumerState<CartScreen> {
   final _specialInstructionsController = TextEditingController();
+  bool _showNoteInput = false;
 
   @override
   void dispose() {
@@ -69,6 +74,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('WhatsApp Not Found'),
           content: const Text(
             'Please install WhatsApp to place orders.',
@@ -84,29 +90,70 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     }
   }
 
+  String _getEffectiveImageUrl(MenuItem item) {
+    if (item.imageUrl.isNotEmpty) return item.imageUrl;
+
+    final nameLower = item.name.toLowerCase();
+    if (nameLower.contains('momo') || nameLower.contains('dumpling')) {
+      if (nameLower.contains('fried')) {
+        return 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=500&auto=format&fit=crop&q=80';
+      }
+      return 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('noodle') || nameLower.contains('chow') || nameLower.contains('maggi')) {
+      return 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('burger')) {
+      return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('paneer') || nameLower.contains('curry')) {
+      return 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('roll') || nameLower.contains('wrap') || nameLower.contains('frankie')) {
+      return 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('pizza')) {
+      return 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&auto=format&fit=crop&q=80';
+    }
+
+    final fallbacks = [
+      'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=500&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=500&auto=format&fit=crop&q=80',
+    ];
+    return fallbacks[item.id.hashCode.abs() % fallbacks.length];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final cartState = ref.watch(cartProvider);
     final cartItems = cartState.items;
     final cartNotifier = ref.read(cartProvider.notifier);
 
     final grandTotal = cartState.grandTotal;
-
     final shopId = cartState.shopId ?? '';
-    final recommendedAsync = shopId.isNotEmpty
-        ? ref.watch(recommendedMenuItemsProvider(shopId))
+    final shopName = cartState.shopName ?? (cartItems.isNotEmpty ? cartItems.first.shopName : '');
+
+    // Live menu items resolution from Firestore
+    final liveMenuItemsAsync = shopId.isNotEmpty
+        ? ref.watch(shopMenuItemsProvider(shopId))
         : const AsyncValue<List<MenuItem>>.data([]);
+    final liveMenuItems = liveMenuItemsAsync.value ?? <MenuItem>[];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Your Cart'),
+        title: const Text(
+          'Your Cart',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           if (cartItems.isNotEmpty)
             TextButton(
-              onPressed: () {
-                cartNotifier.clearCart();
-              },
-              child: const Text('Clear'),
+              onPressed: () => cartNotifier.clearCart(),
+              child: Text(
+                'Clear',
+                style: TextStyle(
+                  color: Colors.red.shade400,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
         ],
       ),
@@ -115,19 +162,26 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.shopping_cart_outlined,
-                    size: 64,
-                    color: AppColors.textHint,
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.shopping_bag_outlined,
+                      size: 64,
+                      color: AppColors.primary,
+                    ),
                   ),
-                  const SizedBox(height: AppSpacing.md),
+                  const SizedBox(height: AppSpacing.lg),
                   Text(
                     'Your cart is empty',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppColors.textSecondary,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Browse shops and add items to get started',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -137,374 +191,482 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 ],
               ),
             )
-          : Column(
-              children: [
-                // Shop name header
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  color: AppColors.primary.withValues(alpha: 0.05),
-                  child: Text(
-                    'Ordering from ${cartItems.first.shopName}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppColors.primary,
-                        ),
-                  ),
-                ),
-
-                // Cart items list & recommendations
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    itemCount: cartItems.length + 2, // +1 instructions, +1 recommendations
-                    itemBuilder: (context, index) {
-                      if (index < cartItems.length) {
-                        final item = cartItems[index];
-                        return _CartItemTile(
-                          item: item,
-                          onIncrement: () =>
-                              cartNotifier.addItem(item.menuItem, item.shopId, item.shopName),
-                          onDecrement: () =>
-                              cartNotifier.removeItem(item.menuItem.id),
-                          onDelete: () =>
-                              cartNotifier.deleteItem(item.menuItem.id),
-                        );
-                      }
-
-                      // Index = cartItems.length -> Special instructions field
-                      if (index == cartItems.length) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: AppSpacing.md),
-                            Text(
-                              'Special Instructions (optional)',
-                              style: Theme.of(context).textTheme.labelLarge,
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            TextField(
-                              controller: _specialInstructionsController,
-                              maxLines: 2,
-                              maxLength: AppConfig.maxSpecialInstructionsLength,
-                              decoration: const InputDecoration(
-                                hintText: 'e.g., Extra spicy, No onion...',
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-
-                      // Index = cartItems.length + 1 -> "You may also like" section
-                      return recommendedAsync.when(
-                        loading: () => const SizedBox.shrink(),
-                        error: (_, __) => const SizedBox.shrink(),
-                        data: (recItems) {
-                          // Filter out items already in cart
-                          final availableRecs = recItems
-                              .where((r) => !cartItems.any((c) => c.menuItem.id == r.id))
-                              .toList();
-
-                          if (availableRecs.isEmpty) return const SizedBox.shrink();
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: AppSpacing.lg),
-                              Text(
-                                'You may also like',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              Text(
-                                'Recommended items from ${cartItems.first.shopName}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
-                              ),
-                              const SizedBox(height: AppSpacing.sm),
-                              SizedBox(
-                                height: 130,
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: availableRecs.length,
-                                  itemBuilder: (context, rIndex) {
-                                    final recItem = availableRecs[rIndex];
-                                    return Container(
-                                      width: 150,
-                                      margin: const EdgeInsets.only(right: AppSpacing.sm),
-                                      child: Card(
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(AppSpacing.sm),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    recItem.name,
-                                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                          fontWeight: FontWeight.w600,
-                                                        ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                  if (recItem.details.isNotEmpty)
-                                                    Text(
-                                                      recItem.details,
-                                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                                            color: AppColors.textHint,
-                                                            fontSize: 11,
-                                                          ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                ],
-                                              ),
-                                              Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Text(
-                                                    recItem.formattedPrice,
-                                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                          fontWeight: FontWeight.bold,
-                                                        ),
-                                                  ),
-                                                  InkWell(
-                                                    onTap: () {
-                                                      cartNotifier.addItem(
-                                                        recItem,
-                                                        cartItems.first.shopId,
-                                                        cartItems.first.shopName,
-                                                      );
-                                                    },
-                                                    child: Container(
-                                                      padding: const EdgeInsets.symmetric(
-                                                        horizontal: AppSpacing.sm,
-                                                        vertical: 4,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: AppColors.primary,
-                                                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                                                      ),
-                                                      child: const Text(
-                                                        'ADD',
-                                                        style: TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 11,
-                                                          fontWeight: FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-
-                // Bottom bar with total and place order
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
-                  ),
-                  child: SafeArea(
-                    child: Row(
+          : SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Current Order Header Section
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Total
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Total',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: AppColors.textSecondary),
-                            ),
-                            Text(
-                              '₹${grandTotal.toStringAsFixed(0)}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                        Text(
+                          'Current Order',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 24,
+                                letterSpacing: -0.3,
+                              ),
                         ),
-                        const SizedBox(width: AppSpacing.lg),
-
-                        // Place Order button
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _placeOrder,
-                            icon: const Icon(
-                              Icons.send_rounded,
-                              color: Colors.white,
-                            ),
-                            label: const Text('Place Order'),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Gate 2 Pickup • $shopName',
+                          style: TextStyle(
+                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
                   ),
+
+                  const Divider(height: 1, thickness: 0.8),
+                  const SizedBox(height: 12),
+
+                  // 2. Cart Items List
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: cartItems.length,
+                    separatorBuilder: (_, __) => const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Divider(height: 1, thickness: 0.6),
+                    ),
+                    itemBuilder: (context, index) {
+                      final cartItem = cartItems[index];
+
+                      // Resolve live MenuItem from Firestore if available
+                      final liveMatch = liveMenuItems.where((m) => m.id == cartItem.menuItem.id).toList();
+                      final effectiveMenuItem = liveMatch.isNotEmpty ? liveMatch.first : cartItem.menuItem;
+                      final effectiveImageUrl = _getEffectiveImageUrl(effectiveMenuItem);
+
+                      return _CartItemRow(
+                        cartItem: cartItem,
+                        menuItem: effectiveMenuItem,
+                        imageUrl: effectiveImageUrl,
+                        onIncrement: () => cartNotifier.addItem(
+                          effectiveMenuItem,
+                          cartItem.shopId,
+                          cartItem.shopName,
+                        ),
+                        onDecrement: () => cartNotifier.removeItem(
+                          cartItem.menuItem.id,
+                          cartItem.shopId,
+                        ),
+                        onDelete: () => cartNotifier.deleteItem(
+                          cartItem.menuItem.id,
+                          cartItem.shopId,
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 3. Add Note Section
+                  if (!_showNoteInput && _specialInstructionsController.text.isEmpty)
+                    InkWell(
+                      onTap: () => setState(() => _showNoteInput = true),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        width: double.infinity,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.edit_note_rounded,
+                                size: 20,
+                                color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Add Note',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14.5,
+                                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFF5C59E5).withValues(alpha: 0.3),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.edit_note_rounded, size: 18, color: Color(0xFF5C59E5)),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Special Note for Shop',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13.5,
+                                      color: Color(0xFF5C59E5),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _specialInstructionsController.clear();
+                                    _showNoteInput = false;
+                                  });
+                                },
+                                child: const Icon(Icons.close_rounded, size: 18, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _specialInstructionsController,
+                            maxLines: 2,
+                            maxLength: AppConfig.maxSpecialInstructionsLength,
+                            style: const TextStyle(fontSize: 13.5),
+                            decoration: const InputDecoration(
+                              hintText: 'e.g., Extra spicy, No onions, Less oil...',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                              isDense: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+      // 4. Pinned Bottom Navigation Bar: Bill Summary + Place Order Button
+      // Uses SafeArea to guarantee it NEVER collides or superimposes with system navigation bar!
+      bottomNavigationBar: cartItems.isEmpty
+          ? null
+          : Container(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                    blurRadius: 14,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Bill Rows
+                    _BillRow(label: 'Subtotal', value: '₹${grandTotal.toStringAsFixed(0)}'),
+                    const SizedBox(height: 8),
+                    const _BillRow(label: 'Tax (5%)', value: 'Included'),
+                    const SizedBox(height: 8),
+                    const _BillRow(label: 'Service Charge', value: 'Free (Gate 2)'),
+                    const SizedBox(height: 12),
+                    const Divider(height: 1, thickness: 0.8),
+                    const SizedBox(height: 12),
+
+                    // Total Price
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total',
+                          style: TextStyle(
+                            fontSize: 18.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          '₹${grandTotal.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 21.5,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF5C59E5),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Place Order Action Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _placeOrder,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981), // Vibrant food-green
+                          foregroundColor: Colors.white,
+                          elevation: 2,
+                          shadowColor: const Color(0xFF10B981).withValues(alpha: 0.35),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Place Order',
+                              style: TextStyle(
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
     );
   }
 }
 
-/// A single cart item row with quantity controls and swipe-to-delete.
-class _CartItemTile extends StatelessWidget {
-  const _CartItemTile({
-    required this.item,
+/// Cart Item Row styled matching reference screenshot
+class _CartItemRow extends StatelessWidget {
+  const _CartItemRow({
+    required this.cartItem,
+    required this.menuItem,
+    required this.imageUrl,
     required this.onIncrement,
     required this.onDecrement,
     required this.onDelete,
   });
 
-  final CartItem item;
+  final CartItem cartItem;
+  final MenuItem menuItem;
+  final String imageUrl;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: ValueKey(item.menuItem.id),
-      direction: DismissDirection.endToStart,
-      onDismissed: (_) => onDelete(),
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: AppSpacing.lg),
-        color: AppColors.error,
-        child: const Icon(Icons.delete_outline, color: Colors.white),
-      ),
-      child: Card(
-        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Food Image (Square rounded)
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            width: 68,
+            height: 68,
+            child: imageUrl.isNotEmpty
+                ? CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      child: const Center(
+                        child: Icon(Icons.restaurant_rounded, size: 20, color: Colors.grey),
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      child: const Center(
+                        child: Icon(Icons.fastfood_rounded, size: 20, color: Colors.grey),
+                      ),
+                    ),
+                  )
+                : Container(
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                    child: const Center(
+                      child: Icon(Icons.fastfood_rounded, size: 20, color: Colors.grey),
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 12),
+
+        // 2. Middle Details Column + Stepper
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Veg/Non-Veg indicator
-              Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: item.menuItem.isVeg
-                        ? AppColors.vegGreen
-                        : AppColors.nonVegRed,
-                    width: 2,
-                  ),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: item.menuItem.isVeg
-                          ? AppColors.vegGreen
-                          : AppColors.nonVegRed,
-                      shape: BoxShape.circle,
+              Text(
+                menuItem.name,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
                     ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (menuItem.details.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  menuItem.details,
+                  style: TextStyle(
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: 10),
+
+              // Stepper Controls
+              Row(
+                children: [
+                  InkWell(
+                    onTap: onDecrement,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey.shade800 : const Color(0xFFF1F3F5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.remove_rounded,
+                        size: 16,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      '${cartItem.quantity}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: onIncrement,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey.shade800 : const Color(0xFFF1F3F5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.add_rounded,
+                        size: 16,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // 3. Right Column: Delete Icon + Price
+        SizedBox(
+          height: 68,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Delete Trash Button
+              GestureDetector(
+                onTap: onDelete,
+                child: const Padding(
+                  padding: EdgeInsets.all(2),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 20,
+                    color: Color(0xFFE53935),
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.md),
 
-              // Item name and price
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.menuItem.name,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      item.formattedTotalPrice,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Quantity controls
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.remove,
-                        size: 18,
-                        color: AppColors.primary,
-                      ),
-                      constraints:
-                          const BoxConstraints(minWidth: 32, minHeight: 32),
-                      padding: EdgeInsets.zero,
-                      onPressed: onDecrement,
-                    ),
-                    Text(
-                      '${item.quantity}',
-                      style:
-                          Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.add,
-                        size: 18,
-                        color: AppColors.primary,
-                      ),
-                      constraints:
-                          const BoxConstraints(minWidth: 32, minHeight: 32),
-                      padding: EdgeInsets.zero,
-                      onPressed: onIncrement,
-                    ),
-                  ],
+              // Item Total Price
+              Text(
+                '₹${cartItem.totalPrice.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15.5,
                 ),
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 }
 
+/// Bill Summary Row
+class _BillRow extends StatelessWidget {
+  const _BillRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: isDark ? Colors.grey.shade200 : Colors.grey.shade800,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
