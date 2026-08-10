@@ -16,6 +16,7 @@ import '../../models/cart_item_model.dart';
 import '../../models/category_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../models/shop_model.dart';
+import '../cart/cart_dialog_helper.dart';
 import '../cart/cart_provider.dart';
 
 /// Provider that fetches shop details by ID.
@@ -278,11 +279,11 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     final shopAsync = ref.watch(shopDetailProvider(widget.shopId));
     final categoriesAsync = ref.watch(shopCategoriesProvider(widget.shopId));
     final menuItemsAsync = ref.watch(shopMenuItemsProvider(widget.shopId));
-    final cartItems = ref.watch(cartProvider);
+    final cartState = ref.watch(cartProvider);
+    final cartItems = cartState.items;
 
-    // Count items in cart for badge
-    final cartItemCount =
-        cartItems.fold<int>(0, (sum, item) => sum + item.quantity);
+    // Count items in cart for badge (sum of quantities)
+    final cartItemCount = cartState.totalItemCount;
 
     return Scaffold(
       // Cart FAB
@@ -1005,41 +1006,16 @@ class _MenuItemCard extends ConsumerWidget {
   }
 
   void _handleCartChange(WidgetRef ref, BuildContext context, int delta) {
-    final cart = ref.read(cartProvider);
-    final cartNotifier = ref.read(cartProvider.notifier);
-
-    if (cart.isNotEmpty && cart.first.shopId != shop.id) {
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Replace cart?'),
-          content: Text(
-            'Your cart has items from ${cart.first.shopName}. '
-            'Clear the cart to order from ${shop.name}?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                cartNotifier.clearCart();
-                cartNotifier.addItem(item, shop.id, shop.name);
-              },
-              child: const Text('Clear & Add'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
     if (delta > 0) {
-      cartNotifier.addItem(item, shop.id, shop.name);
+      tryAddToCart(
+        context: context,
+        ref: ref,
+        item: item,
+        shopId: shop.id,
+        shopName: shop.name,
+      );
     } else {
-      cartNotifier.removeItem(item.id);
+      ref.read(cartProvider.notifier).removeItem(item.id);
     }
   }
 
@@ -1083,11 +1059,8 @@ class _MenuItemCard extends ConsumerWidget {
     final favorites = ref.watch(favoritesProvider);
     final isFavorite = favorites.contains(item.id);
 
-    final cartItem = cartItems
-        .where((ci) => ci.menuItem.id == item.id)
-        .toList();
-    final quantityInCart =
-        cartItem.isNotEmpty ? cartItem.first.quantity : 0;
+    final cartState = ref.watch(cartProvider);
+    final quantityInCart = cartState.getQuantityForShop(shop.id, item.id);
 
     void showItemDetail() {
       showModalBottomSheet<void>(
@@ -1552,8 +1525,8 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     final isFavorite = favorites.contains(widget.item.id);
 
     final liveCart = ref.watch(cartProvider);
-    final cartMatch = liveCart.where((ci) => ci.menuItem.id == widget.item.id).toList();
-    final quantityInCart = cartMatch.isNotEmpty ? cartMatch.first.quantity : 0;
+    final quantityInCart =
+        liveCart.getQuantityForShop(widget.shop.id, widget.item.id);
     final isItemAvailable = widget.isAvailable;
 
     final mediaQuery = MediaQuery.of(context);
@@ -1917,11 +1890,13 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          ref.read(cartProvider.notifier).addItem(
-                widget.item,
-                widget.shop.id,
-                widget.shop.name,
-              );
+          tryAddToCart(
+            context: context,
+            ref: ref,
+            item: widget.item,
+            shopId: widget.shop.id,
+            shopName: widget.shop.name,
+          );
         },
         borderRadius: BorderRadius.circular(14),
         child: Ink(
@@ -2003,11 +1978,13 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
           Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () => ref.read(cartProvider.notifier).addItem(
-                    widget.item,
-                    widget.shop.id,
-                    widget.shop.name,
-                  ),
+              onTap: () => tryAddToCart(
+                context: context,
+                ref: ref,
+                item: widget.item,
+                shopId: widget.shop.id,
+                shopName: widget.shop.name,
+              ),
               borderRadius: const BorderRadius.horizontal(right: Radius.circular(14)),
               child: const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),

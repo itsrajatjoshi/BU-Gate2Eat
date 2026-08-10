@@ -27,15 +27,16 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 
   Future<void> _placeOrder() async {
-    final cartItems = ref.read(cartProvider);
+    final cartState = ref.read(cartProvider);
+    final cartItems = cartState.items;
     if (cartItems.isEmpty) return;
 
     final localStorage = ref.read(localStorageServiceProvider);
-    final shopName = cartItems.first.shopName;
+    final shopName = cartState.shopName ?? cartItems.first.shopName;
 
     // Find the shop's order number
     final firestoreService = ref.read(firestoreServiceProvider);
-    final shop = await firestoreService.getShop(cartItems.first.shopId);
+    final shop = await firestoreService.getShop(cartState.shopId ?? cartItems.first.shopId);
     if (shop == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -85,13 +86,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cartItems = ref.watch(cartProvider);
+    final cartState = ref.watch(cartProvider);
+    final cartItems = cartState.items;
     final cartNotifier = ref.read(cartProvider.notifier);
 
-    final grandTotal =
-        cartItems.fold<double>(0, (sum, item) => sum + item.totalPrice);
+    final grandTotal = cartState.grandTotal;
 
-    final shopId = cartItems.isNotEmpty ? cartItems.first.shopId : '';
+    final shopId = cartState.shopId ?? '';
     final recommendedAsync = shopId.isNotEmpty
         ? ref.watch(recommendedMenuItemsProvider(shopId))
         : const AsyncValue<List<MenuItem>>.data([]);
