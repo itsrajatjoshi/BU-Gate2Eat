@@ -30,6 +30,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final shopsAsync = ref.watch(shopsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth < 360 ? 10.0 : (screenWidth < 400 ? 14.0 : 16.0);
 
     return Scaffold(
       appBar: AppBar(
@@ -45,59 +47,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           // Search bar matching reference screenshot
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
               vertical: AppSpacing.sm,
             ),
-                child: Container(
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(AppRadius.md),
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: TextField(
+                controller: _searchController,
+                textAlignVertical: TextAlignVertical.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search shops or food (e.g. momos)...',
+                  hintStyle: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                    fontWeight: FontWeight.w400,
                   ),
-                  child: TextField(
-                    controller: _searchController,
-                    textAlignVertical: TextAlignVertical.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search shops or food (e.g. momos)...',
-                      hintStyle: TextStyle(
-                        fontSize: 14,
-                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                        fontWeight: FontWeight.w400,
-                      ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        size: 22,
-                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                      ),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(
-                                Icons.clear_rounded,
-                                size: 18,
-                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                              ),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                            )
-                          : null,
-                    ),
-                    onChanged: (value) => setState(
-                      () => _searchQuery = value.trim().toLowerCase(),
-                    ),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    size: 22,
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                   ),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 20),
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: (value) => setState(
+                  () => _searchQuery = value.trim().toLowerCase(),
                 ),
               ),
+            ),
+          ),
 
           // Shop list
           Expanded(
@@ -184,8 +183,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ref.invalidate(shopsProvider);
                   },
                   child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      4,
+                      horizontalPadding,
+                      16 + MediaQuery.of(context).padding.bottom,
                     ),
                     itemCount: filteredShops.length,
                     itemBuilder: (context, index) {
@@ -205,5 +207,3 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 }
-
-

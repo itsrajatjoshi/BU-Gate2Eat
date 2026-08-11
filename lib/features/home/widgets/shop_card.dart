@@ -31,6 +31,10 @@ class ShopCard extends StatelessWidget {
     final isOpen = shop.isOpen;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    final horizontalPadding = isSmallScreen ? 11.0 : 14.0;
+
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
       decoration: BoxDecoration(
@@ -139,9 +143,9 @@ class ShopCard extends StatelessWidget {
 
             // 2. Main Content Area (Matching screenshot layout)
             Padding(
-              padding: const EdgeInsets.only(
-                left: 14,
-                right: 14,
+              padding: EdgeInsets.only(
+                left: horizontalPadding,
+                right: horizontalPadding,
                 top: 12,
                 bottom: 8,
               ),
@@ -163,16 +167,17 @@ class ShopCard extends StatelessWidget {
                                 color: isDark
                                     ? AppColors.darkTextPrimary
                                     : AppColors.textPrimary,
-                                fontSize: 16,
+                                fontSize: isSmallScreen ? 15 : 16,
                               ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.md),
+                      const SizedBox(width: 8),
 
                       // Clock Timings Badge (Icon + Text)
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.schedule_rounded,
@@ -192,7 +197,7 @@ class ShopCard extends StatelessWidget {
                                       ? AppColors.darkTextSecondary
                                       : AppColors.textSecondary,
                                   fontWeight: FontWeight.w500,
-                                  fontSize: 11.5,
+                                  fontSize: isSmallScreen ? 10.5 : 11.5,
                                 ),
                           ),
                         ],
@@ -209,7 +214,7 @@ class ShopCard extends StatelessWidget {
                             color: isDark
                                 ? AppColors.darkTextSecondary
                                 : AppColors.textSecondary,
-                            fontSize: 12.5,
+                            fontSize: isSmallScreen ? 12 : 12.5,
                           ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -221,9 +226,9 @@ class ShopCard extends StatelessWidget {
 
             // 3. Footer Container (Matching rounded chip pills in reference screenshots)
             Padding(
-              padding: const EdgeInsets.only(
-                left: 14,
-                right: 14,
+              padding: EdgeInsets.only(
+                left: horizontalPadding,
+                right: horizontalPadding,
                 bottom: 10,
                 top: 2,
               ),

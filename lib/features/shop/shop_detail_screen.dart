@@ -441,134 +441,144 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
               // Shop info, search bar, and veg/non-veg filter section
               SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Shop info section
-                    Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (shop.description.isNotEmpty) ...[
-                            Text(
-                              shop.description,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                                  ),
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                          ],
-                          if (shop.contactNumber.isNotEmpty) ...[
-                            Text(
-                              'Contact: ${shop.contactNumber}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
-                                  ),
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                          ],
-                          Row(
+                child: Builder(
+                  builder: (context) {
+                    final screenWidth = MediaQuery.of(context).size.width;
+                    final horizontalPadding = screenWidth < 360 ? 10.0 : (screenWidth < 400 ? 12.0 : 14.0);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Shop info section
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
+                            vertical: 12,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.sm,
-                                  vertical: AppSpacing.xs,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isOpen
-                                      ? AppColors.success.withValues(alpha: 0.1)
-                                      : AppColors.error.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                                ),
-                                child: Text(
-                                  isOpen ? 'Open Now' : 'Closed',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: isOpen ? AppColors.success : AppColors.error,
-                                        fontWeight: FontWeight.w600,
+                              if (shop.description.isNotEmpty) ...[
+                                Text(
+                                  shop.description,
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                                       ),
                                 ),
-                              ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Icon(
-                                Icons.access_time_rounded,
-                                size: 14,
-                                color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
-                              ),
-                              const SizedBox(width: AppSpacing.xs),
-                              Text(
-                                '${shop.openTime} – ${shop.closeTime}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                                const SizedBox(height: AppSpacing.xs),
+                              ],
+                              if (shop.contactNumber.isNotEmpty) ...[
+                                Text(
+                                  'Contact: ${shop.contactNumber}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                                      ),
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                              ],
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.sm,
+                                      vertical: AppSpacing.xs,
                                     ),
+                                    decoration: BoxDecoration(
+                                      color: isOpen
+                                          ? AppColors.success.withValues(alpha: 0.1)
+                                          : AppColors.error.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                                    ),
+                                    child: Text(
+                                      isOpen ? 'Open Now' : 'Closed',
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: isOpen ? AppColors.success : AppColors.error,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Icon(
+                                    Icons.access_time_rounded,
+                                    size: 14,
+                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                                  ),
+                                  const SizedBox(width: AppSpacing.xs),
+                                  Text(
+                                    '${shop.openTime} – ${shop.closeTime}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                                        ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-
-                    const Divider(height: 1),
-
-                    // Search bar
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search menu items...',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear_rounded),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() => _searchQuery = '');
-                                  },
-                                )
-                              : null,
-                          isDense: true,
                         ),
-                        onChanged: (value) =>
-                            setState(() => _searchQuery = value.trim().toLowerCase()),
-                      ),
-                    ),
 
-                    // Veg/Non-Veg filter
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                      ),
-                      child: Row(
-                        children: [
-                          _FilterChip(
-                            label: 'All',
-                            isSelected: _foodFilter == FoodFilter.all,
-                            onTap: () => setState(() => _foodFilter = FoodFilter.all),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          _FilterChip(
-                            label: 'Veg',
-                            isSelected: _foodFilter == FoodFilter.veg,
-                            color: AppColors.vegGreen,
-                            onTap: () => setState(() => _foodFilter = FoodFilter.veg),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          _FilterChip(
-                            label: 'Non-Veg',
-                            isSelected: _foodFilter == FoodFilter.nonVeg,
-                            color: AppColors.nonVegRed,
-                            onTap: () => setState(() => _foodFilter = FoodFilter.nonVeg),
-                          ),
-                        ],
-                      ),
-                    ),
+                        const Divider(height: 1),
 
-                    const SizedBox(height: AppSpacing.sm),
-                  ],
+                        // Search bar
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
+                            vertical: AppSpacing.sm,
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: InputDecoration(
+                              hintText: 'Search menu items...',
+                              prefixIcon: const Icon(Icons.search_rounded),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _searchQuery = '');
+                                      },
+                                    )
+                                  : null,
+                              isDense: true,
+                            ),
+                            onChanged: (value) =>
+                                setState(() => _searchQuery = value.trim().toLowerCase()),
+                          ),
+                        ),
+
+                        // Veg/Non-Veg filter
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
+                          ),
+                          child: Row(
+                            children: [
+                              _FilterChip(
+                                label: 'All',
+                                isSelected: _foodFilter == FoodFilter.all,
+                                onTap: () => setState(() => _foodFilter = FoodFilter.all),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              _FilterChip(
+                                label: 'Veg',
+                                isSelected: _foodFilter == FoodFilter.veg,
+                                color: AppColors.vegGreen,
+                                onTap: () => setState(() => _foodFilter = FoodFilter.veg),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              _FilterChip(
+                                label: 'Non-Veg',
+                                isSelected: _foodFilter == FoodFilter.nonVeg,
+                                color: AppColors.nonVegRed,
+                                onTap: () => setState(() => _foodFilter = FoodFilter.nonVeg),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
+                    );
+                  },
                 ),
               ),
 
@@ -576,6 +586,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _StickyCategoryHeaderDelegate(
+                  height: MediaQuery.of(context).size.width < 360 ? 106.0 : 114.0,
                   child: _CategoryNavWidget(
                     categories: _getEffectiveCategories(
                       shop.id,
@@ -608,6 +619,37 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   );
 }
 
+  /// Calculates responsive Grid parameters based on screen width & text scale
+  static SliverGridDelegateWithFixedCrossAxisCount _getResponsiveGridDelegate(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth < 360 ? 10.0 : (screenWidth < 400 ? 12.0 : 14.0);
+    final crossAxisSpacing = screenWidth < 360 ? 8.0 : 10.0;
+    final mainAxisSpacing = screenWidth < 360 ? 10.0 : 12.0;
+    final cardWidth = (screenWidth - (horizontalPadding * 2) - crossAxisSpacing) / 2;
+
+    // Scale for Android accessibility text scaling
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final extraTextHeight = (textScale > 1.0) ? (textScale - 1.0) * 36.0 : 0.0;
+
+    // Dynamic Body Height Allocation:
+    // - Title (up to 2 lines): ~34px
+    // - Spacing: 4px
+    // - Description (up to 2 lines): ~28px
+    // - Bottom Row (Price + Add Button): ~30px
+    // - Padding: 14px (7 top + 7 bottom)
+    // - Internal spacing: ~6px
+    final bodyHeight = 116.0 + extraTextHeight;
+    final cardHeight = (cardWidth / 1.3) + bodyHeight;
+    final childAspectRatio = cardWidth / cardHeight;
+
+    return SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 2,
+      mainAxisSpacing: mainAxisSpacing,
+      crossAxisSpacing: crossAxisSpacing,
+      childAspectRatio: childAspectRatio,
+    );
+  }
+
   /// Builds slivers for menu items list (categorized or flat).
   List<Widget> _buildMenuSlivers({
     required BuildContext context,
@@ -620,6 +662,10 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     required bool isOpen,
     required List<CartItem> cartItems,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth < 360 ? 10.0 : (screenWidth < 400 ? 12.0 : 14.0);
+    final gridDelegate = _getResponsiveGridDelegate(context);
+
     return menuItemsAsync.when(
       loading: () => [
         const SliverFillRemaining(
@@ -672,8 +718,10 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
             ];
           }
           return [
-            _buildFlatSliverList(filtered, shop, isOpen, cartItems),
-            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+            _buildFlatSliverList(context, filtered, shop, isOpen, cartItems),
+            SliverToBoxAdapter(
+              child: SizedBox(height: 80 + MediaQuery.of(context).padding.bottom),
+            ),
           ];
         }
 
@@ -706,14 +754,19 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 key: _getCategoryKey(category.id),
-                padding: const EdgeInsets.fromLTRB(14, 20, 14, 10),
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding + 2,
+                  20,
+                  horizontalPadding + 2,
+                  10,
+                ),
                 child: Row(
                   children: [
                     Text(
                       category.name,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w800,
-                            fontSize: 18,
+                            fontSize: screenWidth < 360 ? 17 : 18,
                             letterSpacing: -0.2,
                           ),
                     ),
@@ -739,17 +792,12 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
             ),
           );
 
-          // 2-column Grid for Category Items
+          // 2-column Responsive Grid for Category Items
           slivers.add(
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 0.74,
-                ),
+                gridDelegate: gridDelegate,
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => _MenuItemCard(
                     key: ValueKey('${shop.id}_${categoryItems[index].id}'),
@@ -766,32 +814,39 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
         if (slivers.isEmpty) {
           return [
-            _buildFlatSliverList(filtered, shop, isOpen, cartItems),
-            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+            _buildFlatSliverList(context, filtered, shop, isOpen, cartItems),
+            SliverToBoxAdapter(
+              child: SizedBox(height: 80 + MediaQuery.of(context).padding.bottom),
+            ),
           ];
         }
 
-        slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 100)));
+        slivers.add(
+          SliverToBoxAdapter(
+            child: SizedBox(height: 80 + MediaQuery.of(context).padding.bottom),
+          ),
+        );
         return slivers;
       },
     );
   }
-   /// Builds a flat SliverGrid.
+
+  /// Builds a flat SliverGrid.
   Widget _buildFlatSliverList(
+    BuildContext context,
     List<MenuItem> items,
     Shop shop,
     bool isOpen,
     List<CartItem> cartItems,
   ) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth < 360 ? 10.0 : (screenWidth < 400 ? 12.0 : 14.0);
+    final gridDelegate = _getResponsiveGridDelegate(context);
+
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 10,
-          childAspectRatio: 0.74,
-        ),
+        gridDelegate: gridDelegate,
         delegate: SliverChildBuilderDelegate(
           (context, index) => _MenuItemCard(
             key: ValueKey('${shop.id}_${items[index].id}'),
@@ -957,6 +1012,8 @@ class _MenuItemCard extends ConsumerWidget {
     required Key key,
     required BuildContext context,
     required WidgetRef ref,
+    double width = 64,
+    double height = 30,
   }) {
     const primaryColor = AppColors.primary;
     return InkWell(
@@ -964,8 +1021,8 @@ class _MenuItemCard extends ConsumerWidget {
       borderRadius: BorderRadius.circular(8),
       onTap: () => _handleCartChange(ref, context, 1),
       child: Container(
-        width: 66,
-        height: 30,
+        width: width,
+        height: height,
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(8),
@@ -980,7 +1037,7 @@ class _MenuItemCard extends ConsumerWidget {
             style: TextStyle(
               color: primaryColor,
               fontWeight: FontWeight.w700,
-              fontSize: 13.5,
+              fontSize: 13,
             ),
           ),
         ),
@@ -993,12 +1050,14 @@ class _MenuItemCard extends ConsumerWidget {
     required BuildContext context,
     required WidgetRef ref,
     required int quantity,
+    double width = 64,
+    double height = 30,
   }) {
     const primaryColor = AppColors.primary;
     return Container(
       key: key,
-      width: 66,
-      height: 30,
+      width: width,
+      height: height,
       decoration: BoxDecoration(
         color: primaryColor,
         borderRadius: BorderRadius.circular(8),
@@ -1016,7 +1075,7 @@ class _MenuItemCard extends ConsumerWidget {
           InkWell(
             onTap: () => _handleCartChange(ref, context, -1),
             child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+              padding: EdgeInsets.symmetric(horizontal: 3.0, vertical: 2.0),
               child: Icon(Icons.remove_rounded, size: 14, color: Colors.white),
             ),
           ),
@@ -1031,7 +1090,7 @@ class _MenuItemCard extends ConsumerWidget {
           InkWell(
             onTap: () => _handleCartChange(ref, context, 1),
             child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+              padding: EdgeInsets.symmetric(horizontal: 3.0, vertical: 2.0),
               child: Icon(Icons.add_rounded, size: 14, color: Colors.white),
             ),
           ),
@@ -1112,6 +1171,9 @@ class _MenuItemCard extends ConsumerWidget {
       );
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+
     return Opacity(
       opacity: isAvailable ? 1.0 : 0.55,
       child: GestureDetector(
@@ -1132,206 +1194,220 @@ class _MenuItemCard extends ConsumerWidget {
               ),
             ],
           ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Food Image Container
-            AspectRatio(
-              aspectRatio: 1.3,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(18),
-                      ),
-                      child: displayImageUrl.isNotEmpty
-                          ? Image.network(
-                              displayImageUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _buildImagePlaceholder(context),
-                            )
-                          : _buildImagePlaceholder(context),
-                    ),
-                  ),
-
-                  // Favorite Heart Button (Top-Right overlay)
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: GestureDetector(
-                      onTap: () {
-                        ref
-                            .read(favoritesProvider.notifier)
-                            .toggleFavorite(item.id);
-                      },
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .cardColor
-                              .withValues(alpha: 0.9),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              blurRadius: 3,
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Icon(
-                            isFavorite
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_outline_rounded,
-                            size: 16,
-                            color: isFavorite
-                                ? AppColors.nonVegRed
-                                : (isDark ? AppColors.darkTextSecondary : AppColors.textHint),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // 2. Card Content Body
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Food Image Container
+              AspectRatio(
+                aspectRatio: 1.3,
+                child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    // Item Title with Veg/Non-Veg icon
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                item.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                      height: 1.2,
-                                    ),
-                              ),
-                            ),
-                          ],
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(18),
                         ),
-                        const SizedBox(height: 4),
-
-                        // Description with clean "... more" (stripping duplicate dots)
-                        Builder(
-                          builder: (context) {
-                            final rawDetails = item.details.isNotEmpty
-                                ? item.details
-                                : '${item.name} prepared fresh with authentic spices';
-                            final cleanDetails = rawDetails.replaceAll(RegExp(r'\.+$'), '').trim();
-                            // Truncate to ensure "...more" is always visible
-                            final truncated = cleanDetails.length > 35
-                                ? '${cleanDetails.substring(0, 35)}...'
-                                : '$cleanDetails...';
-                            return Text.rich(
-                              TextSpan(
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 11.5,
-                                  height: 1.35,
-                                ),
-                                children: [
-                                  TextSpan(text: '$truncated '),
-                                  const TextSpan(
-                                    text: 'more',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            );
-                          },
-                        ),
-                      ],
+                        child: displayImageUrl.isNotEmpty
+                            ? Image.network(
+                                displayImageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildImagePlaceholder(context),
+                              )
+                            : _buildImagePlaceholder(context),
+                      ),
                     ),
 
-                    // Bottom Row: Clean Price + Add Button / Stepper
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          item.formattedPrice,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
+                    // Favorite Heart Button (Top-Right overlay)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: GestureDetector(
+                        onTap: () {
+                          ref
+                              .read(favoritesProvider.notifier)
+                              .toggleFavorite(item.id);
+                        },
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
                             color: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.color,
+                                .cardColor
+                                .withValues(alpha: 0.9),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                blurRadius: 3,
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Icon(
+                              isFavorite
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_outline_rounded,
+                              size: 16,
+                              color: isFavorite
+                                  ? AppColors.nonVegRed
+                                  : (isDark ? AppColors.darkTextSecondary : AppColors.textHint),
+                            ),
                           ),
                         ),
-
-                        // Add Button / Stepper with customizable text
-                        if (isAvailable)
-                          quantityInCart > 0
-                              ? _buildQuantityStepper(
-                                  key: const ValueKey('stepper'),
-                                  context: context,
-                                  ref: ref,
-                                  quantity: quantityInCart,
-                                )
-                              : _buildAddButton(
-                                  key: const ValueKey('add_btn'),
-                                  context: context,
-                                  ref: ref,
-                                ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+
+              // 2. Card Content Body
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    isSmallScreen ? 8 : 10,
+                    7,
+                    isSmallScreen ? 8 : 10,
+                    7,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Item Title with Veg/Non-Veg icon (Supports 2 lines to avoid aggressive ellipsis)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  item.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: isSmallScreen ? 13.0 : 13.8,
+                                        height: 1.2,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+
+                          // Description with clean "... more"
+                          Builder(
+                            builder: (context) {
+                              final rawDetails = item.details.isNotEmpty
+                                  ? item.details
+                                  : '${item.name} prepared fresh with authentic spices';
+                              final cleanDetails = rawDetails.replaceAll(RegExp(r'\.+$'), '').trim();
+                              return Text.rich(
+                                TextSpan(
+                                  style: TextStyle(
+                                    color: isDark ? AppColors.darkTextSecondary : Colors.grey.shade600,
+                                    fontSize: isSmallScreen ? 10.8 : 11.5,
+                                    height: 1.28,
+                                  ),
+                                  children: [
+                                    TextSpan(text: '$cleanDetails '),
+                                    const TextSpan(
+                                      text: 'more',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+
+                      // Bottom Row: Clean Price + Add Button / Stepper
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              item.formattedPrice,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: isSmallScreen ? 14.5 : 15.5,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.color,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+
+                          // Add Button / Stepper with responsive width
+                          if (isAvailable)
+                            quantityInCart > 0
+                                ? _buildQuantityStepper(
+                                    key: const ValueKey('stepper'),
+                                    context: context,
+                                    ref: ref,
+                                    quantity: quantityInCart,
+                                    width: isSmallScreen ? 58.0 : 64.0,
+                                    height: isSmallScreen ? 28.0 : 30.0,
+                                  )
+                                : _buildAddButton(
+                                    key: const ValueKey('add_btn'),
+                                    context: context,
+                                    ref: ref,
+                                    width: isSmallScreen ? 58.0 : 64.0,
+                                    height: isSmallScreen ? 28.0 : 30.0,
+                                  ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 /// Delegate for pinning Category Navigation Header when scrolling
 class _StickyCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
   const _StickyCategoryHeaderDelegate({
     required this.child,
+    this.height = 114.0,
   });
 
   final Widget child;
-
-  static const double _headerHeight = 114.0;
+  final double height;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      height: _headerHeight,
+      height: height,
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         boxShadow: overlapsContent
@@ -1349,14 +1425,14 @@ class _StickyCategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  double get maxExtent => _headerHeight;
+  double get maxExtent => height;
 
   @override
-  double get minExtent => _headerHeight;
+  double get minExtent => height;
 
   @override
   bool shouldRebuild(covariant _StickyCategoryHeaderDelegate oldDelegate) {
-    return oldDelegate.child != child;
+    return oldDelegate.child != child || oldDelegate.height != height;
   }
 }
 
@@ -1379,13 +1455,21 @@ class _CategoryNavWidget extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const primaryColor = AppColors.primary; // Warm orange matching reference screenshot
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    final itemWidth = isSmallScreen ? 68.0 : (screenWidth < 400 ? 73.0 : 76.0);
+    final circleSize = isSmallScreen ? 52.0 : 58.0;
+    final imageSize = isSmallScreen ? 46.0 : 51.0;
+    final itemSpacing = isSmallScreen ? 6.0 : 8.0;
+    final horizontalPadding = isSmallScreen ? 10.0 : 14.0;
+
     return ListView.separated(
       controller: scrollController,
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8),
       itemCount: categories.length,
-      separatorBuilder: (_, __) => const SizedBox(width: 8),
+      separatorBuilder: (_, __) => SizedBox(width: itemSpacing),
       itemBuilder: (context, index) {
         final cat = categories[index];
         final isSelected = selectedCategoryId == cat.id;
@@ -1393,7 +1477,7 @@ class _CategoryNavWidget extends StatelessWidget {
         return GestureDetector(
           onTap: () => onCategorySelected(cat.id),
           child: SizedBox(
-            width: 74,
+            width: itemWidth,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1402,8 +1486,8 @@ class _CategoryNavWidget extends StatelessWidget {
                     children: [
                       // Circular category photo container
                       Container(
-                        width: 58,
-                        height: 58,
+                        width: circleSize,
+                        height: circleSize,
                         padding: const EdgeInsets.all(2.5),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
@@ -1417,8 +1501,8 @@ class _CategoryNavWidget extends StatelessWidget {
                         child: ClipOval(
                           child: CachedNetworkImage(
                             imageUrl: cat.imageUrl,
-                            width: 51,
-                            height: 51,
+                            width: imageSize,
+                            height: imageSize,
                             fit: BoxFit.cover,
                             placeholder: (context, url) => Container(
                               color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
@@ -1438,8 +1522,8 @@ class _CategoryNavWidget extends StatelessWidget {
                           top: 0,
                           right: 0,
                           child: Container(
-                            width: 18,
-                            height: 18,
+                            width: isSmallScreen ? 16 : 18,
+                            height: isSmallScreen ? 16 : 18,
                             decoration: BoxDecoration(
                               color: primaryColor,
                               shape: BoxShape.circle,
@@ -1448,10 +1532,10 @@ class _CategoryNavWidget extends StatelessWidget {
                                 width: 1.5,
                               ),
                             ),
-                            child: const Center(
+                            child: Center(
                               child: Icon(
                                 Icons.check_rounded,
-                                size: 11,
+                                size: isSmallScreen ? 10 : 11,
                                 color: Colors.white,
                               ),
                             ),
@@ -1469,7 +1553,7 @@ class _CategoryNavWidget extends StatelessWidget {
                   maxLines: 2,
                   softWrap: true,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: isSmallScreen ? 10.5 : 11.5,
                     height: 1.15,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                     color: isSelected

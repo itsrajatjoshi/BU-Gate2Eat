@@ -130,6 +130,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final shopId = cartState.shopId ?? '';
     final shopName = cartState.shopName ?? (cartItems.isNotEmpty ? cartItems.first.shopName : '');
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth < 360 ? 12.0 : 16.0;
+
     // Live menu items resolution from Firestore
     final liveMenuItemsAsync = shopId.isNotEmpty
         ? ref.watch(shopMenuItemsProvider(shopId))
@@ -192,7 +195,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             )
           : SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                12,
+                horizontalPadding,
+                24 + MediaQuery.of(context).padding.bottom,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -206,7 +214,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           'Current Order',
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.w800,
-                                fontSize: 24,
+                                fontSize: screenWidth < 360 ? 22 : 24,
                                 letterSpacing: -0.3,
                               ),
                         ),
