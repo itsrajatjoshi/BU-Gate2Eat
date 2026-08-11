@@ -63,25 +63,6 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   void initState() {
     super.initState();
     _mainScrollController.addListener(_onMainScroll);
-    _checkAndEnforceShopBoundary();
-  }
-
-  @override
-  void didUpdateWidget(ShopDetailScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.shopId != widget.shopId) {
-      _checkAndEnforceShopBoundary();
-    }
-  }
-
-  void _checkAndEnforceShopBoundary() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final cartState = ref.read(cartProvider);
-      if (cartState.isNotEmpty && cartState.shopId != widget.shopId) {
-        ref.read(cartProvider.notifier).clearCart();
-      }
-    });
   }
 
   @override
@@ -300,13 +281,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     // Count items in cart for badge (sum of quantities)
     final cartItemCount = cartState.totalItemCount;
 
-    return PopScope(
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          ref.read(cartProvider.notifier).clearCart();
-        }
-      },
-      child: Scaffold(
+    return Scaffold(
         // Cart FAB
         floatingActionButton: cartItemCount > 0
             ? FloatingActionButton.extended(
@@ -615,9 +590,8 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           );
         },
       ),
-    ),
-  );
-}
+    );
+  }
 
   /// Calculates responsive Grid parameters based on screen width & text scale
   static SliverGridDelegateWithFixedCrossAxisCount _getResponsiveGridDelegate(BuildContext context) {

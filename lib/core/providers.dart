@@ -126,3 +126,36 @@ class FavoriteNotifier extends StateNotifier<Set<String>> {
   bool isFavorite(String itemId) => state.contains(itemId);
 }
 
+/// Represents a favorited menu item paired with its parent shop information.
+class FavoriteItemData {
+  const FavoriteItemData({
+    required this.item,
+    required this.shop,
+  });
+
+  final MenuItem item;
+  final Shop shop;
+}
+
+/// Provider for fetching all favorited menu items paired with their parent shops.
+final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async {
+  final favoriteIds = ref.watch(favoritesProvider);
+  if (favoriteIds.isEmpty) return [];
+
+  final shops = await ref.watch(shopsProvider.future);
+  final firestoreService = ref.watch(firestoreServiceProvider);
+
+  final List<FavoriteItemData> results = [];
+
+  for (final shop in shops) {
+    final menuItems = await firestoreService.getMenuItems(shop.id);
+    for (final item in menuItems) {
+      if (favoriteIds.contains(item.id)) {
+        results.add(FavoriteItemData(item: item, shop: shop));
+      }
+    }
+  }
+
+  return results;
+});
+

@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## [1.0.6] — 2026-08-11
+
+### Added & Implemented
+- **4-Tab Bottom Navigation Bar**:
+  - Integrated `Home` → `Favourites` → `Cart` → `Profile` navigation matching existing theme and visual specification.
+  - Implemented dynamic Cart badge counter showing total items in cart when `cartItemCount > 0`.
+  - Preserved tab state across switching via `IndexedStack`.
+- **Dedicated Favourites Screen (`lib/features/favourites/favourites_screen.dart`)**:
+  - Displays user-favorited food/menu items with food dish image, item name, price, veg/non-veg status indicator, item details, and clear parent shop attribution (e.g. "Rajat Shop").
+  - Included interactive favorite removal toggle and direct Add-to-Cart with single-shop invariant enforcement.
+  - Implemented high-contrast empty state ("No favourites yet") for both light and dark themes.
+  - Connected with Riverpod `favoriteItemsProvider` and local SharedPreferences storage (`favoritesProvider`).
+- **Home Category & Status Filter Pills**:
+  - Added horizontal scrollable filter pills below search bar: `All`, `Open Now` (with green dot indicator), `Fast Food`, `Snacks`, `Thalis`, `Chinese`, `Veg`, `Non-Veg`.
+  - Non-destructive filtering combining active pill with text search query.
+- **Strict Profile & Settings Separation**:
+  - `ProfileScreen` is dedicated strictly to User & Account information (Name, Phone number +91, Age, Save Changes button, Bennett University pickup notes, and Settings shortcut).
+  - `SettingsScreen` is dedicated strictly to Application Settings (System / Light / Dark Theme selector, About, App Version, Legal).
+- **Cart Persistence Across Navigation**:
+  - Decoupled cart lifetime from `ShopDetailScreen` lifecycle by removing premature `PopScope` cart clearing. Cart items now persist across Home, Favourites, Cart, and Profile navigation.
+  - Maintained single-shop cross-shop conflict protection dialog (`tryAddToCart`) when attempting to add items from another shop.
+
 ## [1.0.5] — 2026-08-09
 
 ### Added & Connected (Backend / Data Only)

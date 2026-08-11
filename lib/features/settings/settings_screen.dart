@@ -1,82 +1,16 @@
 // BU Gate2Eat — Settings Screen
-// Edit profile, change theme
+// Application settings: theme appearance, about, legal information.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late TextEditingController _nameController;
-  late TextEditingController _phoneController;
-  late TextEditingController _ageController;
-
-  @override
-  void initState() {
-    super.initState();
-    final localStorage = ref.read(localStorageServiceProvider);
-    _nameController = TextEditingController(text: localStorage.userName);
-    _phoneController = TextEditingController(text: localStorage.userPhone);
-    _ageController = TextEditingController(
-      text: localStorage.userAge > 0 ? localStorage.userAge.toString() : '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
-    _ageController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveProfile() async {
-    final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
-    final ageText = _ageController.text.trim();
-
-    if (name.isEmpty || phone.isEmpty || ageText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
-      );
-      return;
-    }
-
-    if (phone.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid 10-digit phone number')),
-      );
-      return;
-    }
-
-    final age = int.tryParse(ageText);
-    if (age == null || age < 15 || age > 30) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid age (15-30)')),
-      );
-      return;
-    }
-
-    final localStorage = ref.read(localStorageServiceProvider);
-    await localStorage.saveUserProfile(name: name, phone: phone, age: age);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
 
     return Scaffold(
@@ -86,70 +20,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
         children: [
-          // ─── Profile Section ────────────────────────
-          Text(
-            'Profile',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          // Name
-          TextField(
-            controller: _nameController,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-              prefixIcon: Icon(Icons.person_outline_rounded),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          // Phone
-          TextField(
-            controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(10),
-            ],
-            decoration: const InputDecoration(
-              labelText: 'Phone Number',
-              prefixIcon: Icon(Icons.phone_outlined),
-              prefixText: '+91 ',
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          // Age
-          TextField(
-            controller: _ageController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(2),
-            ],
-            decoration: const InputDecoration(
-              labelText: 'Age',
-              prefixIcon: Icon(Icons.cake_outlined),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _saveProfile,
-              child: const Text('Save Changes'),
-            ),
-          ),
-
-          const SizedBox(height: AppSpacing.lg),
-          const Divider(),
-          const SizedBox(height: AppSpacing.md),
-
           // ─── Theme Section ─────────────────────────
           Text(
             'Appearance',
@@ -205,7 +75,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Privacy Policy'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              // TODO: Open privacy policy URL
+              // Open privacy policy URL
             },
           ),
           ListTile(
@@ -213,7 +83,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Terms of Service'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              // TODO: Open terms of service URL
+              // Open terms of service URL
             },
           ),
           const ListTile(

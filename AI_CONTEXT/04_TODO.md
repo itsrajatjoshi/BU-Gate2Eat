@@ -9,6 +9,11 @@
 - [x] Connect Menu Category Selector to Cloud Firestore backend (`shops/{shopId}/categories`) for dynamic category addition, image updates, re-ordering, and active/inactive toggling without UI changes.
 - [x] Display friendly floating toast alert ("No items currently available in [Category]") when tapping a 0-item category while skipping empty sections in vertical scrolling list.
 - [x] Implement user-specific local Favorites feature on Menu Item Cards with `SharedPreferences` on-device persistence, Riverpod `favoritesProvider`, and zero Firestore writes.
+- [x] Implement 4-tab Bottom Navigation (`Home` → `Favourites` → `Cart` → `Profile`) with Cart badge counter.
+- [x] Implement Dedicated Favourites screen with food image, name, price, veg indicator, clear shop attribution, remove action, add-to-cart, and empty state.
+- [x] Fix Cart lifetime decoupling from ShopDetailScreen: Cart persists across screen/tab navigation; cross-shop conflict protection preserved.
+- [x] Implement Home category & status filter pills (`All`, `Open Now`, `Fast Food`, `Snacks`, `Thalis`, `Chinese`, `Veg`, `Non-Veg`).
+- [x] Establish strict Profile (User info) vs Settings (App appearance & About) separation without UI duplication.
 
 ## MEDIUM Priority (MVP UI & Order Flow Polish)
 - [x] Refine UI with Blinkit-inspired clean spacing, typography, and reusable component structure.
