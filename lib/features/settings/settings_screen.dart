@@ -219,7 +219,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const ListTile(
             leading: Icon(Icons.info_outline_rounded),
             title: Text('App Version'),
-            subtitle: Text('1.0.0'),
+            subtitle: Text(AppConfig.appVersion),
           ),
 
           // Safe area bottom spacing

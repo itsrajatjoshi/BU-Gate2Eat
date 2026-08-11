@@ -1072,10 +1072,6 @@ class _MenuItemCard extends ConsumerWidget {
     final cartState = ref.watch(cartProvider);
     final quantityInCart = cartState.getQuantityForShop(shop.id, item.id);
 
-    if (item.id == 'veg_steam_momos') {
-      debugPrint('[CARD AUDIT] Shop: ${shop.id} (${shop.name}) | Item: ${item.id} (${item.name}, ₹${item.price}) | CartShop: ${cartState.shopId} | quantityInCart: $quantityInCart');
-    }
-
     void showItemDetail() {
       showModalBottomSheet<void>(
         context: context,
