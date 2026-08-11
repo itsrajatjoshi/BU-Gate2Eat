@@ -27,20 +27,37 @@ Future<void> tryAddToCart({
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Replace cart items?',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+            color: Theme.of(ctx).brightness == Brightness.dark
+                ? AppColors.darkTextPrimary
+                : AppColors.textPrimary,
+          ),
         ),
         content: Text(
           'Your cart contains items from $currentShopName.\n\nDo you want to clear your current cart and add this item from $shopName?',
-          style: const TextStyle(fontSize: 14, height: 1.4),
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.4,
+            color: Theme.of(ctx).brightness == Brightness.dark
+                ? AppColors.darkTextSecondary
+                : AppColors.textSecondary,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
+            child: Text(
               'KEEP CART',
-              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Theme.of(ctx).brightness == Brightness.dark
+                    ? AppColors.darkTextSecondary
+                    : AppColors.textSecondary,
+              ),
             ),
           ),
           ElevatedButton(

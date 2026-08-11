@@ -175,25 +175,36 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
       });
 
       if (!hasItems) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
+                Icon(
+                  Icons.info_outline_rounded,
+                  color: isDark ? AppColors.primary : Colors.white,
+                  size: 18,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'No items currently available in ${categoryObj.name}',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? AppColors.darkTextPrimary : Colors.white,
+                    ),
                   ),
                 ),
               ],
             ),
-            backgroundColor: AppColors.textPrimary,
+            backgroundColor: isDark ? AppColors.darkSurfaceVariant : AppColors.textPrimary,
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: isDark ? const BorderSide(color: AppColors.darkDivider) : BorderSide.none,
+            ),
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
           ),
         );
@@ -323,6 +334,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           }
 
           final isOpen = shop.isOpen;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
           const double expandedHeaderHeight = 160.0;
 
           return CustomScrollView(
@@ -442,7 +454,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                             Text(
                               shop.description,
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppColors.textSecondary,
+                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                                   ),
                             ),
                             const SizedBox(height: AppSpacing.xs),
@@ -451,7 +463,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                             Text(
                               'Contact: ${shop.contactNumber}',
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textHint,
+                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
                                   ),
                             ),
                             const SizedBox(height: AppSpacing.sm),
@@ -478,16 +490,16 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                                 ),
                               ),
                               const SizedBox(width: AppSpacing.sm),
-                              const Icon(
+                              Icon(
                                 Icons.access_time_rounded,
                                 size: 14,
-                                color: AppColors.textHint,
+                                color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
                               ),
                               const SizedBox(width: AppSpacing.xs),
                               Text(
                                 '${shop.openTime} – ${shop.closeTime}',
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppColors.textHint,
+                                      color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
                                     ),
                               ),
                             ],
@@ -639,13 +651,21 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
         if (searchQuery.isNotEmpty) {
           if (filtered.isEmpty) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
             return [
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(
                   child: Padding(
-                    padding: EdgeInsets.all(32.0),
-                    child: Text('No matching items found', style: TextStyle(color: AppColors.textHint)),
+                    padding: const EdgeInsets.all(32.0),
+                    child: Text(
+                      'No matching items found',
+                      style: TextStyle(
+                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -803,6 +823,7 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chipColor = color ?? AppColors.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -814,13 +835,17 @@ class _FilterChip extends StatelessWidget {
           color: isSelected ? chipColor.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.full),
           border: Border.all(
-            color: isSelected ? chipColor : AppColors.divider,
+            color: isSelected
+                ? chipColor
+                : (isDark ? AppColors.darkDivider : AppColors.divider),
           ),
         ),
         child: Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: isSelected ? chipColor : AppColors.textSecondary,
+                color: isSelected
+                    ? chipColor
+                    : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
         ),
@@ -1165,7 +1190,7 @@ class _MenuItemCard extends ConsumerWidget {
                             size: 16,
                             color: isFavorite
                                 ? AppColors.nonVegRed
-                                : AppColors.textHint,
+                                : (isDark ? AppColors.darkTextSecondary : AppColors.textHint),
                           ),
                         ),
                       ),
@@ -1681,11 +1706,14 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                       width: 38,
                                       height: 38,
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.92),
+                                        color: isDark ? AppColors.darkSurfaceVariant : Colors.white.withValues(alpha: 0.92),
                                         shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isDark ? AppColors.darkDivider : Colors.transparent,
+                                        ),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: Colors.black.withValues(alpha: 0.18),
+                                            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.18),
                                             blurRadius: 6,
                                             offset: const Offset(0, 2),
                                           ),
@@ -1699,7 +1727,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                           size: 20,
                                           color: isFavorite
                                               ? AppColors.nonVegRed
-                                              : AppColors.textHint,
+                                              : (isDark ? AppColors.darkTextSecondary : AppColors.textHint),
                                         ),
                                       ),
                                     ),

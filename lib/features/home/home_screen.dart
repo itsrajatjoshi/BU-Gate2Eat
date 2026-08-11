@@ -29,6 +29,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final shopsAsync = ref.watch(shopsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -43,14 +44,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: Column(
         children: [
           // Search bar matching reference screenshot
-          Builder(
-            builder: (context) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: AppSpacing.sm,
-                ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
                 child: Container(
                   height: 48,
                   decoration: BoxDecoration(
@@ -99,9 +97,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                 ),
-              );
-            },
-          ),
+              ),
 
           // Shop list
           Expanded(
@@ -133,7 +129,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
-                              ?.copyWith(color: AppColors.textSecondary),
+                              ?.copyWith(color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: AppSpacing.md),
@@ -164,17 +160,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.store_mall_directory_outlined,
                           size: 48,
-                          color: AppColors.textHint,
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
                         ),
                         const SizedBox(height: AppSpacing.md),
                         Text(
                           _searchQuery.isEmpty
                               ? 'No shops available'
                               : 'No shops found for "$_searchQuery"',
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                              ),
                         ),
                       ],
                     ),

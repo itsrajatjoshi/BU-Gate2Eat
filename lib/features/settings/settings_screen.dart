@@ -248,12 +248,15 @@ class _ThemeOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: ListTile(
         leading: Icon(
           icon,
-          color: isSelected ? AppColors.primary : AppColors.textSecondary,
+          color: isSelected
+              ? AppColors.primary
+              : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
         ),
         title: Text(title),
         subtitle: Text(subtitle),

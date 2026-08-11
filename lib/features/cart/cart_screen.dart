@@ -184,7 +184,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   Text(
                     'Browse shops and add items to get started',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textHint,
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                         ),
                   ),
                 ],
@@ -214,7 +214,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         Text(
                           'Gate 2 Pickup • $shopName',
                           style: TextStyle(
-                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                             fontSize: 13.5,
                             fontWeight: FontWeight.w500,
                           ),
@@ -461,7 +461,7 @@ class _CartItemRow extends StatelessWidget {
                 Text(
                   menuItem.details,
                   style: TextStyle(
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                     fontSize: 12,
                   ),
                   maxLines: 1,
@@ -486,7 +486,7 @@ class _CartItemRow extends StatelessWidget {
                       child: Icon(
                         Icons.remove_rounded,
                         size: 16,
-                        color: isDark ? Colors.white : Colors.black87,
+                        color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
                       ),
                     ),
                   ),
@@ -513,7 +513,7 @@ class _CartItemRow extends StatelessWidget {
                       child: Icon(
                         Icons.add_rounded,
                         size: 16,
-                        color: isDark ? Colors.white : Colors.black87,
+                        color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
                       ),
                     ),
                   ),
@@ -575,7 +575,7 @@ class _BillRow extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
@@ -583,7 +583,7 @@ class _BillRow extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            color: isDark ? Colors.grey.shade200 : Colors.grey.shade800,
+            color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),

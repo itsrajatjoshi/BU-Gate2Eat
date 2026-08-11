@@ -85,6 +85,29 @@ class AppTheme {
         type: BottomNavigationBarType.fixed,
         elevation: 8,
       ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.textPrimary,
+        contentTextStyle: GoogleFonts.inter(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.surface,
+        titleTextStyle: GoogleFonts.outfit(
+          color: AppColors.textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+        contentTextStyle: GoogleFonts.inter(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
       dividerTheme: const DividerThemeData(
         color: AppColors.divider,
         thickness: 1,
@@ -184,6 +207,35 @@ class AppTheme {
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.darkSurface,
         modalBackgroundColor: AppColors.darkSurface,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.darkSurfaceVariant,
+        contentTextStyle: GoogleFonts.inter(
+          color: AppColors.darkTextPrimary,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: AppColors.darkDivider),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.darkSurface,
+        titleTextStyle: GoogleFonts.outfit(
+          color: AppColors.darkTextPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+        contentTextStyle: GoogleFonts.inter(
+          color: AppColors.darkTextSecondary,
+          fontSize: 14,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.darkDivider),
+        ),
       ),
       dividerTheme: const DividerThemeData(
         color: AppColors.darkDivider,
