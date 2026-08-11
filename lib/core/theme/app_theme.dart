@@ -98,11 +98,12 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: const ColorScheme.dark(
-        primary: AppColors.primaryLight,
-        onPrimary: AppColors.darkBackground,
+        primary: AppColors.primary,
+        onPrimary: Colors.white,
         secondary: AppColors.secondary,
         onSecondary: AppColors.darkBackground,
         surface: AppColors.darkSurface,
+        onSurface: AppColors.darkTextPrimary,
         error: AppColors.error,
       ),
       scaffoldBackgroundColor: AppColors.darkBackground,
@@ -124,7 +125,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
           side: const BorderSide(
-            color: AppColors.darkSurfaceVariant,
+            color: AppColors.darkDivider,
           ),
         ),
       ),
@@ -148,15 +149,19 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.darkSurfaceVariant,
+        fillColor: AppColors.darkSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: AppColors.darkDivider),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: const BorderSide(color: AppColors.darkDivider),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: const BorderSide(
-            color: AppColors.primaryLight,
+            color: AppColors.primary,
             width: 2,
           ),
         ),
@@ -165,19 +170,23 @@ class AppTheme {
           vertical: AppSpacing.md,
         ),
         hintStyle: GoogleFonts.inter(
-          color: AppColors.darkTextSecondary,
+          color: AppColors.darkTextHint,
           fontSize: 14,
         ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.darkSurface,
-        selectedItemColor: AppColors.primaryLight,
+        selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.darkTextSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.darkSurface,
+        modalBackgroundColor: AppColors.darkSurface,
+      ),
       dividerTheme: const DividerThemeData(
-        color: AppColors.darkSurfaceVariant,
+        color: AppColors.darkDivider,
         thickness: 1,
       ),
     );

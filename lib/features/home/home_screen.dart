@@ -54,7 +54,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Container(
                   height: 48,
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF191938) : const Color(0xFFEDEFF6),
+                    color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
                   child: TextField(
@@ -68,9 +68,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       hintText: 'Search shops or food (e.g. momos)...',
                       hintStyle: TextStyle(
                         fontSize: 14,
-                        color: isDark
-                            ? const Color(0xFF7E83A6)
-                            : const Color(0xFF717D96),
+                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                         fontWeight: FontWeight.w400,
                       ),
                       border: InputBorder.none,
@@ -80,18 +78,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       prefixIcon: Icon(
                         Icons.search_rounded,
                         size: 22,
-                        color: isDark
-                            ? const Color(0xFF7E83A6)
-                            : const Color(0xFF717D96),
+                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                       ),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
                               icon: Icon(
                                 Icons.clear_rounded,
                                 size: 18,
-                                color: isDark
-                                    ? const Color(0xFF7E83A6)
-                                    : const Color(0xFF717D96),
+                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                               ),
                               onPressed: () {
                                 _searchController.clear();

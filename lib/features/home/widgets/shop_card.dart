@@ -238,9 +238,7 @@ class ShopCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF222246)
-                            : const Color(0xFFF1F3F9),
+                        color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -259,7 +257,7 @@ class ShopCard extends StatelessWidget {
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: isDark
                                           ? AppColors.darkTextSecondary
-                                          : const Color(0xFF475569),
+                                          : AppColors.textSecondary,
                                       fontSize: 11,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -277,18 +275,16 @@ class ShopCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF2A2250)
-                            : const Color(0xFFEEECFF),
+                            ? AppColors.primary.withValues(alpha: 0.2)
+                            : AppColors.primaryLight,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.storefront_outlined,
                             size: 12,
-                            color: isDark
-                                ? AppColors.primaryLight
-                                : AppColors.primary,
+                            color: AppColors.primary,
                           ),
                           const SizedBox(width: 5),
                           Text(
@@ -297,9 +293,7 @@ class ShopCard extends StatelessWidget {
                                 .textTheme
                                 .bodySmall
                                 ?.copyWith(
-                                  color: isDark
-                                      ? AppColors.primaryLight
-                                      : AppColors.primary,
+                                  color: AppColors.primary,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -318,7 +312,7 @@ class ShopCard extends StatelessWidget {
 
   Widget _buildPlaceholder(bool isDark) {
     return Container(
-      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F3F9),
+      color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
       child: Center(
         child: Icon(
           Icons.storefront_rounded,

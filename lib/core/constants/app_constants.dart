@@ -7,43 +7,45 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // Primary palette
-  static const Color primary = Color(0xFF6C5CE7);
-  static const Color primaryLight = Color(0xFFA29BFE);
-  static const Color primaryDark = Color(0xFF4834D4);
+  // Primary palette (Rich Food Orange & Warm Cream Tints)
+  static const Color primary = Color(0xFFFF6B35);
+  static const Color primaryLight = Color(0xFFFFF0EC);
+  static const Color primaryDark = Color(0xFFD94E1B);
 
-  // Secondary palette
-  static const Color secondary = Color(0xFF00CEC9);
-  static const Color secondaryLight = Color(0xFF81ECEC);
+  // Secondary palette (Warm Gold Highlights)
+  static const Color secondary = Color(0xFFFFC857);
+  static const Color secondaryLight = Color(0xFFFFF3D6);
 
   // Accent
-  static const Color accent = Color(0xFFFD79A8);
+  static const Color accent = Color(0xFFFF6B35);
 
-  // Neutrals (matching reference screenshot)
-  static const Color background = Color(0xFFF1F3F9);
+  // Neutrals (Warm Ivory background & Clean White surface)
+  static const Color background = Color(0xFFFFF9F5);
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFEDEFF6);
-  static const Color textPrimary = Color(0xFF1E293B);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color textHint = Color(0xFF94A3B8);
-  static const Color divider = Color(0xFFE2E8F0);
+  static const Color surfaceVariant = Color(0xFFF6F0EA);
+  static const Color textPrimary = Color(0xFF1F1F1F);
+  static const Color textSecondary = Color(0xFF6B6B6B);
+  static const Color textHint = Color(0xFF9E9E9E);
+  static const Color divider = Color(0xFFEFE8E1);
 
-  // Dark mode (matching reference screenshot)
-  static const Color darkBackground = Color(0xFF0D0E20);
-  static const Color darkSurface = Color(0xFF181832);
-  static const Color darkSurfaceVariant = Color(0xFF222246);
-  static const Color darkTextPrimary = Color(0xFFFFFFFF);
-  static const Color darkTextSecondary = Color(0xFF9EA3C0);
+  // Dark mode (Polished deep charcoal food-app palette)
+  static const Color darkBackground = Color(0xFF111113);
+  static const Color darkSurface = Color(0xFF18181B);
+  static const Color darkSurfaceVariant = Color(0xFF202024);
+  static const Color darkTextPrimary = Color(0xFFF5F5F5);
+  static const Color darkTextSecondary = Color(0xFFA1A1AA);
+  static const Color darkTextHint = Color(0xFF71717A);
+  static const Color darkDivider = Color(0xFF27272A);
 
   // Semantic
-  static const Color success = Color(0xFF00B894);
-  static const Color warning = Color(0xFFFDAA5E);
-  static const Color error = Color(0xFFFF6B6B);
-  static const Color info = Color(0xFF74B9FF);
+  static const Color success = Color(0xFF22A06B);
+  static const Color warning = Color(0xFFFF9800);
+  static const Color error = Color(0xFFE5484D);
+  static const Color info = Color(0xFF3B82F6);
 
   // Food type indicators
-  static const Color vegGreen = Color(0xFF27AE60);
-  static const Color nonVegRed = Color(0xFFE74C3C);
+  static const Color vegGreen = Color(0xFF22A06B);
+  static const Color nonVegRed = Color(0xFFE5484D);
 }
 
 // ─── Spacing ───────────────────────────────────────────────────

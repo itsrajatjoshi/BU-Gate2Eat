@@ -337,7 +337,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           style: const TextStyle(
                             fontSize: 21.5,
                             fontWeight: FontWeight.w900,
-                            color: Color(0xFF5C59E5),
+                            color: AppColors.primary,
                           ),
                         ),
                       ],
@@ -351,10 +351,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       child: ElevatedButton(
                         onPressed: _placeOrder,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981), // Vibrant food-green
+                          backgroundColor: AppColors.primary, // Rich Food Orange
                           foregroundColor: Colors.white,
                           elevation: 2,
-                          shadowColor: const Color(0xFF10B981).withValues(alpha: 0.35),
+                          shadowColor: AppColors.primary.withValues(alpha: 0.35),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -420,20 +420,20 @@ class _CartItemRow extends StatelessWidget {
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
                     placeholder: (_, __) => Container(
-                      color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
                       child: const Center(
                         child: Icon(Icons.restaurant_rounded, size: 20, color: Colors.grey),
                       ),
                     ),
                     errorWidget: (_, __, ___) => Container(
-                      color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
                       child: const Center(
                         child: Icon(Icons.fastfood_rounded, size: 20, color: Colors.grey),
                       ),
                     ),
                   )
                 : Container(
-                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                    color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
                     child: const Center(
                       child: Icon(Icons.fastfood_rounded, size: 20, color: Colors.grey),
                     ),
@@ -480,7 +480,7 @@ class _CartItemRow extends StatelessWidget {
                       width: 28,
                       height: 28,
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.grey.shade800 : const Color(0xFFF1F3F5),
+                        color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Icon(
@@ -507,7 +507,7 @@ class _CartItemRow extends StatelessWidget {
                       width: 28,
                       height: 28,
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.grey.shade800 : const Color(0xFFF1F3F5),
+                        color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Icon(
@@ -538,7 +538,7 @@ class _CartItemRow extends StatelessWidget {
                   child: Icon(
                     Icons.delete_outline_rounded,
                     size: 20,
-                    color: Color(0xFFE53935),
+                    color: AppColors.error,
                   ),
                 ),
               ),

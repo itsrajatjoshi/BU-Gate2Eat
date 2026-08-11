@@ -190,7 +190,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: AppColors.textPrimary,
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -701,13 +701,13 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF5C59E5).withValues(alpha: 0.1),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '${categoryItems.length}',
                         style: const TextStyle(
-                          color: Color(0xFF5C59E5),
+                          color: AppColors.primary,
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
                         ),
@@ -867,7 +867,7 @@ class _MenuItemCard extends ConsumerWidget {
       width: 15,
       height: 15,
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF388E3C), width: 1.3),
+        border: Border.all(color: AppColors.vegGreen, width: 1.3),
         borderRadius: BorderRadius.circular(2.5),
       ),
       child: Center(
@@ -875,7 +875,7 @@ class _MenuItemCard extends ConsumerWidget {
           width: 6,
           height: 6,
           decoration: const BoxDecoration(
-            color: Color(0xFF388E3C),
+            color: AppColors.vegGreen,
             shape: BoxShape.circle,
           ),
         ),
@@ -888,13 +888,13 @@ class _MenuItemCard extends ConsumerWidget {
       width: 15,
       height: 15,
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFD32F2F), width: 1.3),
+        border: Border.all(color: AppColors.nonVegRed, width: 1.3),
         borderRadius: BorderRadius.circular(2.5),
       ),
       child: const Center(
         child: CustomPaint(
           size: Size(6, 6),
-          painter: _TrianglePainter(color: Color(0xFFD32F2F)),
+          painter: _TrianglePainter(color: AppColors.nonVegRed),
         ),
       ),
     );
@@ -933,7 +933,7 @@ class _MenuItemCard extends ConsumerWidget {
     required BuildContext context,
     required WidgetRef ref,
   }) {
-    const primaryColor = Color(0xFF5C59E5);
+    const primaryColor = AppColors.primary;
     return InkWell(
       key: key,
       borderRadius: BorderRadius.circular(8),
@@ -969,7 +969,7 @@ class _MenuItemCard extends ConsumerWidget {
     required WidgetRef ref,
     required int quantity,
   }) {
-    const primaryColor = Color(0xFF5C59E5);
+    const primaryColor = AppColors.primary;
     return Container(
       key: key,
       width: 66,
@@ -1168,7 +1168,7 @@ class _MenuItemCard extends ConsumerWidget {
                                 : Icons.favorite_outline_rounded,
                             size: 16,
                             color: isFavorite
-                                ? const Color(0xFFE53935)
+                                ? AppColors.nonVegRed
                                 : AppColors.textHint,
                           ),
                         ),
@@ -1239,7 +1239,7 @@ class _MenuItemCard extends ConsumerWidget {
                                     text: 'more',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
-                                      color: Color(0xFF5C59E5),
+                                      color: AppColors.primary,
                                     ),
                                   ),
                                 ],
@@ -1356,7 +1356,7 @@ class _CategoryNavWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const primaryColor = Color(0xFFE65100); // Warm orange matching reference screenshot
+    const primaryColor = AppColors.primary; // Warm orange matching reference screenshot
 
     return ListView.separated(
       controller: scrollController,
@@ -1400,11 +1400,11 @@ class _CategoryNavWidget extends StatelessWidget {
                             height: 51,
                             fit: BoxFit.cover,
                             placeholder: (context, url) => Container(
-                              color: isDark ? Colors.grey[850] : Colors.grey[200],
+                              color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                               child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
                             ),
                             errorWidget: (context, url, error) => Container(
-                              color: isDark ? Colors.grey[850] : Colors.grey[200],
+                              color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                               child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
                             ),
                           ),
@@ -1491,7 +1491,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
       width: 16,
       height: 16,
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF388E3C), width: 1.5),
+        border: Border.all(color: AppColors.vegGreen, width: 1.5),
         borderRadius: BorderRadius.circular(3.5),
       ),
       child: Center(
@@ -1499,7 +1499,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
           width: 7,
           height: 7,
           decoration: const BoxDecoration(
-            color: Color(0xFF388E3C),
+            color: AppColors.vegGreen,
             shape: BoxShape.circle,
           ),
         ),
@@ -1512,13 +1512,13 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
       width: 16,
       height: 16,
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFD32F2F), width: 1.5),
+        border: Border.all(color: AppColors.nonVegRed, width: 1.5),
         borderRadius: BorderRadius.circular(3.5),
       ),
       child: const Center(
         child: CustomPaint(
           size: Size(8, 8),
-          painter: _TrianglePainter(color: Color(0xFFD32F2F)),
+          painter: _TrianglePainter(color: AppColors.nonVegRed),
         ),
       ),
     );
@@ -1605,7 +1605,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                     widget.displayImageUrl,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) => Container(
-                                      color: isDark ? Colors.grey[850] : Colors.grey[200],
+                                      color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                                       child: const Icon(
                                         Icons.restaurant_menu_rounded,
                                         size: 48,
@@ -1643,7 +1643,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF5C59E5),
+                                      color: AppColors.primary,
                                       borderRadius: BorderRadius.circular(8),
                                       boxShadow: [
                                         BoxShadow(
@@ -1702,7 +1702,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                               : Icons.favorite_outline_rounded,
                                           size: 20,
                                           color: isFavorite
-                                              ? const Color(0xFFE53935)
+                                              ? AppColors.nonVegRed
                                               : AppColors.textHint,
                                         ),
                                       ),
@@ -1732,8 +1732,8 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0.6,
                                     color: widget.item.isVeg
-                                        ? const Color(0xFF2E7D32)
-                                        : const Color(0xFFC62828),
+                                        ? AppColors.vegGreen
+                                        : AppColors.nonVegRed,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -1802,7 +1802,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                               style: TextStyle(
                                 fontSize: 14,
                                 height: 1.55,
-                                color: isDark ? Colors.grey[300] : const Color(0xFF475569),
+                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                               ),
                             ),
                             const SizedBox(height: 20),
@@ -1899,7 +1899,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
   }
 
   Widget _buildAddButton(BuildContext context, WidgetRef ref) {
-    const primaryColor = Color(0xFF5C59E5);
+    const primaryColor = AppColors.primary;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1950,7 +1950,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
   }
 
   Widget _buildQuantityStepper(BuildContext context, WidgetRef ref, int quantity) {
-    const primaryColor = Color(0xFF5C59E5);
+    const primaryColor = AppColors.primary;
     return Container(
       height: 48,
       decoration: BoxDecoration(
