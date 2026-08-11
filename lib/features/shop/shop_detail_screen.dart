@@ -19,9 +19,16 @@ import '../../models/shop_model.dart';
 import '../cart/cart_dialog_helper.dart';
 import '../cart/cart_provider.dart';
 
-/// Provider that fetches shop details by ID.
+/// Provider that fetches shop details by ID, reusing cached shops list to eliminate redundant Firestore reads.
 final shopDetailProvider =
     FutureProvider.family<Shop?, String>((ref, shopId) async {
+  final shopsAsync = ref.watch(shopsProvider);
+  final cachedShops = shopsAsync.value;
+  if (cachedShops != null && cachedShops.isNotEmpty) {
+    final match = cachedShops.where((s) => s.id == shopId).toList();
+    if (match.isNotEmpty) return match.first;
+  }
+
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.getShop(shopId);
 });
@@ -265,28 +272,6 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           isActive: c.isActive,
           shopId: shopId,
         ),);
-      }
-    }
-
-    // If fetched is empty or loading, provide shop default fallback categories
-    if (list.length == 1) {
-      if (shopId == 'rajat_shop' || shopId.contains('rajat')) {
-        list.addAll([
-          const Category(id: 'momos', name: 'Momos', sortOrder: 1, imageUrl: 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'pizzas', name: 'Pizzas', sortOrder: 2, imageUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'burgers', name: 'Burgers', sortOrder: 3, imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'biryani', name: 'Biryani', sortOrder: 4, imageUrl: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'thalis', name: 'Thali', sortOrder: 5, imageUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'snacks', name: 'Snacks', sortOrder: 6, imageUrl: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80'),
-        ]);
-      } else if (shopId == 'nayan_shop' || shopId.contains('nayan')) {
-        list.addAll([
-          const Category(id: 'momos', name: 'Momos', sortOrder: 1, imageUrl: 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'rolls', name: 'Rolls', sortOrder: 2, imageUrl: 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'noodles', name: 'Noodles', sortOrder: 3, imageUrl: 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'snacks', name: 'Snacks', sortOrder: 4, imageUrl: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80'),
-          const Category(id: 'thalis', name: 'Thali', sortOrder: 5, imageUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80'),
-        ]);
       }
     }
 
