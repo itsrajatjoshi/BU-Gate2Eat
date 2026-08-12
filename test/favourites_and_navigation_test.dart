@@ -88,37 +88,85 @@ void main() {
   group('Favourites Feature Logic Tests', () {
     test('Initial favourites set is empty', () {
       expect(favoriteNotifier.state.isEmpty, isTrue);
-      expect(favoriteNotifier.isFavorite('veg_steam_momos'), isFalse);
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', rajatShop.id), isFalse);
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', nayanShop.id), isFalse);
     });
 
-    test('Toggling item adds it to favourites and persists', () async {
-      await favoriteNotifier.toggleFavorite('veg_steam_momos');
+    test('TEST 1 & TEST 2: Favoriting Rajat Shop item does NOT favorite Nayan Shop item', () async {
+      // User favorites Veg Steam Momos in Rajat Shop
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', rajatShop.id);
 
-      expect(favoriteNotifier.isFavorite('veg_steam_momos'), isTrue);
-      expect(favoriteNotifier.state.contains('veg_steam_momos'), isTrue);
-      expect(localStorage.favoriteItemIds, contains('veg_steam_momos'));
+      // Rajat Shop is favorited
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', rajatShop.id), isTrue);
+      expect(favoriteNotifier.state.contains('rajat_shop:veg_steam_momos'), isTrue);
+
+      // Nayan Shop item with identical ID is NOT favorited
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', nayanShop.id), isFalse);
+      expect(favoriteNotifier.state.contains('nayan_shop:veg_steam_momos'), isFalse);
+      expect(favoriteNotifier.state.length, equals(1));
     });
 
-    test('Toggling favorited item removes it from favourites and persists', () async {
-      await favoriteNotifier.toggleFavorite('veg_steam_momos');
-      expect(favoriteNotifier.isFavorite('veg_steam_momos'), isTrue);
-
-      await favoriteNotifier.toggleFavorite('veg_steam_momos');
-      expect(favoriteNotifier.isFavorite('veg_steam_momos'), isFalse);
-      expect(localStorage.favoriteItemIds, isNot(contains('veg_steam_momos')));
-    });
-
-    test('Multiple items can be favorited independently', () async {
-      await favoriteNotifier.toggleFavorite('veg_steam_momos');
-      await favoriteNotifier.toggleFavorite('chicken_kurkure_momos');
+    test('TEST 3: Favoriting both shops with same item ID creates two separate entries', () async {
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', rajatShop.id);
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', nayanShop.id);
 
       expect(favoriteNotifier.state.length, equals(2));
-      expect(favoriteNotifier.isFavorite('veg_steam_momos'), isTrue);
-      expect(favoriteNotifier.isFavorite('chicken_kurkure_momos'), isTrue);
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', rajatShop.id), isTrue);
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', nayanShop.id), isTrue);
+      expect(favoriteNotifier.state.contains('rajat_shop:veg_steam_momos'), isTrue);
+      expect(favoriteNotifier.state.contains('nayan_shop:veg_steam_momos'), isTrue);
+    });
 
-      await favoriteNotifier.toggleFavorite('veg_steam_momos');
+    test('TEST 4: Removing Rajat Shop item leaves Nayan Shop item intact', () async {
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', rajatShop.id);
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', nayanShop.id);
+
+      // Remove Rajat Shop momos
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', rajatShop.id);
+
+      // Rajat Shop momos gone
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', rajatShop.id), isFalse);
+      expect(favoriteNotifier.state.contains('rajat_shop:veg_steam_momos'), isFalse);
+
+      // Nayan Shop momos still favorited
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', nayanShop.id), isTrue);
+      expect(favoriteNotifier.state.contains('nayan_shop:veg_steam_momos'), isTrue);
       expect(favoriteNotifier.state.length, equals(1));
-      expect(favoriteNotifier.isFavorite('chicken_kurkure_momos'), isTrue);
+    });
+
+    test('TEST 5: Two identically named items from different shops never affect each other', () async {
+      // Toggle Rajat momos on, then off
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', rajatShop.id);
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', rajatShop.id), isTrue);
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', nayanShop.id), isFalse);
+
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', rajatShop.id);
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', rajatShop.id), isFalse);
+      expect(favoriteNotifier.isFavorite('veg_steam_momos', nayanShop.id), isFalse);
+    });
+
+    test('TEST 6: Navigate away and return persists shop-specific favorite state in SharedPreferences', () async {
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', rajatShop.id);
+      await favoriteNotifier.toggleFavorite('chicken_kurkure_momos', nayanShop.id);
+
+      expect(localStorage.favoriteItemIds, contains('rajat_shop:veg_steam_momos'));
+      expect(localStorage.favoriteItemIds, contains('nayan_shop:chicken_kurkure_momos'));
+
+      // Simulate app/screen reload from local storage
+      final newFavoriteNotifier = FavoriteNotifier(localStorage);
+      expect(newFavoriteNotifier.isFavorite('veg_steam_momos', rajatShop.id), isTrue);
+      expect(newFavoriteNotifier.isFavorite('veg_steam_momos', nayanShop.id), isFalse);
+      expect(newFavoriteNotifier.isFavorite('chicken_kurkure_momos', nayanShop.id), isTrue);
+      expect(newFavoriteNotifier.isFavorite('chicken_kurkure_momos', rajatShop.id), isFalse);
+    });
+
+    test('clearFavorites empties state and local storage', () async {
+      await favoriteNotifier.toggleFavorite('veg_steam_momos', rajatShop.id);
+      expect(favoriteNotifier.state.isNotEmpty, isTrue);
+
+      await favoriteNotifier.clearFavorites();
+      expect(favoriteNotifier.state.isEmpty, isTrue);
+      expect(localStorage.favoriteItemIds.isEmpty, isTrue);
     });
   });
 

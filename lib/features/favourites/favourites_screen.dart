@@ -292,7 +292,7 @@ class FavouritesScreen extends ConsumerWidget {
                                 ),
                                 InkWell(
                                   onTap: () {
-                                    ref.read(favoritesProvider.notifier).toggleFavorite(item.id);
+                                    ref.read(favoritesProvider.notifier).toggleFavorite(item.id, shop.id);
                                   },
                                   borderRadius: BorderRadius.circular(16),
                                   child: const Padding(

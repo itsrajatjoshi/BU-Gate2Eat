@@ -1125,7 +1125,7 @@ class _MenuItemCard extends ConsumerWidget {
     final isAvailable = item.isAvailable && isShopOpen;
     final displayImageUrl = _getEffectiveImageUrl(item);
     final favorites = ref.watch(favoritesProvider);
-    final isFavorite = favorites.contains(item.id);
+    final isFavorite = favorites.contains(FavoriteNotifier.buildFavoriteKey(shop.id, item.id));
 
     final cartState = ref.watch(cartProvider);
     final quantityInCart = cartState.getQuantityForShop(shop.id, item.id);
@@ -1201,7 +1201,7 @@ class _MenuItemCard extends ConsumerWidget {
                         onTap: () {
                           ref
                               .read(favoritesProvider.notifier)
-                              .toggleFavorite(item.id);
+                              .toggleFavorite(item.id, shop.id);
                         },
                         child: Container(
                           width: 30,
@@ -1605,7 +1605,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
 
   void _onFavoriteTap() {
     setState(() => _favoriteScale = 1.28);
-    ref.read(favoritesProvider.notifier).toggleFavorite(widget.item.id);
+    ref.read(favoritesProvider.notifier).toggleFavorite(widget.item.id, widget.shop.id);
     Future.delayed(const Duration(milliseconds: 160), () {
       if (mounted) setState(() => _favoriteScale = 1.0);
     });
@@ -1615,7 +1615,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final favorites = ref.watch(favoritesProvider);
-    final isFavorite = favorites.contains(widget.item.id);
+    final isFavorite = favorites.contains(FavoriteNotifier.buildFavoriteKey(widget.shop.id, widget.item.id));
 
     final liveCart = ref.watch(cartProvider);
     final quantityInCart =

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## [1.0.7] — 2026-08-12
+
+### Fixed
+- **Shop-Scoped Favourites Identity**:
+  - Resolved cross-shop item ID collision where favouriting an item in one shop (e.g. Rajat Shop `veg_steam_momos`) caused identically ID'd items in another shop (e.g. Nayan Shop) to show as favourited.
+  - Introduced deterministic composite keys (`'$shopId:$itemId'`) in `FavoriteNotifier` and `favoriteItemsProvider`.
+  - Updated `_MenuItemCard`, `_ItemDetailBottomSheet`, and `FavouritesScreen` to pass `shopId` when toggling and evaluating favourite status.
+  - Expanded automated test suite with 6 dedicated test cases covering shop isolation and local storage persistence.
+
 ## [1.0.6] — 2026-08-11
 
 ### Added & Implemented

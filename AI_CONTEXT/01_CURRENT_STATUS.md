@@ -1,23 +1,23 @@
 # 01 — Current Status
 
-## Project Status Snapshot (As of August 11, 2026)
+## Project Status Snapshot (As of August 12, 2026)
 
 | Parameter | Current Status |
 |---|---|
-| **App Version** | `1.0.6` |
+| **App Version** | `1.0.7` |
 | **Flutter SDK** | ✅ Upgraded to `3.44.9` (Stable Channel) |
 | **Current Branch** | `main` |
-| **Latest Commit** | Clean Baseline + Favourites + Navigation + Cart Persistence + Home Filters |
+| **Latest Commit** | Shop-Scoped Favourites Fix + Tests |
 | **Bottom Navigation** | ✅ 4-Tab Main Navigation: `Home` → `Favourites` → `Cart` → `Profile` |
-| **Favourites Screen** | ✅ Live Favourites list with shop attribution, veg/non-veg indicator, price, remove action, add to cart & clean empty state |
+| **Favourites Screen** | ✅ Live Favourites list with shop-scoped identity (`shopId:itemId`), attribution, veg/non-veg indicator, price, remove action, add to cart & clean empty state |
 | **Cart Persistence** | ✅ Cart lifetime uncoupled from ShopDetailScreen; persists across tabs; cross-shop conflict protection preserved |
 | **Home Filters** | ✅ Horizontal Filter Pills (`All`, `Open Now`, `Fast Food`, `Snacks`, `Thalis`, `Chinese`, `Veg`, `Non-Veg`) |
 | **Profile & Settings Separation** | ✅ Profile dedicated to User details (Name, Phone, Age, Pickup Info); Settings dedicated to Appearance & About |
 | **Category Navigation UI** | ✅ Pinned Sticky & 100% Connected to Cloud Firestore (`shops/{shopId}/categories`) |
 | **Scroll-Spy Sync** | ✅ Domino's / Swiggy Style Auto Scroll & Active Section Highlighting |
 | **Build Status** | ✅ Web Release Built & Verified (`build/web`) |
-| **Static Code Health** | ✅ `flutter analyze` — 0 Errors, 0 Warnings (4.2s) |
-| **Test Suite Health** | ✅ `flutter test` — 31/31 Tests Passed |
+| **Static Code Health** | ✅ `flutter analyze` — 0 Errors, 0 Warnings |
+| **Test Suite Health** | ✅ `flutter test` — 34/34 Tests Passed |
 | **Known Blocking Issues** | **None** |
 
 ## Active Environment & Artifacts

@@ -96,34 +96,51 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   }
 }
 
-/// Provider for managing user favorite item IDs stored locally.
+/// Provider for managing user favorite item keys stored locally.
 final favoritesProvider =
     StateNotifierProvider<FavoriteNotifier, Set<String>>((ref) {
   final localStorage = ref.read(localStorageServiceProvider);
   return FavoriteNotifier(localStorage);
 });
 
-/// Manages local user favorite menu item IDs.
+/// Manages local user favorite menu items with shop-specific composite keys (shopId:itemId).
 class FavoriteNotifier extends StateNotifier<Set<String>> {
   FavoriteNotifier(this._localStorage)
       : super(_localStorage.favoriteItemIds.toSet());
 
   final LocalStorageService _localStorage;
 
-  /// Toggles favorite status for a given itemId and persists to SharedPreferences.
-  Future<void> toggleFavorite(String itemId) async {
+  /// Builds a deterministic shop-specific composite key for a menu item.
+  static String buildFavoriteKey(String shopId, String itemId) => '$shopId:$itemId';
+
+  /// Toggles favorite status for a given item in a specific shop and persists to SharedPreferences.
+  Future<void> toggleFavorite(String itemId, [String? shopId]) async {
+    final key = (shopId != null && shopId.isNotEmpty)
+        ? buildFavoriteKey(shopId, itemId)
+        : itemId;
     final updated = Set<String>.from(state);
-    if (updated.contains(itemId)) {
-      updated.remove(itemId);
+    if (updated.contains(key)) {
+      updated.remove(key);
     } else {
-      updated.add(itemId);
+      updated.add(key);
     }
     state = updated;
     await _localStorage.saveFavoriteItemIds(updated.toList());
   }
 
-  /// Checks whether an item is favorited.
-  bool isFavorite(String itemId) => state.contains(itemId);
+  /// Checks whether an item in a specific shop is favorited.
+  bool isFavorite(String itemId, [String? shopId]) {
+    if (shopId != null && shopId.isNotEmpty) {
+      return state.contains(buildFavoriteKey(shopId, itemId));
+    }
+    return state.contains(itemId);
+  }
+
+  /// Clears all stored favorites.
+  Future<void> clearFavorites() async {
+    state = {};
+    await _localStorage.saveFavoriteItemIds([]);
+  }
 }
 
 /// Represents a favorited menu item paired with its parent shop information.
@@ -139,8 +156,8 @@ class FavoriteItemData {
 
 /// Provider for fetching all favorited menu items paired with their parent shops.
 final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async {
-  final favoriteIds = ref.watch(favoritesProvider);
-  if (favoriteIds.isEmpty) return [];
+  final favoriteKeys = ref.watch(favoritesProvider);
+  if (favoriteKeys.isEmpty) return [];
 
   final shops = await ref.watch(shopsProvider.future);
   final firestoreService = ref.watch(firestoreServiceProvider);
@@ -150,7 +167,8 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
   for (final shop in shops) {
     final menuItems = await firestoreService.getMenuItems(shop.id);
     for (final item in menuItems) {
-      if (favoriteIds.contains(item.id)) {
+      final key = FavoriteNotifier.buildFavoriteKey(shop.id, item.id);
+      if (favoriteKeys.contains(key)) {
         results.add(FavoriteItemData(item: item, shop: shop));
       }
     }
@@ -158,4 +176,5 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
 
   return results;
 });
+
 
