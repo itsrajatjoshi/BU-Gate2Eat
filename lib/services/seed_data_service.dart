@@ -44,9 +44,10 @@ class SeedDataService {
 
     final rajatDoc = await firestore.collection('shops').doc('rajat_shop').get();
     final nayanDoc = await firestore.collection('shops').doc('nayan_shop').get();
+    final kivishaDoc = await firestore.collection('shops').doc('kivisha_shop').get();
 
-    // If both shops already exist in Firestore, DO NOT overwrite shop/menu details!
-    if (rajatDoc.exists && nayanDoc.exists) {
+    // If all shops already exist in Firestore, DO NOT overwrite shop/menu details!
+    if (rajatDoc.exists && nayanDoc.exists && kivishaDoc.exists) {
       return;
     }
 
@@ -190,6 +191,27 @@ class SeedDataService {
       }
 
       await _cleanupOldRandomDocs(nayanRef);
+    }
+
+    // ─── Shop 3: Kivisha Shop (Seed ONLY if doc does not exist, without menu items) ──
+    if (!kivishaDoc.exists) {
+      final kivishaRef = firestore.collection('shops').doc('kivisha_shop');
+      await kivishaRef.set({
+        'name': 'Kivisha Shop',
+        'description': 'Fresh Food, Snacks & Fast Food',
+        'bannerUrl': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=500',
+        'contactNumber': '8295643910',
+        'orderNumber': '8295643910',
+        'openTime': '08:00',
+        'closeTime': '23:30',
+        'isClosedOverride': false,
+        'isActive': true,
+        'sortOrder': 3,
+        'searchKeywords': ['kivisha', 'snacks', 'fast food', 'food'],
+        'deliveryNote': 'Pickup from Gate 2',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     }
   }
 
