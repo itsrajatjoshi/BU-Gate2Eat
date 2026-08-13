@@ -139,6 +139,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         : const AsyncValue<List<MenuItem>>.data([]);
     final liveMenuItems = liveMenuItemsAsync.value ?? <MenuItem>[];
 
+    // Filter suggestions from current shop's live menu items (max 3, in-stock, excluded if in cart)
+    final cartItemIds = cartItems.map((ci) => ci.menuItem.id).toSet();
+    final suggestions = liveMenuItems
+        .where((item) => item.isAvailable && !cartItemIds.contains(item.id))
+        .take(3)
+        .toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -293,6 +300,20 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       ),
                     ],
                   ),
+
+                  // 4. Cart Suggestions Section ("Complete your order")
+                  if (suggestions.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Divider(height: 1, thickness: 0.8),
+                    const SizedBox(height: 16),
+                    _CartSuggestionsSection(
+                      suggestions: suggestions,
+                      onAdd: (item) {
+                        cartNotifier.addItem(item, shopId, shopName);
+                      },
+                      getEffectiveImageUrl: _getEffectiveImageUrl,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -597,6 +618,233 @@ class _BillRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Suggestions / Upsell Section ("Complete your order")
+class _CartSuggestionsSection extends StatelessWidget {
+  const _CartSuggestionsSection({
+    required this.suggestions,
+    required this.onAdd,
+    required this.getEffectiveImageUrl,
+  });
+
+  final List<MenuItem> suggestions;
+  final void Function(MenuItem item) onAdd;
+  final String Function(MenuItem item) getEffectiveImageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.stars_rounded,
+              size: 20,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Complete your order with',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    letterSpacing: -0.2,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: suggestions.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final item = suggestions[index];
+            final imageUrl = getEffectiveImageUrl(item);
+
+            return _SuggestionRow(
+              item: item,
+              imageUrl: imageUrl,
+              onAdd: () => onAdd(item),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Compact Suggestion Item Row
+class _SuggestionRow extends StatelessWidget {
+  const _SuggestionRow({
+    required this.item,
+    required this.imageUrl,
+    required this.onAdd,
+  });
+
+  final MenuItem item;
+  final String imageUrl;
+  final VoidCallback onAdd;
+
+  Widget _buildVegIcon() {
+    return Container(
+      width: 14,
+      height: 14,
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.vegGreen, width: 1.2),
+        borderRadius: BorderRadius.circular(2.5),
+      ),
+      child: Center(
+        child: Container(
+          width: 5,
+          height: 5,
+          decoration: const BoxDecoration(
+            color: AppColors.vegGreen,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNonVegIcon() {
+    return Container(
+      width: 14,
+      height: 14,
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.nonVegRed, width: 1.2),
+        borderRadius: BorderRadius.circular(2.5),
+      ),
+      child: Center(
+        child: Container(
+          width: 5,
+          height: 5,
+          decoration: const BoxDecoration(
+            color: AppColors.nonVegRed,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Food Image
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 52,
+              height: 52,
+              child: imageUrl.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
+                        child: const Center(
+                          child: Icon(Icons.restaurant_rounded, size: 16, color: Colors.grey),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
+                        child: const Center(
+                          child: Icon(Icons.fastfood_rounded, size: 16, color: Colors.grey),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
+                      child: const Center(
+                        child: Icon(Icons.fastfood_rounded, size: 16, color: Colors.grey),
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Details: Name & Veg Icon + Price
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '₹${item.price.toStringAsFixed(0)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Small Add Button
+          OutlinedButton(
+            onPressed: onAdd,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary, width: 1.2),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              minimumSize: const Size(60, 32),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text(
+              'ADD',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12.5,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

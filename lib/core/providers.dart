@@ -131,7 +131,7 @@ class FavoriteNotifier extends StateNotifier<Set<String>> {
   /// Checks whether an item in a specific shop is favorited.
   bool isFavorite(String itemId, [String? shopId]) {
     if (shopId != null && shopId.isNotEmpty) {
-      return state.contains(buildFavoriteKey(shopId, itemId));
+      return state.contains(buildFavoriteKey(shopId, itemId)) || state.contains(itemId);
     }
     return state.contains(itemId);
   }
@@ -168,7 +168,7 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
     final menuItems = await firestoreService.getMenuItems(shop.id);
     for (final item in menuItems) {
       final key = FavoriteNotifier.buildFavoriteKey(shop.id, item.id);
-      if (favoriteKeys.contains(key)) {
+      if (favoriteKeys.contains(key) || favoriteKeys.contains(item.id)) {
         results.add(FavoriteItemData(item: item, shop: shop));
       }
     }

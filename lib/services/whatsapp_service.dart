@@ -68,9 +68,14 @@ class WhatsAppService {
     final cleanNumber = whatsappNumber.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanNumber.isEmpty) return false;
 
-    // Build WhatsApp deep link with Indian country code
+    // Normalize number with Indian country code (91)
+    final formattedNumber = cleanNumber.startsWith('91') && cleanNumber.length == 12
+        ? cleanNumber
+        : '91$cleanNumber';
+
+    // Build WhatsApp deep link
     final whatsappUrl = Uri.parse(
-      'https://wa.me/91$cleanNumber?text=${Uri.encodeComponent(message)}',
+      'https://wa.me/$formattedNumber?text=${Uri.encodeComponent(message)}',
     );
 
     try {
@@ -87,7 +92,12 @@ class WhatsAppService {
   static Future<bool> launchPhoneCall(String phoneNumber) async {
     final cleanNumber = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanNumber.isEmpty) return false;
-    final phoneUrl = Uri.parse('tel:+91$cleanNumber');
+
+    final formattedNumber = cleanNumber.startsWith('91') && cleanNumber.length == 12
+        ? cleanNumber
+        : '91$cleanNumber';
+
+    final phoneUrl = Uri.parse('tel:+$formattedNumber');
 
     try {
       if (await canLaunchUrl(phoneUrl)) {

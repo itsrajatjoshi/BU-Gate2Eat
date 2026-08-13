@@ -3,6 +3,7 @@
 
 import 'package:bugate2eat_app/features/cart/cart_provider.dart';
 import 'package:bugate2eat_app/models/menu_item_model.dart';
+import 'package:bugate2eat_app/services/whatsapp_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -265,6 +266,25 @@ void main() {
 
       // Rajat Shop + veg_steam_momos -> quantity MUST BE 1 (shows - 1 + stepper)
       expect(cartNotifier.state.getQuantityForShop(shopAId, itemA1.id), equals(1));
+    });
+
+    test('CASE 19: WhatsApp Message Generation & Phone Formatting', () {
+      cartNotifier.addItem(itemA1, shopAId, shopAName);
+      final message = WhatsAppService.generateOrderMessage(
+        shopName: shopAName,
+        userName: 'Rajat Joshi',
+        userPhone: '9876543210',
+        cartItems: cartNotifier.state.items,
+        specialInstructions: 'Extra spicy',
+      );
+
+      expect(message, contains('Hello Rajat Shop,'));
+      expect(message, contains('Name: Rajat Joshi'));
+      expect(message, contains('Phone: 9876543210'));
+      expect(message, contains('1 × Veg Momos — ₹60'));
+      expect(message, contains('Total: ₹60'));
+      expect(message, contains('Special Instructions: Extra spicy'));
+      expect(message, contains('Bennett Gate No. 2'));
     });
   });
 }
