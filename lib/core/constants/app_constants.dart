@@ -75,10 +75,10 @@ class AppRadius {
 class AppConfig {
   AppConfig._();
 
-  static const String appName = 'BU Gate2Eat';
+  static const String appName = 'YummBU';
   static const String appTagline = 'Everything around Bennett. One app. One tap.';
   static const String pickupLocation = 'Bennett Gate No. 2';
-  static const String whatsappBranding = '~ Sent via BU Gate2Eat';
+  static const String whatsappBranding = '~ Sent via YummBU';
 
   // Special instructions character limit
   static const int maxSpecialInstructionsLength = 200;

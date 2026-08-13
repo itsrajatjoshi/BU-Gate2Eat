@@ -2,6 +2,7 @@
 // WhatsApp service for generating and launching order messages
 
 import 'package:url_launcher/url_launcher.dart';
+import '../core/constants/app_constants.dart';
 import '../models/cart_item_model.dart';
 
 /// Service for generating WhatsApp order messages and launching WhatsApp.
@@ -53,7 +54,7 @@ class WhatsAppService {
     buffer.writeln();
 
     // Branding
-    buffer.write('~ Sent via BU Gate2Eat');
+    buffer.write(AppConfig.whatsappBranding);
 
     return buffer.toString();
   }

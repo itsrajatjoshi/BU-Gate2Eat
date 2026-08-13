@@ -1,6 +1,6 @@
 {
-    "name": "bugate2eat_app",
-    "short_name": "bugate2eat_app",
+    "name": "YummBU",
+    "short_name": "YummBU",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
