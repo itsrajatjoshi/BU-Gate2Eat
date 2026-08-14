@@ -133,7 +133,11 @@ class _HomeTabContentState extends ConsumerState<_HomeTabContent> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(AppConfig.appName),
+        title: Image.asset(
+          'assets/images/yummbu_wordmark.png',
+          height: 30,
+          fit: BoxFit.contain,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
