@@ -80,6 +80,70 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _showLogoutDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.logout_rounded, color: AppColors.error, size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Logout',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Are you sure you want to log out? You will need to enter your details again to continue.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+              ),
+              child: const Text(
+                'Logout',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      final localStorage = ref.read(localStorageServiceProvider);
+      await localStorage.logout();
+
+      if (mounted) {
+        context.go(AppRoutes.onboarding);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -326,6 +390,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push(AppRoutes.settings),
                 ),
+                Divider(
+                  height: 1,
+                  thickness: 0.6,
+                  color: isDark ? AppColors.darkDivider : AppColors.divider,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.logout_rounded, color: AppColors.error),
+                  title: const Text(
+                    'Logout',
+                    style: TextStyle(
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text('Sign out from this device'),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.error),
+                  onTap: _showLogoutDialog,
+                ),
               ],
             ),
           ),
@@ -334,3 +416,4 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 }
+

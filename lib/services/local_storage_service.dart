@@ -93,4 +93,14 @@ class LocalStorageService {
   Future<void> saveFavoriteItemIds(List<String> ids) async {
     await _prefs.setStringList(_keyFavorites, ids);
   }
+
+  // ─── Session Management ────────────────────────────────────
+
+  /// Clears the user profile and onboarding state, effectively logging out.
+  Future<void> logout() async {
+    await _prefs.remove(_keyIsOnboarded);
+    await _prefs.remove(_keyName);
+    await _prefs.remove(_keyPhone);
+    await _prefs.remove(_keyAge);
+  }
 }
