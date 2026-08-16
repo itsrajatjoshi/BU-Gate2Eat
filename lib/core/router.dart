@@ -10,6 +10,7 @@ import '../features/onboarding/onboarding_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shop/shop_detail_screen.dart';
 import '../features/splash/splash_screen.dart';
+import '../panel/shopkeeper_panel/shopkeeper_main_shell.dart';
 
 /// App route paths.
 class AppRoutes {
@@ -21,6 +22,7 @@ class AppRoutes {
   static const String shopDetail = '/shop/:shopId';
   static const String cart = '/cart';
   static const String settings = '/settings';
+  static const String shopkeeper = '/shopkeeper';
 }
 
 /// GoRouter configuration for the app.
@@ -55,6 +57,15 @@ final GoRouter appRouter = GoRouter(
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 400),
+      ),
+    ),
+    GoRoute(
+      path: AppRoutes.shopkeeper,
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: state.pageKey,
+        child: const ShopkeeperMainShell(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
       ),
     ),
     GoRoute(

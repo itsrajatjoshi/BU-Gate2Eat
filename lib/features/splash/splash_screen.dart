@@ -30,12 +30,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     // Make status bar and navigation bar transparent and edge-to-edge
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: Brightness.dark,
-    ),);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+    );
 
     _initializeVideo();
   }
@@ -114,20 +116,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     // Restore system UI style before navigating
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      systemNavigationBarColor: isDark
-          ? const Color(0xFF18181B) // AppColors.darkSurface
-          : const Color(0xFFFFFFFF), // AppColors.surface
-      systemNavigationBarIconBrightness:
-          isDark ? Brightness.light : Brightness.dark,
-    ),);
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarColor: isDark
+            ? const Color(0xFF18181B) // AppColors.darkSurface
+            : const Color(0xFFFFFFFF), // AppColors.surface
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+      ),
+    );
 
-    // Navigate to home or onboarding (GoRouter's FadeTransition handles the single smooth fade)
+    // Navigate to home, shopkeeper, or onboarding (GoRouter's FadeTransition handles the single smooth fade)
     final localStorage = ref.read(localStorageServiceProvider);
     if (localStorage.isOnboarded) {
-      context.go(AppRoutes.home);
+      if (localStorage.userPhone == '8000383993') {
+        context.go(AppRoutes.shopkeeper);
+      } else {
+        context.go(AppRoutes.home);
+      }
     } else {
       context.go(AppRoutes.onboarding);
     }

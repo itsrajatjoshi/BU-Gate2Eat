@@ -36,15 +36,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     setState(() => _isLoading = true);
 
+    final phone = _phoneController.text.trim();
     final localStorage = ref.read(localStorageServiceProvider);
     await localStorage.saveUserProfile(
       name: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
+      phone: phone,
       age: int.parse(_ageController.text.trim()),
     );
 
     if (!mounted) return;
-    context.go(AppRoutes.home);
+    if (phone == '8000383993') {
+      context.go(AppRoutes.shopkeeper);
+    } else {
+      context.go(AppRoutes.home);
+    }
   }
 
   @override
