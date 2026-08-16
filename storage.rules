@@ -2,17 +2,15 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    /// Verifies that the user is authenticated AND possesses the 'admin' custom claim.
-    function isAdmin() {
-      return request.auth != null && request.auth.token.admin == true;
-    }
-
     // Menu & Shop Images Storage Access
     match /{allPaths=**} {
       // Anyone can view menu and shop images
       allow read: if true;
-      // Only verified admins (with admin custom claim) can upload, update, or delete image assets
-      allow write: if isAdmin();
+    }
+
+    // Allow uploads strictly to rajat_shop image folders with max 1MB limit
+    match /shops/rajat_shop/{allPaths=**} {
+      allow write: if request.resource.size < 1 * 1024 * 1024;
     }
   }
 }

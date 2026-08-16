@@ -1,6 +1,6 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Shopkeeper Home Screen (Exact Visual Match with User ShopDetailScreen)
-// UI/UX Prototype ONLY — No Backend Modification
+// Shopkeeper Home Screen (Connected to Firestore & Real-Time Data)
+// UI/UX Visual Match with User ShopDetailScreen
 
 import 'dart:ui';
 
@@ -274,6 +274,7 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
         onPressed: () => AddContentModal.show(
           context,
           categories: rawCategories,
+          shopId: shop.id,
         ),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
@@ -486,7 +487,7 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                           ),
                           const SizedBox(height: AppSpacing.sm),
 
-                          // Open/Closed badge, timing and delivery note
+                          // Open/Closed badge, timing and delivery note (Live status)
                           Row(
                             children: [
                               Container(
@@ -495,18 +496,22 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                                   vertical: AppSpacing.xs,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.success
+                                  color: (shop.isOpen
+                                          ? AppColors.success
+                                          : AppColors.error)
                                       .withValues(alpha: 0.1),
                                   borderRadius:
                                       BorderRadius.circular(AppRadius.sm),
                                 ),
                                 child: Text(
-                                  'Open Now',
+                                  shop.isOpen ? 'Open Now' : 'Closed',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
                                       ?.copyWith(
-                                        color: AppColors.success,
+                                        color: shop.isOpen
+                                            ? AppColors.success
+                                            : AppColors.error,
                                         fontWeight: FontWeight.w600,
                                       ),
                                 ),
@@ -996,219 +1001,248 @@ class _ShopkeeperMenuItemCard extends ConsumerWidget {
         context,
         item: item,
         categories: categories,
+        shopId: shop.id,
       );
     }
 
-    return GestureDetector(
-      onTap: showEditSheet,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
-            width: 0.8,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2.5),
+    return Opacity(
+      opacity: item.isAvailable ? 1.0 : 0.65,
+      child: GestureDetector(
+        onTap: showEditSheet,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: item.isAvailable
+                  ? Theme.of(context).dividerColor.withValues(alpha: 0.08)
+                  : AppColors.error.withValues(alpha: 0.3),
+              width: 0.8,
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Food Image Container (aspectRatio 1.3 matching User App)
-            AspectRatio(
-              aspectRatio: 1.3,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(18),
-                      ),
-                      child: displayImageUrl.isNotEmpty
-                          ? Image.network(
-                              displayImageUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _buildImagePlaceholder(context),
-                            )
-                          : _buildImagePlaceholder(context),
-                    ),
-                  ),
-
-                  // Recommended / Chef Special Tag
-                  if (item.isRecommended)
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'SPECIAL',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2.5),
               ),
-            ),
-
-            // 2. Card Content Body
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  isSmallScreen ? 8 : 10,
-                  7,
-                  isSmallScreen ? 8 : 10,
-                  7,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Food Image Container (aspectRatio 1.3 matching User App)
+              AspectRatio(
+                aspectRatio: 1.3,
+                child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    // Item Title with Veg/Non-Veg icon (2 lines matching User App)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: item.isVeg
-                                  ? _buildVegIcon()
-                                  : _buildNonVegIcon(),
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                item.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: isSmallScreen ? 13.0 : 13.8,
-                                      height: 1.2,
-                                    ),
-                              ),
-                            ),
-                          ],
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(18),
                         ),
-                        const SizedBox(height: 3),
-
-                        // Description with clean "... more" (Matching User App)
-                        Builder(
-                          builder: (context) {
-                            final rawDetails = item.details.isNotEmpty
-                                ? item.details
-                                : '${item.name} prepared fresh with authentic spices';
-                            final cleanDetails = rawDetails
-                                .replaceAll(RegExp(r'\.+$'), '')
-                                .trim();
-                            return Text.rich(
-                              TextSpan(
-                                style: TextStyle(
-                                  color: isDark
-                                      ? AppColors.darkTextSecondary
-                                      : Colors.grey.shade600,
-                                  fontSize: isSmallScreen ? 10.8 : 11.5,
-                                  height: 1.28,
-                                ),
-                                children: [
-                                  TextSpan(text: '$cleanDetails '),
-                                  const TextSpan(
-                                    text: 'more',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            );
-                          },
-                        ),
-                      ],
+                        child: displayImageUrl.isNotEmpty
+                            ? Image.network(
+                                displayImageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildImagePlaceholder(context),
+                              )
+                            : _buildImagePlaceholder(context),
+                      ),
                     ),
 
-                    // Bottom Row: Price + Edit Button (Matching User App Add button size)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            item.formattedPrice,
+                    // Out of Stock or Special Badge
+                    if (!item.isAvailable)
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.error,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'OUT OF STOCK',
                             style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
                               fontWeight: FontWeight.w800,
-                              fontSize: isSmallScreen ? 14.5 : 15.5,
-                              color: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.color,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-
-                        // Edit Button styled cleanly like User App Add button
-                        InkWell(
-                          onTap: showEditSheet,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            width: isSmallScreen ? 58.0 : 64.0,
-                            height: isSmallScreen ? 28.0 : 30.0,
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).cardColor,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppColors.primary,
-                                width: 1.3,
-                              ),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                'Edit',
-                                style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      )
+                    else if (item.isRecommended)
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'SPECIAL',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-            ),
-          ],
+
+              // 2. Card Content Body
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    isSmallScreen ? 8 : 10,
+                    7,
+                    isSmallScreen ? 8 : 10,
+                    7,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Item Title with Veg/Non-Veg icon (2 lines matching User App)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: item.isVeg
+                                    ? _buildVegIcon()
+                                    : _buildNonVegIcon(),
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  item.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: isSmallScreen ? 13.0 : 13.8,
+                                        height: 1.2,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+
+                          // Description with clean "... more" (Matching User App)
+                          Builder(
+                            builder: (context) {
+                              final rawDetails = item.details.isNotEmpty
+                                  ? item.details
+                                  : '${item.name} prepared fresh with authentic spices';
+                              final cleanDetails = rawDetails
+                                  .replaceAll(RegExp(r'\.+$'), '')
+                                  .trim();
+                              return Text.rich(
+                                TextSpan(
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? AppColors.darkTextSecondary
+                                        : Colors.grey.shade600,
+                                    fontSize: isSmallScreen ? 10.8 : 11.5,
+                                    height: 1.28,
+                                  ),
+                                  children: [
+                                    TextSpan(text: '$cleanDetails '),
+                                    const TextSpan(
+                                      text: 'more',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+
+                      // Bottom Row: Price + Edit Button (Matching User App Add button size)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              item.formattedPrice,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: isSmallScreen ? 14.5 : 15.5,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.color,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+
+                          // Edit Button styled cleanly like User App Add button
+                          InkWell(
+                            onTap: showEditSheet,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: isSmallScreen ? 58.0 : 64.0,
+                              height: isSmallScreen ? 28.0 : 30.0,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: AppColors.primary,
+                                  width: 1.3,
+                                ),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'Edit',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

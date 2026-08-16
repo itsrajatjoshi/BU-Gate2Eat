@@ -1,30 +1,36 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Edit Menu Item Modal (Single Unified Form with Image Picker Max 1MB, Category Options + Other, and Delete Option)
-// UI/UX Prototype ONLY — No Backend Modification
+// Edit Menu Item Modal (Connected to Firestore & Firebase Storage)
 
 import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/providers.dart';
 import '../../../../models/category_model.dart';
 import '../../../../models/menu_item_model.dart';
 import 'delete_item_dialog.dart';
 
-class EditMenuItemModal extends StatefulWidget {
+class EditMenuItemModal extends ConsumerStatefulWidget {
   const EditMenuItemModal({
     required this.item,
     required this.categories,
+    this.shopId = 'rajat_shop',
     super.key,
   });
 
   final MenuItem item;
   final List<Category> categories;
+  final String shopId;
 
   static Future<void> show(
     BuildContext context, {
     required MenuItem item,
     required List<Category> categories,
+    String shopId = 'rajat_shop',
   }) {
     return showModalBottomSheet(
       context: context,
@@ -33,15 +39,16 @@ class EditMenuItemModal extends StatefulWidget {
       builder: (_) => EditMenuItemModal(
         item: item,
         categories: categories,
+        shopId: shopId,
       ),
     );
   }
 
   @override
-  State<EditMenuItemModal> createState() => _EditMenuItemModalState();
+  ConsumerState<EditMenuItemModal> createState() => _EditMenuItemModalState();
 }
 
-class _EditMenuItemModalState extends State<EditMenuItemModal> {
+class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
   late final TextEditingController _nameController;
   late final TextEditingController _priceController;
   late final TextEditingController _detailsController;
@@ -57,6 +64,7 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
   late bool _isAvailable;
   late String _selectedCategory;
   bool _isOtherCategory = false;
+  bool _isLoading = false;
 
   static const List<String> _defaultCategories = [
     'Momos',
@@ -175,18 +183,32 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
     });
   }
 
-  void _onSave() {
+  Future<void> _onSave() async {
     final name = _nameController.text.trim();
-    final price = _priceController.text.trim();
+    final priceText = _priceController.text.trim();
     final details = _detailsController.text.trim();
     final effectiveCategory = _isOtherCategory
         ? _customCategoryController.text.trim()
         : _selectedCategory;
 
-    if (name.isEmpty || price.isEmpty || details.isEmpty) {
+    if (name.isEmpty || priceText.isEmpty || details.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Please fill in all compulsory fields (*).'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    final price = int.tryParse(priceText);
+    if (price == null || price <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please enter a valid price.'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
           shape:
@@ -209,39 +231,156 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
       return;
     }
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(
-              Icons.check_circle_outline_rounded,
-              color: Colors.white,
-              size: 18,
+    setState(() => _isLoading = true);
+
+    try {
+      final firestoreService = ref.read(firestoreServiceProvider);
+      String categoryId = widget.item.categoryId;
+
+      // If category was changed to custom category via "+ Other"
+      if (_isOtherCategory) {
+        final createdCategory = await firestoreService.createCustomCategory(
+          widget.shopId,
+          effectiveCategory,
+        );
+        categoryId = createdCategory.id;
+      } else {
+        final matched = widget.categories
+            .where(
+              (c) => c.name.toLowerCase() == effectiveCategory.toLowerCase(),
+            )
+            .firstOrNull;
+        if (matched != null) {
+          categoryId = matched.id;
+        }
+      }
+
+      String imageUrl = widget.item.imageUrl;
+      // If new image was picked from gallery, upload to Firebase Storage
+      if (_selectedImageBytes != null) {
+        final uploaded = await firestoreService.uploadImage(
+          shopId: widget.shopId,
+          path: 'items',
+          bytes: _selectedImageBytes!,
+          fileName: '${name.toLowerCase().replaceAll(' ', '_')}.jpg',
+        );
+        if (uploaded != null) {
+          imageUrl = uploaded;
+        }
+      }
+
+      await firestoreService.updateMenuItem(widget.shopId, widget.item.id, {
+        'name': name,
+        'price': price,
+        'details': details,
+        'isVeg': _isVeg,
+        'isAvailable': _isAvailable,
+        'categoryId': categoryId,
+        'imageUrl': imageUrl,
+      });
+
+      ref.invalidate(shopMenuItemsProvider(widget.shopId));
+      ref.invalidate(shopCategoriesProvider(widget.shopId));
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '"$name" updated successfully!',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'UI Prototype: "$name" updated under "$effectiveCategory" (No backend write)',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-          ],
-        ),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update item: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   void _onDelete() {
-    DeleteItemDialog.show(context, widget.item).then((confirmed) {
+    DeleteItemDialog.show(context, widget.item).then((confirmed) async {
       if (confirmed == true && mounted) {
-        Navigator.pop(context); // Close edit modal
+        setState(() => _isLoading = true);
+        try {
+          final firestoreService = ref.read(firestoreServiceProvider);
+          await firestoreService.deleteMenuItem(widget.shopId, widget.item.id);
+          ref.invalidate(shopMenuItemsProvider(widget.shopId));
+
+          if (mounted) {
+            Navigator.pop(context); // Close edit modal
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '"${widget.item.name}" deleted from menu.',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: AppColors.error,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to delete item: $e'),
+                backgroundColor: AppColors.error,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            );
+          }
+        }
       }
     });
   }
@@ -419,7 +558,7 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                         size: 20,
                       ),
                       tooltip: 'Choose Different Image',
-                      onPressed: _pickImage,
+                      onPressed: _isLoading ? null : _pickImage,
                     ),
                     IconButton(
                       icon: const Icon(
@@ -428,14 +567,16 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                         size: 20,
                       ),
                       tooltip: 'Revert to Original Image',
-                      onPressed: () {
-                        setState(() {
-                          _selectedImageBytes = null;
-                          _selectedImageName = null;
-                          _selectedImageSizeBytes = null;
-                          _imageError = null;
-                        });
-                      },
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _selectedImageBytes = null;
+                                _selectedImageName = null;
+                                _selectedImageSizeBytes = null;
+                                _imageError = null;
+                              });
+                            },
                     ),
                   ],
                 ),
@@ -485,7 +626,7 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Tap button to change from phone',
+                            'Tap button to change from gallery',
                             style: TextStyle(
                               fontSize: 11,
                               color: isDark
@@ -497,7 +638,7 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _pickImage,
+                      onPressed: _isLoading ? null : _pickImage,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primary,
                         side: const BorderSide(
@@ -741,7 +882,9 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                               inactiveThumbColor: AppColors.nonVegRed,
                               inactiveTrackColor: AppColors.nonVegRed
                                   .withValues(alpha: 0.3),
-                              onChanged: (val) => setState(() => _isVeg = val),
+                              onChanged: _isLoading
+                                  ? null
+                                  : (val) => setState(() => _isVeg = val),
                             ),
                           ],
                         ),
@@ -812,7 +955,9 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                   Switch(
                     value: _isAvailable,
                     activeThumbColor: AppColors.success,
-                    onChanged: (val) => setState(() => _isAvailable = val),
+                    onChanged: _isLoading
+                        ? null
+                        : (val) => setState(() => _isAvailable = val),
                   ),
                 ],
               ),
@@ -825,7 +970,7 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                 Expanded(
                   flex: 3,
                   child: OutlinedButton.icon(
-                    onPressed: _onDelete,
+                    onPressed: _isLoading ? null : _onDelete,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
                       side:
@@ -846,7 +991,7 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                 Expanded(
                   flex: 5,
                   child: ElevatedButton(
-                    onPressed: _onSave,
+                    onPressed: _isLoading ? null : _onSave,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -856,13 +1001,23 @@ class _EditMenuItemModalState extends State<EditMenuItemModal> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Save Changes',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text(
+                            'Save Changes',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                 ),
               ],

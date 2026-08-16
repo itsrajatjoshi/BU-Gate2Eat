@@ -1,38 +1,48 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Add Item Modal (Single Unified Form with Image Picker Max 1MB & Category Options + Other)
-// UI/UX Prototype ONLY — No Backend Modification
+// Add Item Modal (Connected to Firestore & Firebase Storage)
 
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import '../../../../core/constants/app_constants.dart';
-import '../../../../models/category_model.dart';
 
-class AddContentModal extends StatefulWidget {
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/providers.dart';
+import '../../../../models/category_model.dart';
+import '../../../../models/menu_item_model.dart';
+
+class AddContentModal extends ConsumerStatefulWidget {
   const AddContentModal({
     required this.categories,
+    this.shopId = 'rajat_shop',
     super.key,
   });
 
   final List<Category> categories;
+  final String shopId;
 
   static Future<void> show(
     BuildContext context, {
     required List<Category> categories,
+    String shopId = 'rajat_shop',
   }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AddContentModal(categories: categories),
+      builder: (_) => AddContentModal(
+        categories: categories,
+        shopId: shopId,
+      ),
     );
   }
 
   @override
-  State<AddContentModal> createState() => _AddContentModalState();
+  ConsumerState<AddContentModal> createState() => _AddContentModalState();
 }
 
-class _AddContentModalState extends State<AddContentModal> {
+class _AddContentModalState extends ConsumerState<AddContentModal> {
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
   final _detailsController = TextEditingController();
@@ -47,6 +57,7 @@ class _AddContentModalState extends State<AddContentModal> {
   bool _isVeg = true;
   String _selectedCategory = 'Momos';
   bool _isOtherCategory = false;
+  bool _isLoading = false;
 
   // Curated category options
   static const List<String> _defaultCategories = [
@@ -100,7 +111,8 @@ class _AddContentModalState extends State<AddContentModal> {
             _selectedImageBytes = null;
             _selectedImageName = null;
             _selectedImageSizeBytes = null;
-            _imageError = 'Image size ($sizeMb MB) exceeds 1MB limit. Please choose a smaller image.';
+            _imageError =
+                'Image size ($sizeMb MB) exceeds 1MB limit. Please choose a smaller image.';
           });
         } else {
           setState(() {
@@ -114,21 +126,36 @@ class _AddContentModalState extends State<AddContentModal> {
     });
   }
 
-  void _onAdd() {
+  Future<void> _onAdd() async {
     final name = _nameController.text.trim();
-    final price = _priceController.text.trim();
+    final priceText = _priceController.text.trim();
     final details = _detailsController.text.trim();
     final effectiveCategory = _isOtherCategory
         ? _customCategoryController.text.trim()
         : _selectedCategory;
 
-    if (name.isEmpty || price.isEmpty || details.isEmpty) {
+    if (name.isEmpty || priceText.isEmpty || details.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Please fill in all compulsory fields (*).'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    final price = int.tryParse(priceText);
+    if (price == null || price <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please enter a valid price.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       return;
@@ -140,39 +167,124 @@ class _AddContentModalState extends State<AddContentModal> {
           content: const Text('Please type the custom category name.'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       return;
     }
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(
-              Icons.check_circle_outline_rounded,
-              color: Colors.white,
-              size: 18,
+    setState(() => _isLoading = true);
+
+    try {
+      final firestoreService = ref.read(firestoreServiceProvider);
+      String categoryId = '';
+
+      // If user typed custom category via "+ Other", create it in Firestore
+      if (_isOtherCategory) {
+        final createdCategory = await firestoreService.createCustomCategory(
+          widget.shopId,
+          effectiveCategory,
+        );
+        categoryId = createdCategory.id;
+      } else {
+        // Find existing category ID or generate slug
+        final matched = widget.categories
+            .where(
+              (c) => c.name.toLowerCase() == effectiveCategory.toLowerCase(),
+            )
+            .firstOrNull;
+        if (matched != null) {
+          categoryId = matched.id;
+        } else {
+          final createdCategory = await firestoreService.createCustomCategory(
+            widget.shopId,
+            effectiveCategory,
+          );
+          categoryId = createdCategory.id;
+        }
+      }
+
+      // If image bytes selected from gallery, upload to Firebase Storage
+      String imageUrl = '';
+      if (_selectedImageBytes != null) {
+        final uploaded = await firestoreService.uploadImage(
+          shopId: widget.shopId,
+          path: 'items',
+          bytes: _selectedImageBytes!,
+          fileName: '${name.toLowerCase().replaceAll(' ', '_')}.jpg',
+        );
+        if (uploaded != null) {
+          imageUrl = uploaded;
+        }
+      }
+
+      final itemId =
+          'item_${DateTime.now().millisecondsSinceEpoch}_${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}';
+
+      final newItem = MenuItem(
+        id: itemId,
+        name: name,
+        details: details,
+        price: price,
+        imageUrl: imageUrl,
+        categoryId: categoryId,
+        isVeg: _isVeg,
+        isAvailable: true,
+        isRecommended: false,
+        sortOrder: 99,
+      );
+
+      await firestoreService.addMenuItem(widget.shopId, newItem);
+
+      // Invalidate Riverpod providers to refresh menu & categories instantly
+      ref.invalidate(shopMenuItemsProvider(widget.shopId));
+      ref.invalidate(shopCategoriesProvider(widget.shopId));
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '"$name" added to menu under "$effectiveCategory"!',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'UI Prototype: "$name" added under "$effectiveCategory" (No backend write)',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-          ],
-        ),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add item: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   List<String> _getAllCategoryOptions() {
@@ -238,7 +350,9 @@ class _AddContentModalState extends State<AddContentModal> {
                       'All details marked with * are compulsory',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
                       ),
                     ),
                   ],
@@ -259,12 +373,15 @@ class _AddContentModalState extends State<AddContentModal> {
                   'Item Image',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
                       ),
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(4),
@@ -286,7 +403,9 @@ class _AddContentModalState extends State<AddContentModal> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: AppColors.primary.withValues(alpha: 0.4),
@@ -312,7 +431,10 @@ class _AddContentModalState extends State<AddContentModal> {
                             _selectedImageName ?? 'Uploaded Food Image',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -327,33 +449,46 @@ class _AddContentModalState extends State<AddContentModal> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
-                      onPressed: () {
-                        setState(() {
-                          _selectedImageBytes = null;
-                          _selectedImageName = null;
-                          _selectedImageSizeBytes = null;
-                          _imageError = null;
-                        });
-                      },
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: AppColors.error,
+                        size: 20,
+                      ),
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _selectedImageBytes = null;
+                                _selectedImageName = null;
+                                _selectedImageSizeBytes = null;
+                                _imageError = null;
+                              });
+                            },
                     ),
                   ],
                 ),
               ),
             ] else ...[
               InkWell(
-                onTap: _pickImage,
+                onTap: _isLoading ? null : _pickImage,
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 12,
+                  ),
                   decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
+                    color: isDark
+                        ? AppColors.darkSurfaceVariant
+                        : AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: _imageError != null
                           ? AppColors.error
-                          : (isDark ? AppColors.darkDivider : AppColors.divider),
+                          : (isDark
+                              ? AppColors.darkDivider
+                              : AppColors.divider),
                     ),
                   ),
                   child: Column(
@@ -361,15 +496,19 @@ class _AddContentModalState extends State<AddContentModal> {
                       Icon(
                         Icons.add_photo_alternate_outlined,
                         size: 32,
-                        color: _imageError != null ? AppColors.error : AppColors.primary,
+                        color: _imageError != null
+                            ? AppColors.error
+                            : AppColors.primary,
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Upload Image from Gallery / Phone',
+                        'Upload Image from Gallery',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: _imageError != null ? AppColors.error : AppColors.primary,
+                          color: _imageError != null
+                              ? AppColors.error
+                              : AppColors.primary,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -377,7 +516,9 @@ class _AddContentModalState extends State<AddContentModal> {
                         'PNG, JPG or WEBP up to 1 MB',
                         style: TextStyle(
                           fontSize: 11,
-                          color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.textHint,
                         ),
                       ),
                     ],
@@ -390,7 +531,11 @@ class _AddContentModalState extends State<AddContentModal> {
               const SizedBox(height: 4),
               Text(
                 _imageError!,
-                style: const TextStyle(fontSize: 11, color: AppColors.error, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
 
@@ -401,7 +546,9 @@ class _AddContentModalState extends State<AddContentModal> {
               'Item Name *',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
                   ),
             ),
             const SizedBox(height: 6),
@@ -420,7 +567,9 @@ class _AddContentModalState extends State<AddContentModal> {
               'Category *',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
                   ),
             ),
             const SizedBox(height: 6),
@@ -431,23 +580,31 @@ class _AddContentModalState extends State<AddContentModal> {
               runSpacing: 6,
               children: [
                 ...allCategories.map((cat) {
-                  final isSelected = !_isOtherCategory && _selectedCategory == cat;
+                  final isSelected =
+                      !_isOtherCategory && _selectedCategory == cat;
                   return ChoiceChip(
                     label: Text(cat),
                     selected: isSelected,
                     selectedColor: AppColors.primary.withValues(alpha: 0.15),
-                    backgroundColor: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
+                    backgroundColor: isDark
+                        ? AppColors.darkSurfaceVariant
+                        : AppColors.surfaceVariant,
                     labelStyle: TextStyle(
                       fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
                       color: isSelected
                           ? AppColors.primary
-                          : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                          : (isDark
+                              ? AppColors.darkTextPrimary
+                              : AppColors.textPrimary),
                     ),
                     side: BorderSide(
                       color: isSelected
                           ? AppColors.primary
-                          : (isDark ? AppColors.darkDivider : AppColors.divider),
+                          : (isDark
+                              ? AppColors.darkDivider
+                              : AppColors.divider),
                     ),
                     onSelected: (selected) {
                       if (selected) {
@@ -466,13 +623,18 @@ class _AddContentModalState extends State<AddContentModal> {
                   label: const Text('+ Other (Type Custom)'),
                   selected: _isOtherCategory,
                   selectedColor: AppColors.primary.withValues(alpha: 0.15),
-                  backgroundColor: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
+                  backgroundColor: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
                   labelStyle: TextStyle(
                     fontSize: 12,
-                    fontWeight: _isOtherCategory ? FontWeight.bold : FontWeight.normal,
+                    fontWeight:
+                        _isOtherCategory ? FontWeight.bold : FontWeight.normal,
                     color: _isOtherCategory
                         ? AppColors.primary
-                        : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                        : (isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.textPrimary),
                   ),
                   side: BorderSide(
                     color: _isOtherCategory
@@ -495,7 +657,8 @@ class _AddContentModalState extends State<AddContentModal> {
                 controller: _customCategoryController,
                 autofocus: true,
                 decoration: const InputDecoration(
-                  hintText: 'Type custom category (e.g. Sushi, Ice Cream, Beverages)',
+                  hintText:
+                      'Type custom category (e.g. Sushi, Ice Cream, Beverages)',
                   prefixIcon: Icon(Icons.add_circle_outline_rounded),
                   isDense: true,
                 ),
@@ -516,7 +679,9 @@ class _AddContentModalState extends State<AddContentModal> {
                         'Price (₹) *',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               fontWeight: FontWeight.w700,
-                              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.textSecondary,
                             ),
                       ),
                       const SizedBox(height: 6),
@@ -542,7 +707,9 @@ class _AddContentModalState extends State<AddContentModal> {
                         'Food Type *',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               fontWeight: FontWeight.w700,
-                              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.textSecondary,
                             ),
                       ),
                       const SizedBox(height: 6),
@@ -550,10 +717,14 @@ class _AddContentModalState extends State<AddContentModal> {
                         height: 48,
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         decoration: BoxDecoration(
-                          color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
+                          color: isDark
+                              ? AppColors.darkSurfaceVariant
+                              : AppColors.surfaceVariant,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isDark ? AppColors.darkDivider : AppColors.divider,
+                            color: isDark
+                                ? AppColors.darkDivider
+                                : AppColors.divider,
                           ),
                         ),
                         child: Row(
@@ -563,15 +734,20 @@ class _AddContentModalState extends State<AddContentModal> {
                               _isVeg ? 'Veg' : 'Non-Veg',
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                color: _isVeg ? AppColors.vegGreen : AppColors.nonVegRed,
+                                color: _isVeg
+                                    ? AppColors.vegGreen
+                                    : AppColors.nonVegRed,
                               ),
                             ),
                             Switch(
                               value: _isVeg,
                               activeThumbColor: AppColors.vegGreen,
                               inactiveThumbColor: AppColors.nonVegRed,
-                              inactiveTrackColor: AppColors.nonVegRed.withValues(alpha: 0.3),
-                              onChanged: (val) => setState(() => _isVeg = val),
+                              inactiveTrackColor: AppColors.nonVegRed
+                                  .withValues(alpha: 0.3),
+                              onChanged: _isLoading
+                                  ? null
+                                  : (val) => setState(() => _isVeg = val),
                             ),
                           ],
                         ),
@@ -588,7 +764,9 @@ class _AddContentModalState extends State<AddContentModal> {
               'Portion / Description *',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
                   ),
             ),
             const SizedBox(height: 6),
@@ -607,7 +785,7 @@ class _AddContentModalState extends State<AddContentModal> {
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: _onAdd,
+                onPressed: _isLoading ? null : _onAdd,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -616,13 +794,23 @@ class _AddContentModalState extends State<AddContentModal> {
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Add Item to Menu',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Add Item to Menu',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
               ),
             ),
           ],

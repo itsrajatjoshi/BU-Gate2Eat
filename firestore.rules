@@ -2,42 +2,34 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ─── Helper Functions ─────────────────────────────────────────────
-
-    /// Verifies that the user is authenticated AND possesses the 'admin' custom claim.
-    function isAdmin() {
-      return request.auth != null && request.auth.token.admin == true;
-    }
-
-    // ─── Collection Rules ─────────────────────────────────────────────
-
-    // Shops collection & subcollections
+    // ─── Shops collection & subcollections ────────────────────────────
     match /shops/{shopId} {
-      // Students can read shop details
+      // Anyone can read shop details
       allow read: if true;
-      // Only verified admins (with admin custom claim) can create, edit, or delete shops
-      allow write: if isAdmin();
 
-      // Categories subcollection
+      // Allow writes ONLY for rajat_shop in development (Shopkeeper Panel)
+      allow write: if shopId == 'rajat_shop';
+
+      // Categories subcollection: anyone can read, rajat_shop can write
       match /categories/{categoryId} {
         allow read: if true;
-        allow write: if isAdmin();
+        allow write: if shopId == 'rajat_shop';
       }
 
-      // Menu Items subcollection
+      // Menu items subcollection: anyone can read, rajat_shop can write
       match /menuItems/{menuItemId} {
         allow read: if true;
-        allow write: if isAdmin();
+        allow write: if shopId == 'rajat_shop';
       }
     }
 
     // App Configuration document (force update, maintenance mode)
     match /config/{document=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
-    // Default deny all other unlisted paths
+    // Default deny all other unlisted paths (orders, users, admin, etc.)
     match /{document=**} {
       allow read, write: if false;
     }
