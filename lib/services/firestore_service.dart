@@ -379,19 +379,64 @@ class FirestoreService {
     required Uint8List bytes,
     required String fileName,
   }) async {
+    debugPrint(
+      '📸 [UPLOAD STARTED] shopId: $shopId, path: $path, size: ${bytes.lengthInBytes} bytes, fileName: $fileName',
+    );
     try {
       final uniqueName =
           '${DateTime.now().millisecondsSinceEpoch}_$fileName';
-      final ref = _storage.ref().child('shops/$shopId/$path/$uniqueName');
-      final metadata = SettableMetadata(contentType: 'image/jpeg');
+      final storageRef = _storage.ref('shops/$shopId/$path/$uniqueName');
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {
+          'uploadedBy': 'shopkeeper',
+          'shopId': shopId,
+        },
+      );
 
-      final uploadTask = await ref.putData(bytes, metadata);
-      final downloadUrl = await uploadTask.ref.getDownloadURL();
-      debugPrint('✅ FirebaseStorage uploadImage -> SUCCESS: $downloadUrl');
+      debugPrint('🚀 [UPLOAD TASK] Calling putData on: ${storageRef.fullPath}');
+      final UploadTask uploadTask = storageRef.putData(bytes, metadata);
+
+      // Listen to upload snapshot progress events
+      uploadTask.snapshotEvents.listen(
+        (TaskSnapshot snapshot) {
+          final total = snapshot.totalBytes > 0 ? snapshot.totalBytes : 1;
+          final progress = (snapshot.bytesTransferred / total) * 100;
+          debugPrint(
+            '📊 [UPLOAD PROGRESS] ${progress.toStringAsFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} bytes) - State: ${snapshot.state}',
+          );
+        },
+        onError: (Object error) {
+          debugPrint('❌ [UPLOAD SNAPSHOT ERROR] $error');
+        },
+      );
+
+      final TaskSnapshot snapshot = await uploadTask.timeout(
+        const Duration(seconds: 25),
+        onTimeout: () {
+          debugPrint('⚠️ [UPLOAD TIMEOUT] Storage upload timed out after 25s');
+          throw Exception(
+            'Storage upload timed out. Please verify Firebase Storage rules in Firebase Console.',
+          );
+        },
+      );
+
+      debugPrint(
+        '✅ [UPLOAD COMPLETED] State: ${snapshot.state}. Fetching download URL...',
+      );
+      final downloadUrl = await snapshot.ref.getDownloadURL().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('⚠️ [GET DOWNLOAD URL TIMEOUT]');
+          throw Exception('Failed to get download URL within 10s.');
+        },
+      );
+
+      debugPrint('🎉 [DOWNLOAD URL RECEIVED] $downloadUrl');
       return downloadUrl;
-    } catch (e) {
-      debugPrint('⚠️ FirebaseStorage uploadImage error (safe fallback): $e');
-      return null;
+    } catch (e, stack) {
+      debugPrint('❌ [UPLOAD EXCEPTION] $e\n$stack');
+      rethrow;
     }
   }
 
