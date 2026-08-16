@@ -526,7 +526,7 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                               ),
                               const SizedBox(width: AppSpacing.xs),
                               Text(
-                                '${shop.openTime} – ${shop.closeTime}',
+                                shop.formattedTimings,
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall

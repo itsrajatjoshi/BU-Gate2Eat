@@ -15,16 +15,8 @@ class ShopCard extends StatelessWidget {
   final Shop shop;
   final VoidCallback onTap;
 
-  /// Converts 24hr time string "23:30" to 12hr AM/PM format "11:30 PM".
-  String _formatTime12hr(String time24) {
-    final parts = time24.split(':');
-    if (parts.length != 2) return time24;
-    final hour = int.tryParse(parts[0]) ?? 0;
-    final minute = parts[1];
-    final period = hour >= 12 ? 'PM' : 'AM';
-    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    return '$displayHour:$minute $period';
-  }
+  /// Converts time string to 12hr AM/PM format.
+  String _formatTime12hr(String time) => Shop.format12hr(time);
 
   @override
   Widget build(BuildContext context) {

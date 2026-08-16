@@ -66,6 +66,51 @@ class Shop {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// Converts any time string ("08:00", "8:00 AM", "23:30", "11:30 PM") into minutes from midnight (0..1439).
+  static int parseTimeToMinutes(String timeStr, {int defaultMinutes = 0}) {
+    if (timeStr.trim().isEmpty) return defaultMinutes;
+    final trimmed = timeStr.trim().toUpperCase();
+
+    final isPM = trimmed.contains('PM');
+    final isAM = trimmed.contains('AM');
+    final cleanTime =
+        trimmed.replaceAll('AM', '').replaceAll('PM', '').replaceAll('.', '').trim();
+
+    final parts = cleanTime.split(':');
+    if (parts.isEmpty) return defaultMinutes;
+
+    int hour = int.tryParse(parts[0].trim()) ?? 0;
+    final int minute = parts.length > 1 ? (int.tryParse(parts[1].trim()) ?? 0) : 0;
+
+    if (isPM && hour < 12) {
+      hour += 12;
+    } else if (isAM && hour == 12) {
+      hour = 0;
+    }
+
+    return (hour * 60 + minute).clamp(0, 1439);
+  }
+
+  /// Converts any time string into standard 12-hour AM/PM format (e.g. "8:00 AM" or "11:30 PM").
+  static String format12hr(String timeStr) {
+    if (timeStr.trim().isEmpty) return '';
+    final minutes = parseTimeToMinutes(timeStr);
+    final hour24 = minutes ~/ 60;
+    final minute = (minutes % 60).toString().padLeft(2, '0');
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    final hour12 = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+    return '$hour12:$minute $period';
+  }
+
+  /// 12-hour formatted open time (e.g. "8:00 AM").
+  String get formattedOpenTime => format12hr(openTime);
+
+  /// 12-hour formatted close time (e.g. "11:30 PM").
+  String get formattedCloseTime => format12hr(closeTime);
+
+  /// Combined formatted timing (e.g. "8:00 AM – 11:30 PM").
+  String get formattedTimings => '$formattedOpenTime – $formattedCloseTime';
+
   /// Converts Shop to a Firestore-compatible map.
   Map<String, dynamic> toFirestore() {
     return {
@@ -93,11 +138,8 @@ class Shop {
     final now = DateTime.now();
     final currentMinutes = now.hour * 60 + now.minute;
 
-    final openParts = openTime.split(':');
-    final closeParts = closeTime.split(':');
-    final openMinutes = int.parse(openParts[0]) * 60 + int.parse(openParts[1]);
-    final closeMinutes =
-        int.parse(closeParts[0]) * 60 + int.parse(closeParts[1]);
+    final openMinutes = parseTimeToMinutes(openTime, defaultMinutes: 8 * 60);
+    final closeMinutes = parseTimeToMinutes(closeTime, defaultMinutes: 23 * 60 + 30);
 
     if (closeMinutes < openMinutes) {
       return currentMinutes >= openMinutes || currentMinutes < closeMinutes;
@@ -106,4 +148,3 @@ class Shop {
     return currentMinutes >= openMinutes && currentMinutes < closeMinutes;
   }
 }
-

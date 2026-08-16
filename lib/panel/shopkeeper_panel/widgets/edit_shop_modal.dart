@@ -1,5 +1,5 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Edit Shop Modal (Connected to Firestore & Firebase Storage with Temporary Open/Closed Override)
+// Edit Shop Modal (Connected to Firestore & Firebase Storage with 12-hour AM/PM Time Pickers)
 
 import 'dart:typed_data';
 
@@ -54,8 +54,16 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     super.initState();
     _nameController = TextEditingController(text: widget.shop.name);
     _descController = TextEditingController(text: widget.shop.description);
-    _openTimeController = TextEditingController(text: widget.shop.openTime);
-    _closeTimeController = TextEditingController(text: widget.shop.closeTime);
+    _openTimeController = TextEditingController(
+      text: widget.shop.formattedOpenTime.isNotEmpty
+          ? widget.shop.formattedOpenTime
+          : '8:00 AM',
+    );
+    _closeTimeController = TextEditingController(
+      text: widget.shop.formattedCloseTime.isNotEmpty
+          ? widget.shop.formattedCloseTime
+          : '11:30 PM',
+    );
     _pickupNoteController =
         TextEditingController(text: widget.shop.deliveryNote);
     _contactController = TextEditingController(text: widget.shop.contactNumber);
@@ -71,6 +79,40 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     _pickupNoteController.dispose();
     _contactController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickTime({required bool isOpenTime}) async {
+    final currentText =
+        isOpenTime ? _openTimeController.text : _closeTimeController.text;
+    final minutes = Shop.parseTimeToMinutes(
+      currentText,
+      defaultMinutes: isOpenTime ? 8 * 60 : 23 * 60 + 30,
+    );
+    final initialTime = TimeOfDay(
+      hour: minutes ~/ 60,
+      minute: minutes % 60,
+    );
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: isOpenTime ? 'Select Opening Time' : 'Select Closing Time',
+    );
+
+    if (picked != null) {
+      final period = picked.period == DayPeriod.am ? 'AM' : 'PM';
+      final hour12 = picked.hourOfPeriod == 0 ? 12 : picked.hourOfPeriod;
+      final minute = picked.minute.toString().padLeft(2, '0');
+      final formatted = '$hour12:$minute $period';
+
+      setState(() {
+        if (isOpenTime) {
+          _openTimeController.text = formatted;
+        } else {
+          _closeTimeController.text = formatted;
+        }
+      });
+    }
   }
 
   Future<void> _pickBanner() {
@@ -133,15 +175,18 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         }
       }
 
+      final formattedOpen = _openTimeController.text.trim().isEmpty
+          ? '8:00 AM'
+          : Shop.format12hr(_openTimeController.text.trim());
+      final formattedClose = _closeTimeController.text.trim().isEmpty
+          ? '11:30 PM'
+          : Shop.format12hr(_closeTimeController.text.trim());
+
       await firestoreService.updateShop(widget.shop.id, {
         'name': name,
         'description': _descController.text.trim(),
-        'openTime': _openTimeController.text.trim().isEmpty
-            ? '08:00'
-            : _openTimeController.text.trim(),
-        'closeTime': _closeTimeController.text.trim().isEmpty
-            ? '23:30'
-            : _closeTimeController.text.trim(),
+        'openTime': formattedOpen,
+        'closeTime': formattedClose,
         'deliveryNote': _pickupNoteController.text.trim(),
         'contactNumber': _contactController.text.trim(),
         'bannerUrl': bannerUrl,
@@ -546,7 +591,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             ),
             const SizedBox(height: 14),
 
-            // ─── 5. Open & Close Timings ──────────────────────────────────
+            // ─── 5. Open & Close Timings (12-hour AM/PM Pickers) ──────────
             Row(
               children: [
                 Expanded(
@@ -563,12 +608,23 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                             ),
                       ),
                       const SizedBox(height: 6),
-                      TextField(
-                        controller: _openTimeController,
-                        decoration: const InputDecoration(
-                          hintText: '08:00',
-                          prefixIcon: Icon(Icons.access_time_rounded),
-                          isDense: true,
+                      InkWell(
+                        onTap: _isLoading
+                            ? null
+                            : () => _pickTime(isOpenTime: true),
+                        borderRadius: BorderRadius.circular(12),
+                        child: IgnorePointer(
+                          child: TextField(
+                            controller: _openTimeController,
+                            readOnly: true,
+                            decoration: const InputDecoration(
+                              hintText: '8:00 AM',
+                              prefixIcon: Icon(Icons.access_time_rounded),
+                              suffixIcon:
+                                  Icon(Icons.arrow_drop_down_rounded, size: 22),
+                              isDense: true,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -589,12 +645,24 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                             ),
                       ),
                       const SizedBox(height: 6),
-                      TextField(
-                        controller: _closeTimeController,
-                        decoration: const InputDecoration(
-                          hintText: '23:30',
-                          prefixIcon: Icon(Icons.access_time_filled_rounded),
-                          isDense: true,
+                      InkWell(
+                        onTap: _isLoading
+                            ? null
+                            : () => _pickTime(isOpenTime: false),
+                        borderRadius: BorderRadius.circular(12),
+                        child: IgnorePointer(
+                          child: TextField(
+                            controller: _closeTimeController,
+                            readOnly: true,
+                            decoration: const InputDecoration(
+                              hintText: '11:30 PM',
+                              prefixIcon:
+                                  Icon(Icons.access_time_filled_rounded),
+                              suffixIcon:
+                                  Icon(Icons.arrow_drop_down_rounded, size: 22),
+                              isDense: true,
+                            ),
+                          ),
                         ),
                       ),
                     ],

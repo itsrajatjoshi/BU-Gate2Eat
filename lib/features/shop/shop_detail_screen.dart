@@ -480,7 +480,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                                   ),
                                   const SizedBox(width: AppSpacing.xs),
                                   Text(
-                                    '${shop.openTime} – ${shop.closeTime}',
+                                    shop.formattedTimings,
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                           color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
                                         ),
