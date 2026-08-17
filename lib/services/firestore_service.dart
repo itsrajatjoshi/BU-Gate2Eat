@@ -1,5 +1,5 @@
 // BU Gate2Eat — Services
-// Firestore service for reading and writing shop & menu data
+// Firestore service for reading and writing shop & menu data + Firebase Storage
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -10,7 +10,7 @@ import '../models/menu_item_model.dart';
 import '../models/shop_model.dart';
 
 /// Service class for all Firestore operations.
-/// Handles shops, categories, and menu items.
+/// Handles shops, categories, menu items, and storage assets.
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -351,8 +351,12 @@ class FirestoreService {
     }
   }
 
-  /// Deletes a menu item from Firestore.
-  Future<void> deleteMenuItem(String shopId, String menuItemId) async {
+  /// Deletes a menu item from Firestore and cleans up its storage photo (best-effort).
+  Future<void> deleteMenuItem(
+    String shopId,
+    String menuItemId, {
+    String? imageUrl,
+  }) async {
     debugPrint(
       '📝 FirestoreService.deleteMenuItem -> deleting shops/$shopId/menuItems/$menuItemId',
     );
@@ -363,6 +367,16 @@ class FirestoreService {
           .collection('menuItems')
           .doc(menuItemId)
           .delete();
+      debugPrint('✅ FirestoreService.deleteMenuItem -> doc deleted');
+
+      // Best-effort cleanup of associated Firebase Storage image
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        try {
+          await deleteStorageImageByUrl(imageUrl);
+        } catch (e) {
+          debugPrint('⚠️ Best-effort image cleanup skipped on delete: $e');
+        }
+      }
       debugPrint('✅ FirestoreService.deleteMenuItem -> SUCCESS');
     } catch (e, stack) {
       debugPrint('❌ FirestoreService.deleteMenuItem -> ERROR: $e\n$stack');
@@ -370,22 +384,31 @@ class FirestoreService {
     }
   }
 
-  // ─── Firebase Storage Uploads ────────────────────────────────
+  // ─── Firebase Storage Operations ─────────────────────────────
 
-  /// Uploads image bytes to Firebase Storage and returns download URL.
+  /// Uploads optimized image bytes to Firebase Storage and returns download URL.
   Future<String?> uploadImage({
     required String shopId,
     required String path,
     required Uint8List bytes,
     required String fileName,
   }) async {
-    debugPrint(
-      '📸 [UPLOAD STARTED] shopId: $shopId, path: $path, size: ${bytes.lengthInBytes} bytes, fileName: $fileName',
-    );
+    final sizeKb = (bytes.lengthInBytes / 1024).toStringAsFixed(1);
+    final uniqueName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+    final fullStoragePath = 'shops/$shopId/$path/$uniqueName';
+
+    debugPrint('STEP 1: NEW IMAGE UPLOAD START');
+    debugPrint('STORAGE PATH: $fullStoragePath');
+    debugPrint('OPTIMIZED SIZE: $sizeKb KB (${bytes.lengthInBytes} bytes)');
+    debugPrint('🪣 STORAGE BUCKET: ${_storage.bucket}');
+
+    if (bytes.isEmpty) {
+      debugPrint('❌ UPLOAD ERROR: Byte array is empty!');
+      throw Exception('Cannot upload empty image bytes');
+    }
+
     try {
-      final uniqueName =
-          '${DateTime.now().millisecondsSinceEpoch}_$fileName';
-      final storageRef = _storage.ref('shops/$shopId/$path/$uniqueName');
+      final storageRef = _storage.ref(fullStoragePath);
       final metadata = SettableMetadata(
         contentType: 'image/jpeg',
         customMetadata: {
@@ -394,49 +417,98 @@ class FirestoreService {
         },
       );
 
-      debugPrint('🚀 [UPLOAD TASK] Calling putData on: ${storageRef.fullPath}');
+      debugPrint('🚀 UPLOAD STATE: running - putData on $fullStoragePath');
       final UploadTask uploadTask = storageRef.putData(bytes, metadata);
 
-      // Listen to upload snapshot progress events
+      // Listen to progress stream
       uploadTask.snapshotEvents.listen(
         (TaskSnapshot snapshot) {
           final total = snapshot.totalBytes > 0 ? snapshot.totalBytes : 1;
           final progress = (snapshot.bytesTransferred / total) * 100;
           debugPrint(
-            '📊 [UPLOAD PROGRESS] ${progress.toStringAsFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} bytes) - State: ${snapshot.state}',
+            '📊 UPLOAD STATE: progress ${progress.toStringAsFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} bytes) - State: ${snapshot.state}',
           );
         },
         onError: (Object error) {
-          debugPrint('❌ [UPLOAD SNAPSHOT ERROR] $error');
+          debugPrint('❌ UPLOAD ERROR from stream: $error');
         },
       );
 
+      // Await upload completion with safety timeout
       final TaskSnapshot snapshot = await uploadTask.timeout(
-        const Duration(seconds: 25),
+        const Duration(seconds: 40),
         onTimeout: () {
-          debugPrint('⚠️ [UPLOAD TIMEOUT] Storage upload timed out after 25s');
+          debugPrint(
+            '❌ UPLOAD ERROR: UploadTask timed out after 40 seconds. Check network and Firebase Storage rules.',
+          );
           throw Exception(
-            'Storage upload timed out. Please verify Firebase Storage rules in Firebase Console.',
+            'Storage upload timed out. Please check network and Firebase Storage configuration.',
           );
         },
       );
 
-      debugPrint(
-        '✅ [UPLOAD COMPLETED] State: ${snapshot.state}. Fetching download URL...',
-      );
+      debugPrint('✅ STEP 2: NEW IMAGE UPLOAD COMPLETE (State: ${snapshot.state})');
+      debugPrint('🌐 STEP 3: GET NEW DOWNLOAD URL START');
+
       final downloadUrl = await snapshot.ref.getDownloadURL().timeout(
-        const Duration(seconds: 10),
+        const Duration(seconds: 15),
         onTimeout: () {
-          debugPrint('⚠️ [GET DOWNLOAD URL TIMEOUT]');
-          throw Exception('Failed to get download URL within 10s.');
+          debugPrint('❌ UPLOAD ERROR: getDownloadURL timed out');
+          throw Exception('Failed to get download URL within 15 seconds.');
         },
       );
 
-      debugPrint('🎉 [DOWNLOAD URL RECEIVED] $downloadUrl');
+      debugPrint('✅ STEP 3: GET NEW DOWNLOAD URL COMPLETE');
+      debugPrint('NEW URL: $downloadUrl');
       return downloadUrl;
     } catch (e, stack) {
-      debugPrint('❌ [UPLOAD EXCEPTION] $e\n$stack');
+      debugPrint('❌ UPLOAD ERROR (Exception caught): $e\n$stack');
       rethrow;
+    }
+  }
+
+  /// Safely deletes an old image from Firebase Storage by its download URL.
+  /// 100% best-effort: NEVER throws an error, NEVER interrupts save/update.
+  Future<void> deleteStorageImageByUrl(String? imageUrl) async {
+    if (imageUrl == null || imageUrl.trim().isEmpty) return;
+
+    try {
+      final trimmedUrl = imageUrl.trim();
+      debugPrint('STEP 5: OLD IMAGE DELETE START');
+      debugPrint('OLD URL: $trimmedUrl');
+
+      if (trimmedUrl.contains('firebasestorage.googleapis.com') ||
+          trimmedUrl.contains('firebasestorage.app') ||
+          trimmedUrl.contains('appspot.com')) {
+        try {
+          final ref = _storage.refFromURL(trimmedUrl);
+          debugPrint('OLD STORAGE PATH: ${ref.fullPath}');
+          await ref.delete();
+          debugPrint(
+            '✅ STEP 5: OLD IMAGE DELETE COMPLETE (Deleted: ${ref.fullPath})',
+          );
+        } on FirebaseException catch (fe) {
+          if (fe.code == 'object-not-found') {
+            debugPrint(
+              'ℹ️ STEP 5: OLD IMAGE NOT FOUND (object-not-found). Old image already missing. Ignored safely.',
+            );
+          } else {
+            debugPrint(
+              '⚠️ STEP 5: OLD IMAGE DELETE NOTE: ${fe.code} - ${fe.message}',
+            );
+          }
+        } catch (e) {
+          debugPrint(
+            '⚠️ STEP 5: Could not parse/delete old storage ref (safe ignore): $e',
+          );
+        }
+      } else {
+        debugPrint(
+          'ℹ️ STEP 5: Old image is external/sample image (e.g. Unsplash). No Storage delete needed.',
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ STEP 5: Safe top-level fallback: $e');
     }
   }
 

@@ -1,5 +1,5 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Edit Menu Item Modal (Connected to Firestore & Firebase Storage)
+// Edit Menu Item Modal (Client-Side Auto-Compression <= 300KB & Safe Storage Cleanup)
 
 import 'dart:typed_data';
 
@@ -12,34 +12,35 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers.dart';
 import '../../../../models/category_model.dart';
 import '../../../../models/menu_item_model.dart';
+import '../../../../services/image_optimization_service.dart';
 import 'delete_item_dialog.dart';
 
 class EditMenuItemModal extends ConsumerStatefulWidget {
   const EditMenuItemModal({
+    required this.shopId,
     required this.item,
     required this.categories,
-    this.shopId = 'rajat_shop',
     super.key,
   });
 
+  final String shopId;
   final MenuItem item;
   final List<Category> categories;
-  final String shopId;
 
   static Future<void> show(
     BuildContext context, {
+    required String shopId,
     required MenuItem item,
     required List<Category> categories,
-    String shopId = 'rajat_shop',
   }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => EditMenuItemModal(
+        shopId: shopId,
         item: item,
         categories: categories,
-        shopId: shopId,
       ),
     );
   }
@@ -49,10 +50,18 @@ class EditMenuItemModal extends ConsumerStatefulWidget {
 }
 
 class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _priceController;
-  late final TextEditingController _detailsController;
-  final _customCategoryController = TextEditingController();
+  late TextEditingController _nameController;
+  late TextEditingController _priceController;
+  late TextEditingController _detailsController;
+  late TextEditingController _customCategoryController;
+
+  late String _selectedCategory;
+  late bool _isOtherCategory;
+  late bool _isVeg;
+  late bool _isAvailable;
+
+  bool _isLoading = false;
+  bool _isOptimizingImage = false;
 
   final ImagePicker _picker = ImagePicker();
   Uint8List? _selectedImageBytes;
@@ -60,25 +69,17 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
   int? _selectedImageSizeBytes;
   String? _imageError;
 
-  late bool _isVeg;
-  late bool _isAvailable;
-  late String _selectedCategory;
-  bool _isOtherCategory = false;
-  bool _isLoading = false;
-
   static const List<String> _defaultCategories = [
     'Momos',
     'Pizzas',
+    'Snacks & Fast Food',
     'Burgers',
-    'Biryani',
-    'Thali',
-    'Snacks',
-    'Rolls',
-    'Noodles',
-    'Beverages',
+    'Thalis & Meals',
     'Desserts',
-    'Ice Cream',
-    'Sushi',
+    'Beverages',
+    'Chinese',
+    'South Indian',
+    'Rolls & Wraps',
   ];
 
   @override
@@ -86,29 +87,34 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     super.initState();
     _nameController = TextEditingController(text: widget.item.name);
     _priceController =
-        TextEditingController(text: widget.item.price.toStringAsFixed(0));
+        TextEditingController(text: widget.item.price.toString());
     _detailsController = TextEditingController(text: widget.item.details);
+    _customCategoryController = TextEditingController();
+
     _isVeg = widget.item.isVeg;
     _isAvailable = widget.item.isAvailable;
 
-    // Match existing category
-    final matchedCat = widget.categories
-        .where(
-          (c) =>
-              c.id.toLowerCase() == widget.item.categoryId.toLowerCase() ||
-              c.name.toLowerCase() == widget.item.categoryId.toLowerCase(),
-        )
-        .map((c) => c.name)
+    final currentCat = widget.categories
+        .where((c) => c.id == widget.item.categoryId)
         .firstOrNull;
 
-    if (matchedCat != null) {
-      _selectedCategory = matchedCat;
+    if (currentCat != null) {
+      _selectedCategory = currentCat.name;
+      _isOtherCategory = false;
     } else {
-      final capCat = widget.item.categoryId.isNotEmpty
-          ? widget.item.categoryId[0].toUpperCase() +
-              widget.item.categoryId.substring(1)
-          : 'Momos';
-      _selectedCategory = capCat;
+      final matchByName = widget.categories
+          .where(
+            (c) =>
+                c.name.toLowerCase() == widget.item.categoryId.toLowerCase(),
+          )
+          .firstOrNull;
+      if (matchByName != null) {
+        _selectedCategory = matchByName.name;
+        _isOtherCategory = false;
+      } else {
+        _selectedCategory = widget.item.categoryId;
+        _isOtherCategory = false;
+      }
     }
   }
 
@@ -155,32 +161,47 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     return fallbacks[item.id.hashCode.abs() % fallbacks.length];
   }
 
-  Future<void> _pickImage() {
-    return _picker.pickImage(source: ImageSource.gallery).then((picked) async {
+  Future<void> _pickImage() async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery);
       if (picked != null) {
-        final bytes = await picked.readAsBytes();
-        final size = bytes.lengthInBytes;
-        const maxBytes = 1024 * 1024; // 1 MB
+        setState(() {
+          _isOptimizingImage = true;
+          _imageError = null;
+        });
 
-        if (size > maxBytes) {
-          final sizeMb = (size / (1024 * 1024)).toStringAsFixed(2);
+        debugPrint('🔄 IMAGE OPTIMIZATION START (Menu Item)');
+        final rawBytes = await picked.readAsBytes();
+
+        // Automatically resize & compress to <= 300 KB on background isolate
+        final optimized = await ImageOptimizationService.optimizeImageBytes(
+          originalBytes: rawBytes,
+          type: ImageTargetType.menuItem,
+        );
+
+        debugPrint('✅ IMAGE OPTIMIZATION COMPLETE');
+        debugPrint(
+          '📸 OPTIMIZED SIZE: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+        );
+
+        if (mounted) {
           setState(() {
-            _selectedImageBytes = null;
-            _selectedImageName = null;
-            _selectedImageSizeBytes = null;
-            _imageError =
-                'Image size ($sizeMb MB) exceeds 1MB limit. Please choose a smaller image.';
-          });
-        } else {
-          setState(() {
-            _selectedImageBytes = bytes;
+            _selectedImageBytes = optimized;
             _selectedImageName = picked.name;
-            _selectedImageSizeBytes = size;
-            _imageError = null;
+            _selectedImageSizeBytes = optimized.lengthInBytes;
+            _isOptimizingImage = false;
           });
         }
       }
-    });
+    } catch (e, stack) {
+      debugPrint('❌ IMAGE OPTIMIZATION ERROR: $e\n$stack');
+      if (mounted) {
+        setState(() {
+          _isOptimizingImage = false;
+          _imageError = 'Failed to process image. Please try again.';
+        });
+      }
+    }
   }
 
   Future<void> _onSave() async {
@@ -236,6 +257,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     try {
       final firestoreService = ref.read(firestoreServiceProvider);
       String categoryId = widget.item.categoryId;
+      final String oldImageUrl = widget.item.imageUrl;
 
       // If category was changed to custom category via "+ Other"
       if (_isOtherCategory) {
@@ -256,7 +278,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
       }
 
       String imageUrl = widget.item.imageUrl;
-      // If new image was picked from gallery, upload to Firebase Storage
+      // If new image was picked from gallery, upload optimized bytes to Firebase Storage
       if (_selectedImageBytes != null) {
         final uploaded = await firestoreService.uploadImage(
           shopId: widget.shopId,
@@ -269,6 +291,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         }
       }
 
+      debugPrint('📝 FIRESTORE UPDATE START -> shops/${widget.shopId}/menuItems/${widget.item.id}');
       await firestoreService.updateMenuItem(widget.shopId, widget.item.id, {
         'name': name,
         'price': price,
@@ -278,7 +301,9 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         'categoryId': categoryId,
         'imageUrl': imageUrl,
       });
+      debugPrint('✅ FIRESTORE UPDATE COMPLETE');
 
+      // Invalidate Riverpod providers to refresh menu & categories instantly
       ref.invalidate(shopMenuItemsProvider(widget.shopId));
       ref.invalidate(shopCategoriesProvider(widget.shopId));
 
@@ -311,9 +336,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
           ),
         );
       }
-    } catch (e) {
+      debugPrint('🎉 SAVE COMPLETE');
+    } catch (e, stack) {
+      debugPrint('❌ SAVE ERROR: $e\n$stack');
       if (mounted) {
-        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update item: $e'),
@@ -325,6 +351,11 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
           ),
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        debugPrint('🔄 LOADING RESET: _isLoading = false');
+      }
     }
   }
 
@@ -334,30 +365,22 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         setState(() => _isLoading = true);
         try {
           final firestoreService = ref.read(firestoreServiceProvider);
-          await firestoreService.deleteMenuItem(widget.shopId, widget.item.id);
+          await firestoreService.deleteMenuItem(
+            widget.shopId,
+            widget.item.id,
+            imageUrl: widget.item.imageUrl,
+          );
           ref.invalidate(shopMenuItemsProvider(widget.shopId));
 
           if (mounted) {
-            Navigator.pop(context); // Close edit modal
+            Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(
-                      Icons.delete_outline_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '"${widget.item.name}" deleted from menu.',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
+                content: Text(
+                  '"${widget.item.name}" deleted from menu.',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
-                backgroundColor: AppColors.error,
+                backgroundColor: AppColors.textPrimary,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -368,7 +391,6 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
           }
         } catch (e) {
           if (mounted) {
-            setState(() => _isLoading = false);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Failed to delete item: $e'),
@@ -379,6 +401,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                 ),
               ),
             );
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _isLoading = false);
           }
         }
       }
@@ -394,9 +420,6 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     }
     for (final def in _defaultCategories) {
       set.add(def);
-    }
-    if (_selectedCategory.isNotEmpty) {
-      set.add(_selectedCategory);
     }
     return set.toList();
   }
@@ -420,59 +443,75 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Drag Handle
+            // Handle bar
             Center(
               child: Container(
                 width: 40,
                 height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.grey[700] : Colors.grey[300],
+                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-            const SizedBox(height: 14),
 
-            // Header
+            // Header Row with Delete Action
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
-                    Text(
-                      'Edit Menu Item',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.3,
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'All details marked with * are compulsory',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? AppColors.darkTextSecondary
-                            : AppColors.textSecondary,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      child: const Icon(
+                        Icons.edit_note_rounded,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Edit Menu Item',
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 19,
+                                  ),
+                        ),
+                        Text(
+                          'Update price, details, photo or availability',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
-                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            // ─── 1. Image Upload / Change (Local storage / Max 1MB) ──────
+            // ─── 1. Image Section ─────────────────────────────────────────
             Row(
               children: [
                 Text(
-                  'Item Image',
+                  'Item Photo',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: isDark
@@ -489,7 +528,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
-                    'Max 1 MB',
+                    'Auto-Optimized ≤ 300 KB',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -501,17 +540,42 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             ),
             const SizedBox(height: 6),
 
-            if (_selectedImageBytes != null) ...[
-              // New image preview with change / revert options
+            if (_isOptimizingImage)
               Container(
-                padding: const EdgeInsets.all(10),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Column(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Optimizing photo for fast delivery...',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              )
+            else if (_selectedImageBytes != null) ...[
+              // New selected photo preview
+              Container(
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isDark
                       ? AppColors.darkSurfaceVariant
                       : AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.4),
+                    color: AppColors.success.withValues(alpha: 0.5),
                   ),
                 ),
                 child: Row(
@@ -520,8 +584,8 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                       borderRadius: BorderRadius.circular(8),
                       child: Image.memory(
                         _selectedImageBytes!,
-                        width: 56,
-                        height: 56,
+                        width: 54,
+                        height: 54,
                         fit: BoxFit.cover,
                       ),
                     ),
@@ -531,7 +595,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _selectedImageName ?? 'New Uploaded Photo',
+                            _selectedImageName ?? 'New Photo Selected',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -541,7 +605,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Size: ${((_selectedImageSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB (Under 1MB)',
+                            'Optimized: ${((_selectedImageSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB (≤ 300 KB)',
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.success,
@@ -553,20 +617,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                     ),
                     IconButton(
                       icon: const Icon(
-                        Icons.refresh_rounded,
-                        color: AppColors.primary,
+                        Icons.delete_outline_rounded,
+                        color: AppColors.error,
                         size: 20,
                       ),
-                      tooltip: 'Choose Different Image',
-                      onPressed: _isLoading ? null : _pickImage,
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.undo_rounded,
-                        color: AppColors.textHint,
-                        size: 20,
-                      ),
-                      tooltip: 'Revert to Original Image',
                       onPressed: _isLoading
                           ? null
                           : () {
@@ -582,10 +636,9 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                 ),
               ),
             ] else ...[
-              // Current image preview with Change Image button
+              // Existing photo preview with change button
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isDark
                       ? AppColors.darkSurfaceVariant
@@ -626,7 +679,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Tap button to change from gallery',
+                            'Tap Change to pick a new photo from gallery',
                             style: TextStyle(
                               fontSize: 11,
                               color: isDark
@@ -638,7 +691,9 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _isLoading ? null : _pickImage,
+                      onPressed: (_isLoading || _isOptimizingImage)
+                          ? null
+                          : _pickImage,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primary,
                         side: const BorderSide(
@@ -758,7 +813,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                 }),
                 ChoiceChip(
                   avatar: const Icon(Icons.edit_note_rounded, size: 16),
-                  label: const Text('+ Other (Type Custom)'),
+                  label: const Text('Other (Type Custom)'),
                   selected: _isOtherCategory,
                   selectedColor: AppColors.primary.withValues(alpha: 0.15),
                   backgroundColor: isDark
@@ -777,7 +832,9 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                   side: BorderSide(
                     color: _isOtherCategory
                         ? AppColors.primary
-                        : (isDark ? AppColors.darkDivider : AppColors.divider),
+                        : (isDark
+                            ? AppColors.darkDivider
+                            : AppColors.divider),
                   ),
                   onSelected: (selected) {
                     setState(() {
@@ -792,11 +849,9 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
               const SizedBox(height: 8),
               TextField(
                 controller: _customCategoryController,
-                autofocus: true,
                 decoration: const InputDecoration(
-                  hintText:
-                      'Type custom category (e.g. Sushi, Ice Cream, Beverages)',
-                  prefixIcon: Icon(Icons.add_circle_outline_rounded),
+                  hintText: 'Type new category name (e.g. Beverages, Rolls)',
+                  prefixIcon: Icon(Icons.category_outlined),
                   isDense: true,
                 ),
               ),
@@ -804,11 +859,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
 
             const SizedBox(height: 14),
 
-            // ─── 4. Price & Food Type (Veg / Non-Veg) ─────────────────────
+            // ─── 4. Price & Veg/Non-Veg (Compulsory) ──────────────────────
             Row(
               children: [
                 Expanded(
-                  flex: 3,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -826,17 +880,16 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                         controller: _priceController,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          hintText: '90',
-                          prefixText: '₹ ',
+                          hintText: 'e.g. 60',
+                          prefixIcon: Icon(Icons.currency_rupee_rounded),
                           isDense: true,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
-                  flex: 3,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -858,27 +911,35 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                               ? AppColors.darkSurfaceVariant
                               : AppColors.surfaceVariant,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.darkDivider
-                                : AppColors.divider,
-                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              _isVeg ? 'Veg' : 'Non-Veg',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: _isVeg
-                                    ? AppColors.vegGreen
-                                    : AppColors.nonVegRed,
-                              ),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.circle,
+                                  size: 10,
+                                  color: _isVeg
+                                      ? AppColors.vegGreen
+                                      : AppColors.nonVegRed,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _isVeg ? 'Veg' : 'Non-Veg',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: _isVeg
+                                        ? AppColors.vegGreen
+                                        : AppColors.nonVegRed,
+                                  ),
+                                ),
+                              ],
                             ),
                             Switch(
                               value: _isVeg,
-                              activeThumbColor: AppColors.vegGreen,
+                              activeColor: AppColors.vegGreen,
                               inactiveThumbColor: AppColors.nonVegRed,
                               inactiveTrackColor: AppColors.nonVegRed
                                   .withValues(alpha: 0.3),
@@ -896,7 +957,81 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             ),
             const SizedBox(height: 14),
 
-            // ─── 5. Portion / Description (Compulsory) ────────────────────
+            // ─── 5. Availability Status Toggle (Available / Out of Stock) ─
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.darkSurfaceVariant
+                    : AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: !_isAvailable
+                      ? AppColors.error.withValues(alpha: 0.4)
+                      : (isDark ? AppColors.darkDivider : AppColors.divider),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _isAvailable
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.remove_circle_outline_rounded,
+                            size: 16,
+                            color: _isAvailable
+                                ? AppColors.success
+                                : AppColors.error,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _isAvailable
+                                ? 'Item Available (In Stock)'
+                                : 'Out of Stock (Unavailable)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: _isAvailable
+                                  ? AppColors.success
+                                  : AppColors.error,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _isAvailable
+                            ? 'Students can see & order this item'
+                            : 'Students will see "OUT OF STOCK"',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.textHint,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Switch(
+                    value: _isAvailable,
+                    activeThumbColor: AppColors.success,
+                    inactiveThumbColor: AppColors.error,
+                    inactiveTrackColor: AppColors.error.withValues(alpha: 0.3),
+                    onChanged: _isLoading
+                        ? null
+                        : (val) => setState(() => _isAvailable = val),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 6. Portion / Description (Compulsory) ────────────────────
             Text(
               'Portion / Description *',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -910,117 +1045,64 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             TextField(
               controller: _detailsController,
               decoration: const InputDecoration(
-                hintText: 'e.g. 8 Pieces / Served fresh with special sauces',
+                hintText: 'e.g. 8 Pieces / Served fresh with spicy schezwan',
                 prefixIcon: Icon(Icons.info_outline_rounded),
                 isDense: true,
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 20),
 
-            // ─── 6. Availability Status Toggle ────────────────────────────
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.darkSurfaceVariant
-                    : AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Item In Stock / Available',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                      Text(
-                        _isAvailable
-                            ? 'Customers can order this item'
-                            : 'Item marked Out of Stock',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark
-                              ? AppColors.darkTextSecondary
-                              : AppColors.textHint,
-                        ),
-                      ),
-                    ],
+            // ─── 7. Delete Item Button ────────────────────────────────────
+            Center(
+              child: TextButton.icon(
+                onPressed: (_isLoading || _isOptimizingImage) ? null : _onDelete,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                ),
+                icon: const Icon(Icons.delete_forever_rounded, size: 18),
+                label: const Text(
+                  'Delete Item from Menu',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
                   ),
-                  Switch(
-                    value: _isAvailable,
-                    activeThumbColor: AppColors.success,
-                    onChanged: _isLoading
-                        ? null
-                        : (val) => setState(() => _isAvailable = val),
-                  ),
-                ],
+                ),
               ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 8),
 
-            // ─── 7. Action Buttons (Save Changes + Delete) ────────────────
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _onDelete,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      side:
-                          const BorderSide(color: AppColors.error, width: 1.2),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                    label: const Text(
-                      'Delete',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
+            // ─── 8. Save Button ───────────────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: (_isLoading || _isOptimizingImage) ? null : _onSave,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  elevation: 0,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 5,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _onSave,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Save Changes',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      elevation: 0,
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Text(
-                            'Save Changes',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),

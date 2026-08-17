@@ -8,9 +8,10 @@ service firebase.storage {
       allow read: if true;
     }
 
-    // Allow uploads strictly to rajat_shop image folders with max 1MB limit
+    // Allow uploads and deletes strictly to rajat_shop image folders with max 1MB limit
     match /shops/rajat_shop/{allPaths=**} {
-      allow write: if request.resource.size < 1 * 1024 * 1024;
+      allow create, update: if request.resource.size < 1 * 1024 * 1024;
+      allow delete: if true;
     }
   }
 }

@@ -1,5 +1,5 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Add Item Modal (Connected to Firestore & Firebase Storage)
+// Add Content Modal (Client-Side Auto-Compression <= 300KB & Safe Upload Flow)
 
 import 'dart:typed_data';
 
@@ -11,30 +11,29 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers.dart';
 import '../../../../models/category_model.dart';
 import '../../../../models/menu_item_model.dart';
+import '../../../../services/image_optimization_service.dart';
 
 class AddContentModal extends ConsumerStatefulWidget {
   const AddContentModal({
+    required this.shopId,
     required this.categories,
-    this.shopId = 'rajat_shop',
     super.key,
   });
 
-  final List<Category> categories;
   final String shopId;
+  final List<Category> categories;
 
   static Future<void> show(
     BuildContext context, {
+    required String shopId,
     required List<Category> categories,
-    String shopId = 'rajat_shop',
   }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AddContentModal(
-        categories: categories,
-        shopId: shopId,
-      ),
+      builder: (_) =>
+          AddContentModal(shopId: shopId, categories: categories),
     );
   }
 
@@ -43,10 +42,17 @@ class AddContentModal extends ConsumerStatefulWidget {
 }
 
 class _AddContentModalState extends ConsumerState<AddContentModal> {
-  final _nameController = TextEditingController();
-  final _priceController = TextEditingController();
-  final _detailsController = TextEditingController();
-  final _customCategoryController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _detailsController = TextEditingController();
+  final TextEditingController _customCategoryController =
+      TextEditingController();
+
+  String _selectedCategory = 'Momos';
+  bool _isOtherCategory = false;
+  bool _isVeg = true;
+  bool _isLoading = false;
+  bool _isOptimizingImage = false;
 
   final ImagePicker _picker = ImagePicker();
   Uint8List? _selectedImageBytes;
@@ -54,25 +60,17 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
   int? _selectedImageSizeBytes;
   String? _imageError;
 
-  bool _isVeg = true;
-  String _selectedCategory = 'Momos';
-  bool _isOtherCategory = false;
-  bool _isLoading = false;
-
-  // Curated category options
   static const List<String> _defaultCategories = [
     'Momos',
     'Pizzas',
+    'Snacks & Fast Food',
     'Burgers',
-    'Biryani',
-    'Thali',
-    'Snacks',
-    'Rolls',
-    'Noodles',
-    'Beverages',
+    'Thalis & Meals',
     'Desserts',
-    'Ice Cream',
-    'Sushi',
+    'Beverages',
+    'Chinese',
+    'South Indian',
+    'Rolls & Wraps',
   ];
 
   @override
@@ -98,32 +96,47 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
     super.dispose();
   }
 
-  Future<void> _pickImage() {
-    return _picker.pickImage(source: ImageSource.gallery).then((picked) async {
+  Future<void> _pickImage() async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery);
       if (picked != null) {
-        final bytes = await picked.readAsBytes();
-        final size = bytes.lengthInBytes;
-        const maxBytes = 1024 * 1024; // 1 MB
+        setState(() {
+          _isOptimizingImage = true;
+          _imageError = null;
+        });
 
-        if (size > maxBytes) {
-          final sizeMb = (size / (1024 * 1024)).toStringAsFixed(2);
+        debugPrint('🔄 IMAGE OPTIMIZATION START (Menu Item)');
+        final rawBytes = await picked.readAsBytes();
+
+        // Automatically resize & compress to <= 300 KB on background isolate
+        final optimized = await ImageOptimizationService.optimizeImageBytes(
+          originalBytes: rawBytes,
+          type: ImageTargetType.menuItem,
+        );
+
+        debugPrint('✅ IMAGE OPTIMIZATION COMPLETE');
+        debugPrint(
+          '📸 OPTIMIZED SIZE: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+        );
+
+        if (mounted) {
           setState(() {
-            _selectedImageBytes = null;
-            _selectedImageName = null;
-            _selectedImageSizeBytes = null;
-            _imageError =
-                'Image size ($sizeMb MB) exceeds 1MB limit. Please choose a smaller image.';
-          });
-        } else {
-          setState(() {
-            _selectedImageBytes = bytes;
+            _selectedImageBytes = optimized;
             _selectedImageName = picked.name;
-            _selectedImageSizeBytes = size;
-            _imageError = null;
+            _selectedImageSizeBytes = optimized.lengthInBytes;
+            _isOptimizingImage = false;
           });
         }
       }
-    });
+    } catch (e, stack) {
+      debugPrint('❌ IMAGE OPTIMIZATION ERROR: $e\n$stack');
+      if (mounted) {
+        setState(() {
+          _isOptimizingImage = false;
+          _imageError = 'Failed to process image. Please try again.';
+        });
+      }
+    }
   }
 
   Future<void> _onAdd() async {
@@ -205,7 +218,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
         }
       }
 
-      // If image bytes selected from gallery, upload to Firebase Storage
+      // If image bytes selected from gallery, upload optimized bytes to Firebase Storage
       String imageUrl = '';
       if (_selectedImageBytes != null) {
         final uploaded = await firestoreService.uploadImage(
@@ -235,7 +248,9 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
         sortOrder: 99,
       );
 
+      debugPrint('📝 FIRESTORE UPDATE START -> shops/${widget.shopId}/menuItems/$itemId');
       await firestoreService.addMenuItem(widget.shopId, newItem);
+      debugPrint('✅ FIRESTORE UPDATE COMPLETE');
 
       // Invalidate Riverpod providers to refresh menu & categories instantly
       ref.invalidate(shopMenuItemsProvider(widget.shopId));
@@ -270,9 +285,10 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           ),
         );
       }
-    } catch (e) {
+      debugPrint('🎉 SAVE COMPLETE');
+    } catch (e, stack) {
+      debugPrint('❌ SAVE ERROR: $e\n$stack');
       if (mounted) {
-        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to add item: $e'),
@@ -283,6 +299,11 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
             ),
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        debugPrint('🔄 LOADING RESET: _isLoading = false');
       }
     }
   }
@@ -318,55 +339,71 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Drag Handle
+            // Handle bar
             Center(
               child: Container(
                 width: 40,
                 height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.grey[700] : Colors.grey[300],
+                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-            const SizedBox(height: 14),
 
-            // Header
+            // Header Row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
-                    Text(
-                      'Add New Menu Item',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.3,
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'All details marked with * are compulsory',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? AppColors.darkTextSecondary
-                            : AppColors.textSecondary,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      child: const Icon(
+                        Icons.add_circle_outline_rounded,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Add New Menu Item',
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 19,
+                                  ),
+                        ),
+                        Text(
+                          'Item will be visible on shop menu immediately',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
-                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            // ─── 1. Image Upload (Local storage / Phone Gallery / Max 1MB) ───
+            // ─── 1. Image Upload Section ──────────────────────────────────
             Row(
               children: [
                 Text(
@@ -387,7 +424,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
-                    'Max 1 MB',
+                    'Auto-Optimized ≤ 300 KB',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -399,16 +436,41 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
             ),
             const SizedBox(height: 6),
 
-            if (_selectedImageBytes != null) ...[
+            if (_isOptimizingImage)
               Container(
-                padding: const EdgeInsets.all(10),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Column(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Optimizing photo for fast loading...',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              )
+            else if (_selectedImageBytes != null) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isDark
                       ? AppColors.darkSurfaceVariant
                       : AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.4),
+                    color: AppColors.success.withValues(alpha: 0.5),
                   ),
                 ),
                 child: Row(
@@ -417,8 +479,8 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                       borderRadius: BorderRadius.circular(8),
                       child: Image.memory(
                         _selectedImageBytes!,
-                        width: 56,
-                        height: 56,
+                        width: 54,
+                        height: 54,
                         fit: BoxFit.cover,
                       ),
                     ),
@@ -438,7 +500,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Size: ${((_selectedImageSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB (Under 1MB limit)',
+                            'Optimized: ${((_selectedImageSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB (≤ 300 KB limit)',
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.success,
@@ -513,7 +575,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'PNG, JPG or WEBP up to 1 MB',
+                        'Auto-compresses to ≤ 300 KB for fast delivery',
                         style: TextStyle(
                           fontSize: 11,
                           color: isDark
@@ -599,28 +661,27 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                               ? AppColors.darkTextPrimary
                               : AppColors.textPrimary),
                     ),
-                    side: BorderSide(
-                      color: isSelected
-                          ? AppColors.primary
-                          : (isDark
-                              ? AppColors.darkDivider
-                              : AppColors.divider),
-                    ),
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() {
-                          _selectedCategory = cat;
-                          _isOtherCategory = false;
-                        });
-                      }
-                    },
+                    onSelected: _isLoading
+                        ? null
+                        : (selected) {
+                            if (selected) {
+                              setState(() {
+                                _selectedCategory = cat;
+                                _isOtherCategory = false;
+                              });
+                            }
+                          },
                   );
                 }),
-
-                // "+ Other" Chip
                 ChoiceChip(
-                  avatar: const Icon(Icons.edit_note_rounded, size: 16),
-                  label: const Text('+ Other (Type Custom)'),
+                  label: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add, size: 14),
+                      SizedBox(width: 4),
+                      Text('Other (Type Custom)'),
+                    ],
+                  ),
                   selected: _isOtherCategory,
                   selectedColor: AppColors.primary.withValues(alpha: 0.15),
                   backgroundColor: isDark
@@ -636,30 +697,25 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                             ? AppColors.darkTextPrimary
                             : AppColors.textPrimary),
                   ),
-                  side: BorderSide(
-                    color: _isOtherCategory
-                        ? AppColors.primary
-                        : (isDark ? AppColors.darkDivider : AppColors.divider),
-                  ),
-                  onSelected: (selected) {
-                    setState(() {
-                      _isOtherCategory = selected;
-                    });
-                  },
+                  onSelected: _isLoading
+                      ? null
+                      : (selected) {
+                          setState(() {
+                            _isOtherCategory = selected;
+                          });
+                        },
                 ),
               ],
             ),
 
-            // Animated Custom Category Text Field (Visible when Other is chosen)
+            // Custom Category Input Field
             if (_isOtherCategory) ...[
               const SizedBox(height: 8),
               TextField(
                 controller: _customCategoryController,
-                autofocus: true,
                 decoration: const InputDecoration(
-                  hintText:
-                      'Type custom category (e.g. Sushi, Ice Cream, Beverages)',
-                  prefixIcon: Icon(Icons.add_circle_outline_rounded),
+                  hintText: 'Type new category name (e.g. Beverages, Rolls)',
+                  prefixIcon: Icon(Icons.category_outlined),
                   isDense: true,
                 ),
               ),
@@ -667,11 +723,10 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
 
             const SizedBox(height: 14),
 
-            // ─── 4. Price & Food Type (Veg / Non-Veg) ─────────────────────
+            // ─── 4. Price & Veg/Non-Veg (Compulsory) ──────────────────────
             Row(
               children: [
                 Expanded(
-                  flex: 3,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -689,17 +744,16 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                         controller: _priceController,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          hintText: '90',
-                          prefixText: '₹ ',
+                          hintText: 'e.g. 70',
+                          prefixIcon: Icon(Icons.currency_rupee_rounded),
                           isDense: true,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
-                  flex: 3,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -721,27 +775,35 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                               ? AppColors.darkSurfaceVariant
                               : AppColors.surfaceVariant,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.darkDivider
-                                : AppColors.divider,
-                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              _isVeg ? 'Veg' : 'Non-Veg',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: _isVeg
-                                    ? AppColors.vegGreen
-                                    : AppColors.nonVegRed,
-                              ),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.circle,
+                                  size: 10,
+                                  color: _isVeg
+                                      ? AppColors.vegGreen
+                                      : AppColors.nonVegRed,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _isVeg ? 'Veg' : 'Non-Veg',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: _isVeg
+                                        ? AppColors.vegGreen
+                                        : AppColors.nonVegRed,
+                                  ),
+                                ),
+                              ],
                             ),
                             Switch(
                               value: _isVeg,
-                              activeThumbColor: AppColors.vegGreen,
+                              activeColor: AppColors.vegGreen,
                               inactiveThumbColor: AppColors.nonVegRed,
                               inactiveTrackColor: AppColors.nonVegRed
                                   .withValues(alpha: 0.3),
@@ -785,7 +847,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _onAdd,
+                onPressed: (_isLoading || _isOptimizingImage) ? null : _onAdd,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,

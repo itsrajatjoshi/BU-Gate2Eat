@@ -1,5 +1,5 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Edit Shop Modal (Connected to Firestore & Firebase Storage with 12-hour AM/PM Time Pickers)
+// Edit Shop Modal (Auto-Compression <= 800KB & Direct Firebase Storage Upload Flow)
 
 import 'dart:typed_data';
 
@@ -11,12 +11,10 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers.dart';
 import '../../../../models/shop_model.dart';
+import '../../../../services/image_optimization_service.dart';
 
 class EditShopModal extends ConsumerStatefulWidget {
-  const EditShopModal({
-    required this.shop,
-    super.key,
-  });
+  const EditShopModal({required this.shop, super.key});
 
   final Shop shop;
 
@@ -40,9 +38,9 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
   late TextEditingController _closeTimeController;
   late TextEditingController _pickupNoteController;
   late TextEditingController _contactController;
-
   late bool _isClosedOverride;
   bool _isLoading = false;
+  bool _isOptimizingImage = false;
 
   final ImagePicker _picker = ImagePicker();
   Uint8List? _selectedBannerBytes;
@@ -54,19 +52,14 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     super.initState();
     _nameController = TextEditingController(text: widget.shop.name);
     _descController = TextEditingController(text: widget.shop.description);
-    _openTimeController = TextEditingController(
-      text: widget.shop.formattedOpenTime.isNotEmpty
-          ? widget.shop.formattedOpenTime
-          : '8:00 AM',
-    );
-    _closeTimeController = TextEditingController(
-      text: widget.shop.formattedCloseTime.isNotEmpty
-          ? widget.shop.formattedCloseTime
-          : '11:30 PM',
-    );
+    _openTimeController =
+        TextEditingController(text: widget.shop.formattedOpenTime);
+    _closeTimeController =
+        TextEditingController(text: widget.shop.formattedCloseTime);
     _pickupNoteController =
         TextEditingController(text: widget.shop.deliveryNote);
-    _contactController = TextEditingController(text: widget.shop.contactNumber);
+    _contactController =
+        TextEditingController(text: widget.shop.contactNumber);
     _isClosedOverride = widget.shop.isClosedOverride;
   }
 
@@ -81,64 +74,98 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     super.dispose();
   }
 
-  Future<void> _pickTime({required bool isOpenTime}) async {
-    final currentText =
-        isOpenTime ? _openTimeController.text : _closeTimeController.text;
-    final minutes = Shop.parseTimeToMinutes(
-      currentText,
-      defaultMinutes: isOpenTime ? 8 * 60 : 23 * 60 + 30,
-    );
-    final initialTime = TimeOfDay(
-      hour: minutes ~/ 60,
-      minute: minutes % 60,
-    );
+  /// Converts a time string (e.g. "8:00 AM" or "08:00") into a TimeOfDay object.
+  TimeOfDay _parseToTimeOfDay(String timeStr, TimeOfDay fallback) {
+    try {
+      final clean = timeStr.trim().toUpperCase();
+      final isPm = clean.contains('PM');
+      final isAm = clean.contains('AM');
 
+      final numericPart = clean.replaceAll(RegExp(r'[^\d:]'), '');
+      final parts = numericPart.split(':');
+      if (parts.length >= 2) {
+        var h = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+
+        if (isPm && h < 12) h += 12;
+        if (isAm && h == 12) h = 0;
+
+        return TimeOfDay(hour: h.clamp(0, 23), minute: m.clamp(0, 59));
+      }
+    } catch (_) {}
+    return fallback;
+  }
+
+  /// Shows Flutter's 12-hour AM/PM native time picker
+  Future<void> _pickTimeDialog({
+    required TextEditingController controller,
+    required String title,
+    required TimeOfDay initialTime,
+  }) async {
     final picked = await showTimePicker(
       context: context,
       initialTime: initialTime,
-      helpText: isOpenTime ? 'Select Opening Time' : 'Select Closing Time',
+      helpText: title,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
 
-    if (picked != null) {
+    if (picked != null && mounted) {
       final period = picked.period == DayPeriod.am ? 'AM' : 'PM';
       final hour12 = picked.hourOfPeriod == 0 ? 12 : picked.hourOfPeriod;
-      final minute = picked.minute.toString().padLeft(2, '0');
-      final formatted = '$hour12:$minute $period';
+      final minuteStr = picked.minute.toString().padLeft(2, '0');
+      final formattedString = '$hour12:$minuteStr $period';
 
       setState(() {
-        if (isOpenTime) {
-          _openTimeController.text = formatted;
-        } else {
-          _closeTimeController.text = formatted;
-        }
+        controller.text = formattedString;
       });
     }
   }
 
-  Future<void> _pickBanner() {
-    return _picker.pickImage(source: ImageSource.gallery).then((picked) async {
+  Future<void> _pickBanner() async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery);
       if (picked != null) {
-        final bytes = await picked.readAsBytes();
-        final size = bytes.lengthInBytes;
-        const maxBytes = 1024 * 1024; // 1 MB
+        setState(() {
+          _isOptimizingImage = true;
+          _bannerError = null;
+        });
 
-        if (size > maxBytes) {
-          final sizeMb = (size / (1024 * 1024)).toStringAsFixed(2);
+        debugPrint('[BANNER] optimization started');
+        final rawBytes = await picked.readAsBytes();
+
+        // Automatically resize & compress to <= 800 KB on background isolate
+        final optimized = await ImageOptimizationService.optimizeImageBytes(
+          originalBytes: rawBytes,
+          type: ImageTargetType.shopBanner,
+        );
+
+        debugPrint('[BANNER] optimization completed');
+        debugPrint(
+          '[BANNER] optimized size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+        );
+
+        if (mounted) {
           setState(() {
-            _selectedBannerBytes = null;
-            _selectedBannerSizeBytes = null;
-            _bannerError =
-                'Image size ($sizeMb MB) exceeds 1MB limit. Please choose an image under 1MB.';
-          });
-        } else {
-          setState(() {
-            _selectedBannerBytes = bytes;
-            _selectedBannerSizeBytes = size;
-            _bannerError = null;
+            _selectedBannerBytes = optimized;
+            _selectedBannerSizeBytes = optimized.lengthInBytes;
+            _isOptimizingImage = false;
           });
         }
       }
-    });
+    } catch (e, stack) {
+      debugPrint('❌ [BANNER] optimization error: $e\n$stack');
+      if (mounted) {
+        setState(() {
+          _isOptimizingImage = false;
+          _bannerError = 'Failed to process image. Please try again.';
+        });
+      }
+    }
   }
 
   Future<void> _onSave() async {
@@ -162,19 +189,23 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       final firestoreService = ref.read(firestoreServiceProvider);
       String bannerUrl = widget.shop.bannerUrl;
 
-      // If new banner was picked from gallery, upload to Firebase Storage
+      // If new banner was picked from gallery, upload optimized bytes to Firebase Storage
       if (_selectedBannerBytes != null) {
+        debugPrint('[BANNER] upload started');
         final uploadedUrl = await firestoreService.uploadImage(
           shopId: widget.shop.id,
           path: 'banner',
           bytes: _selectedBannerBytes!,
           fileName: 'shop_banner.jpg',
         );
+        debugPrint('[BANNER] upload completed');
         if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
           bannerUrl = uploadedUrl;
+          debugPrint('[BANNER] download URL received: $bannerUrl');
         }
       }
 
+      debugPrint('[BANNER] Firestore update started');
       final formattedOpen = _openTimeController.text.trim().isEmpty
           ? '8:00 AM'
           : Shop.format12hr(_openTimeController.text.trim());
@@ -192,7 +223,10 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         'bannerUrl': bannerUrl,
         'isClosedOverride': _isClosedOverride,
       });
+      debugPrint('[BANNER] Firestore update completed');
+      debugPrint('[BANNER] SAVE SUCCESS');
 
+      // Invalidate provider so home screen and shop detail refresh immediately
       ref.invalidate(shopsProvider);
 
       if (mounted) {
@@ -224,9 +258,9 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('❌ [BANNER] SAVE ERROR: $e\n$stack');
       if (mounted) {
-        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update shop: $e'),
@@ -237,6 +271,10 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             ),
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -271,7 +309,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
               ),
             ),
 
-            // Header Row
+            // Title
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -284,7 +322,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
-                        Icons.storefront_rounded,
+                        Icons.store_rounded,
                         color: AppColors.primary,
                         size: 20,
                       ),
@@ -294,7 +332,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Edit Shop Info',
+                          'Edit Shop Details',
                           style:
                               Theme.of(context).textTheme.titleLarge?.copyWith(
                                     fontWeight: FontWeight.bold,
@@ -302,7 +340,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                                   ),
                         ),
                         Text(
-                          'Update shop banner, timings & details',
+                          'Changes will reflect on student app immediately',
                           style: TextStyle(
                             fontSize: 11,
                             color: isDark
@@ -322,7 +360,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             ),
             const SizedBox(height: 16),
 
-            // ─── 1. Shop Banner Image (Change from Phone Gallery / Max 1MB) ──
+            // ─── 1. Shop Banner Section ──────────────────────────────────
             Row(
               children: [
                 Text(
@@ -343,7 +381,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
-                    'Max 1 MB',
+                    'Auto-Optimized ≤ 800 KB',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -355,61 +393,162 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             ),
             const SizedBox(height: 6),
 
-            // Banner Image Preview Box
-            Container(
-              width: double.infinity,
-              height: 120,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: _bannerError != null
-                      ? AppColors.error
-                      : (isDark ? AppColors.darkDivider : AppColors.divider),
+            if (_isOptimizingImage)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Column(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Optimizing banner photo for high speed...',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              )
+            else if (_selectedBannerBytes != null) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.memory(
+                        _selectedBannerBytes!,
+                        width: 72,
+                        height: 52,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'New Banner Photo Selected',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Optimized: ${((_selectedBannerSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB (≤ 800 KB)',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: AppColors.error,
+                        size: 20,
+                      ),
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _selectedBannerBytes = null;
+                                _selectedBannerSizeBytes = null;
+                                _bannerError = null;
+                              });
+                            },
+                    ),
+                  ],
                 ),
               ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: _selectedBannerBytes != null
-                        ? Image.memory(
-                            _selectedBannerBytes!,
-                            fit: BoxFit.cover,
-                          )
-                        : (widget.shop.bannerUrl.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: widget.shop.bannerUrl,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => Container(
-                                  color: isDark
-                                      ? AppColors.darkSurfaceVariant
-                                      : Colors.grey[200],
-                                ),
-                                errorWidget: (_, __, ___) => Container(
-                                  color: isDark
-                                      ? AppColors.darkSurfaceVariant
-                                      : Colors.grey[200],
-                                  child: const Icon(Icons.store_rounded),
-                                ),
-                              )
-                            : Container(
-                                color: isDark
-                                    ? AppColors.darkSurfaceVariant
-                                    : Colors.grey[200],
-                                child: const Icon(Icons.store_rounded),
-                              )),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _bannerError != null
+                        ? AppColors.error
+                        : (isDark ? AppColors.darkDivider : AppColors.divider),
                   ),
-
-                  // Overlay Button to Change Banner
-                  Positioned(
-                    bottom: 8,
-                    right: 8,
-                    child: ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _pickBanner,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black.withValues(alpha: 0.75),
-                        foregroundColor: Colors.white,
+                ),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: widget.shop.bannerUrl,
+                        width: 72,
+                        height: 52,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => const Icon(
+                          Icons.store_rounded,
+                          color: AppColors.textHint,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Current Banner Photo',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Tap Change to pick a new photo',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.textHint,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: (_isLoading || _isOptimizingImage)
+                          ? null
+                          : _pickBanner,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.2,
+                        ),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 6,
@@ -419,45 +558,19 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      icon: const Icon(Icons.camera_alt_rounded, size: 14),
-                      label: Text(
-                        _selectedBannerBytes != null
-                            ? 'Change Banner'
-                            : 'Upload / Change',
-                        style: const TextStyle(
-                          fontSize: 11,
+                      icon: const Icon(Icons.camera_alt_outlined, size: 14),
+                      label: const Text(
+                        'Change',
+                        style: TextStyle(
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                  ),
-
-                  if (_selectedBannerBytes != null)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.success.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'New Photo (${((_selectedBannerSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB)',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            ],
 
             if (_bannerError != null) ...[
               const SizedBox(height: 4),
@@ -473,7 +586,170 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
 
             const SizedBox(height: 14),
 
-            // ─── 2. Temporary Open / Closed Status Override ───────────────
+            // ─── 2. Shop Name (Compulsory) ───────────────────────────────
+            Text(
+              'Shop Name *',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Rajat Shop',
+                prefixIcon: Icon(Icons.store_outlined),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 3. Description / Specialties (Compulsory) ───────────────
+            Text(
+              'Specialties / Subtitle *',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _descController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Chinese, Fast Food, Snacks & Special Thalis',
+                prefixIcon: Icon(Icons.description_outlined),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 4. Timings: 12-Hour AM/PM Native Clock Pickers ──────────
+            Text(
+              'Shop Timings (12-Hour AM/PM) *',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: _isLoading
+                        ? null
+                        : () {
+                            final current = _parseToTimeOfDay(
+                              _openTimeController.text,
+                              const TimeOfDay(hour: 8, minute: 0),
+                            );
+                            _pickTimeDialog(
+                              controller: _openTimeController,
+                              title: 'Select Opening Time',
+                              initialTime: current,
+                            );
+                          },
+                    borderRadius: BorderRadius.circular(12),
+                    child: IgnorePointer(
+                      child: TextField(
+                        controller: _openTimeController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Opening Time',
+                          hintText: '8:00 AM',
+                          prefixIcon: Icon(Icons.access_time_rounded),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: InkWell(
+                    onTap: _isLoading
+                        ? null
+                        : () {
+                            final current = _parseToTimeOfDay(
+                              _closeTimeController.text,
+                              const TimeOfDay(hour: 23, minute: 30),
+                            );
+                            _pickTimeDialog(
+                              controller: _closeTimeController,
+                              title: 'Select Closing Time',
+                              initialTime: current,
+                            );
+                          },
+                    borderRadius: BorderRadius.circular(12),
+                    child: IgnorePointer(
+                      child: TextField(
+                        controller: _closeTimeController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Closing Time',
+                          hintText: '11:30 PM',
+                          prefixIcon: Icon(Icons.access_time_filled_rounded),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 5. Pickup Location / Delivery Note ──────────────────────
+            Text(
+              'Pickup Location / Note',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _pickupNoteController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Pickup from Gate 2 / Near Canteen',
+                prefixIcon: Icon(Icons.location_on_outlined),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 6. Contact Number ───────────────────────────────────────
+            Text(
+              'Contact Number',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _contactController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                hintText: 'e.g. 9876543210',
+                prefixIcon: Icon(Icons.phone_outlined),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 7. Shop Operational Status Toggle ───────────────────────
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
@@ -497,8 +773,8 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                         children: [
                           Icon(
                             _isClosedOverride
-                                ? Icons.do_not_disturb_on_rounded
-                                : Icons.access_time_rounded,
+                                ? Icons.remove_circle_outline_rounded
+                                : Icons.check_circle_outline_rounded,
                             size: 16,
                             color: _isClosedOverride
                                 ? AppColors.error
@@ -507,16 +783,14 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                           const SizedBox(width: 6),
                           Text(
                             _isClosedOverride
-                                ? 'Temporarily Closed (Override)'
-                                : 'Open based on Schedule',
+                                ? 'Manually Marked CLOSED'
+                                : 'Shop Open & Accepting Orders',
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
                               color: _isClosedOverride
                                   ? AppColors.error
-                                  : (isDark
-                                      ? AppColors.darkTextPrimary
-                                      : AppColors.textPrimary),
+                                  : AppColors.success,
                             ),
                           ),
                         ],
@@ -524,8 +798,8 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                       const SizedBox(height: 2),
                       Text(
                         _isClosedOverride
-                            ? 'Shop is marked closed for emergency/holiday'
-                            : 'Normal schedule: ${_openTimeController.text} – ${_closeTimeController.text}',
+                            ? 'Students will see "CLOSED NOW"'
+                            : 'Students can place orders normally',
                         style: TextStyle(
                           fontSize: 11,
                           color: isDark
@@ -537,7 +811,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                   ),
                   Switch(
                     value: !_isClosedOverride,
-                    activeThumbColor: AppColors.success,
+                    activeColor: AppColors.success,
                     inactiveThumbColor: AppColors.error,
                     inactiveTrackColor: AppColors.error.withValues(alpha: 0.3),
                     onChanged: _isLoading
@@ -547,180 +821,15 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-
-            // ─── 3. Shop Name ────────────────────────────────────────────
-            Text(
-              'Shop Name *',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.textSecondary,
-                  ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                hintText: 'e.g. Rajat Shop',
-                prefixIcon: Icon(Icons.storefront_outlined),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // ─── 4. Description ──────────────────────────────────────────
-            Text(
-              'Cuisine & Description',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.textSecondary,
-                  ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _descController,
-              decoration: const InputDecoration(
-                hintText: 'e.g. Chinese, Fast Food, Snacks & Special Thalis',
-                prefixIcon: Icon(Icons.description_outlined),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // ─── 5. Open & Close Timings (12-hour AM/PM Pickers) ──────────
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Opening Time',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? AppColors.darkTextSecondary
-                                  : AppColors.textSecondary,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      InkWell(
-                        onTap: _isLoading
-                            ? null
-                            : () => _pickTime(isOpenTime: true),
-                        borderRadius: BorderRadius.circular(12),
-                        child: IgnorePointer(
-                          child: TextField(
-                            controller: _openTimeController,
-                            readOnly: true,
-                            decoration: const InputDecoration(
-                              hintText: '8:00 AM',
-                              prefixIcon: Icon(Icons.access_time_rounded),
-                              suffixIcon:
-                                  Icon(Icons.arrow_drop_down_rounded, size: 22),
-                              isDense: true,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Closing Time',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? AppColors.darkTextSecondary
-                                  : AppColors.textSecondary,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      InkWell(
-                        onTap: _isLoading
-                            ? null
-                            : () => _pickTime(isOpenTime: false),
-                        borderRadius: BorderRadius.circular(12),
-                        child: IgnorePointer(
-                          child: TextField(
-                            controller: _closeTimeController,
-                            readOnly: true,
-                            decoration: const InputDecoration(
-                              hintText: '11:30 PM',
-                              prefixIcon:
-                                  Icon(Icons.access_time_filled_rounded),
-                              suffixIcon:
-                                  Icon(Icons.arrow_drop_down_rounded, size: 22),
-                              isDense: true,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // ─── 6. Delivery / Pickup Note ────────────────────────────────
-            Text(
-              'Pickup Location / Delivery Note',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.textSecondary,
-                  ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _pickupNoteController,
-              decoration: const InputDecoration(
-                hintText: 'e.g. Pickup from Gate 2',
-                prefixIcon: Icon(Icons.location_on_outlined),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // ─── 7. Contact Number ───────────────────────────────────────
-            Text(
-              'Contact / WhatsApp Order Number',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.textSecondary,
-                  ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _contactController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                hintText: '8295643910',
-                prefixIcon: Icon(Icons.phone_outlined),
-                isDense: true,
-              ),
-            ),
             const SizedBox(height: 22),
 
-            // ─── 8. Save Button ──────────────────────────────────────────
+            // ─── 8. Save Button ───────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _onSave,
+                onPressed:
+                    (_isLoading || _isOptimizingImage) ? null : _onSave,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
