@@ -408,9 +408,10 @@ class FirestoreService {
     }
 
     try {
+      final detectedType = ImageOptimizationService.detectContentType(bytes);
       final storageRef = _storage.ref(fullStoragePath);
       final metadata = SettableMetadata(
-        contentType: 'image/jpeg',
+        contentType: detectedType,
         customMetadata: {
           'uploadedBy': 'shopkeeper',
           'shopId': shopId,

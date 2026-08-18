@@ -23,16 +23,36 @@ class ImageOptimizationService {
   /// Maximum byte limit for shop banners (800 KB).
   static const int maxBannerBytes = 800 * 1024;
 
-  /// Optimizes image bytes asynchronously on a background isolate.
-  /// Guarantees that:
-  /// - Menu items are <= 300 KB (target ~800px max dimension)
-  /// - Shop banners are <= 800 KB (target ~1400px max dimension)
+  /// Optimizes image bytes asynchronously on a background isolate ONLY if exceeding limits.
+  ///
+  /// Rule:
+  /// - If `originalBytes.length <= limit` (<= 300 KB for items, <= 800 KB for banners):
+  ///   Does NOT compress, resize, re-encode, or alter the file. Returns exact original bytes.
+  /// - If `originalBytes.length > limit`:
+  ///   Compresses & resizes in background isolate until within target limits.
   static Future<Uint8List> optimizeImageBytes({
     required Uint8List originalBytes,
     required ImageTargetType type,
   }) async {
+    final int maxAllowedBytes = type == ImageTargetType.menuItem
+        ? maxMenuItemBytes
+        : maxBannerBytes;
+
+    final originalSizeKb =
+        (originalBytes.lengthInBytes / 1024).toStringAsFixed(1);
+    final limitKb = (maxAllowedBytes / 1024).toInt();
+
+    // 1. If file is already within the allowed limit, skip compression entirely
+    if (originalBytes.lengthInBytes <= maxAllowedBytes) {
+      debugPrint(
+        '⚡ [IMAGE OPTIMIZE] Image is already within limit ($originalSizeKb KB <= $limitKb KB). Skipping compression, preserving original format & bytes as-is.',
+      );
+      return originalBytes;
+    }
+
+    // 2. If file exceeds limit, optimize in background isolate
     debugPrint(
-      '🔄 [IMAGE OPTIMIZE] Starting optimization for ${type.name} (Original size: ${(originalBytes.lengthInBytes / 1024).toStringAsFixed(1)} KB)...',
+      '🔄 [IMAGE OPTIMIZE] Image exceeds limit ($originalSizeKb KB > $limitKb KB). Starting auto-optimization for ${type.name}...',
     );
 
     try {
@@ -42,7 +62,7 @@ class ImageOptimizationService {
       });
 
       debugPrint(
-        '✅ [IMAGE OPTIMIZE] Complete! Final size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB (Target limit: ${type == ImageTargetType.menuItem ? '300 KB' : '800 KB'})',
+        '✅ [IMAGE OPTIMIZE] Complete! Final size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB (Target limit: ${limitKb} KB)',
       );
 
       return optimized;
@@ -50,6 +70,29 @@ class ImageOptimizationService {
       debugPrint('⚠️ [IMAGE OPTIMIZE] Isolate processing error: $e');
       return originalBytes;
     }
+  }
+
+  /// Detects MIME content-type from magic header bytes (PNG, WebP, JPEG).
+  static String detectContentType(Uint8List bytes) {
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'image/png';
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return 'image/webp';
+    }
+    return 'image/jpeg';
   }
 
   /// Background isolate processing function.
@@ -102,7 +145,7 @@ class ImageOptimizationService {
       } else {
         image = img.copyResize(image, height: currentDimension);
       }
-      encoded = Uint8List.fromList(img.encodeJpg(image, quality: quality));
+      encoded = Uint8List.fromList(img.encodeJpg(image, quality: 70));
     }
 
     return encoded;
