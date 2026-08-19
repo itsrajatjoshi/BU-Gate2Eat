@@ -1,5 +1,5 @@
 // BU Gate2Eat — Shopkeeper Panel
-// UI/UX Prototype: Delete Menu Item Dialog (UI Only — No Backend)
+// Delete Menu Item Confirmation Dialog
 
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -39,7 +39,7 @@ class DeleteItemDialog extends StatelessWidget {
         ],
       ),
       content: Text(
-        'Are you sure you want to delete "${item.name}" from your shop menu? (UI Prototype — no item will actually be deleted).',
+        'Are you sure you want to delete "${item.name}" from your shop menu? This action cannot be undone.',
         style: TextStyle(
           color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
           fontSize: 14,
@@ -59,35 +59,7 @@ class DeleteItemDialog extends StatelessWidget {
           ),
         ),
         ElevatedButton(
-          onPressed: () {
-            Navigator.pop(context, true);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(
-                      Icons.delete_outline_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'UI Prototype: "${item.name}" delete action triggered (No backend modification)',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-                backgroundColor: AppColors.error,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          },
+          onPressed: () => Navigator.pop(context, true),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.error,
             foregroundColor: Colors.white,
