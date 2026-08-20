@@ -13,6 +13,7 @@ import '../../../core/providers.dart';
 import '../../../models/category_model.dart';
 import '../../../models/menu_item_model.dart';
 import '../../../models/shop_model.dart';
+import '../admin_panel/widgets/delete_shop_dialog.dart';
 import 'widgets/add_content_modal.dart';
 import 'widgets/edit_menu_item_modal.dart';
 import 'widgets/edit_shop_modal.dart';
@@ -23,10 +24,12 @@ enum FoodFilter { all, veg, nonVeg }
 class ShopkeeperHomeScreen extends ConsumerStatefulWidget {
   const ShopkeeperHomeScreen({
     this.shopId = 'rajat_shop',
+    this.isAdmin = false,
     super.key,
   });
 
   final String shopId;
+  final bool isAdmin;
 
   @override
   ConsumerState<ShopkeeperHomeScreen> createState() =>
@@ -304,9 +307,9 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                     color: AppColors.primary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'SHOPKEEPER',
-                    style: TextStyle(
+                  child: Text(
+                    widget.isAdmin ? 'ADMIN' : 'SHOPKEEPER',
+                    style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w900,
                       color: AppColors.primary,
@@ -328,11 +331,59 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
               ],
             ),
             actions: [
-              IconButton(
-                tooltip: 'Edit Shop Info',
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () => EditShopModal.show(context, shop),
-              ),
+              if (widget.isAdmin)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert_rounded),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: (value) async {
+                    if (value == 'edit') {
+                      EditShopModal.show(context, shop);
+                    } else if (value == 'delete') {
+                      final deleted =
+                          await DeleteShopDialog.show(context, shop);
+                      if (deleted == true && context.mounted) {
+                        Navigator.of(context).pop();
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18),
+                          SizedBox(width: 10),
+                          Text('Edit Shop Info'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline_rounded,
+                            color: AppColors.error,
+                            size: 18,
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'Delete Shop',
+                            style: TextStyle(color: AppColors.error),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              else
+                IconButton(
+                  tooltip: 'Edit Shop Info',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => EditShopModal.show(context, shop),
+                ),
             ],
             flexibleSpace: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {

@@ -7,19 +7,20 @@ service cloud.firestore {
       // Anyone can read shop details
       allow read: if true;
 
-      // Allow writes ONLY for rajat_shop in development (Shopkeeper Panel)
-      allow write: if shopId == 'rajat_shop';
+      // Allow writes for shops in development (Admin & Shopkeeper Panels)
+      // Note: Temporary development permission. Will be hardened with Firebase Auth in a future phase.
+      allow create, update, delete: if true;
 
-      // Categories subcollection: anyone can read, rajat_shop can write
+      // Categories subcollection: anyone can read, authorized write
       match /categories/{categoryId} {
         allow read: if true;
-        allow write: if shopId == 'rajat_shop';
+        allow write: if true;
       }
 
-      // Menu items subcollection: anyone can read, rajat_shop can write
+      // Menu items subcollection: anyone can read, authorized write
       match /menuItems/{menuItemId} {
         allow read: if true;
-        allow write: if shopId == 'rajat_shop';
+        allow write: if true;
       }
     }
 
@@ -29,7 +30,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Default deny all other unlisted paths (orders, users, admin, etc.)
+    // Default deny all other unlisted paths
     match /{document=**} {
       allow read, write: if false;
     }

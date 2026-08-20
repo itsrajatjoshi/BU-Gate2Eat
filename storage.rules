@@ -8,8 +8,9 @@ service firebase.storage {
       allow read: if true;
     }
 
-    // Allow uploads and deletes strictly to rajat_shop image folders with max 1MB limit
-    match /shops/rajat_shop/{allPaths=**} {
+    // Allow uploads (< 1MB) and deletes to any shop image folders
+    // Note: Temporary development permission. Will be hardened with Firebase Auth in a future phase.
+    match /shops/{shopId}/{allPaths=**} {
       allow create, update: if request.resource.size < 1 * 1024 * 1024;
       allow delete: if true;
     }

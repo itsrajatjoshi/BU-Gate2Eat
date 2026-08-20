@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
+import '../../models/shop_model.dart';
 import '../cart/cart_provider.dart';
 import '../cart/cart_screen.dart';
 import '../favourites/favourites_screen.dart';
@@ -34,7 +35,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: const [
-          _HomeTabContent(),
+          HomeTabContent(),
           FavouritesScreen(),
           CartScreen(),
           ProfileScreen(),
@@ -95,14 +96,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-class _HomeTabContent extends ConsumerStatefulWidget {
-  const _HomeTabContent();
+class HomeTabContent extends ConsumerStatefulWidget {
+  const HomeTabContent({
+    this.onShopTap,
+    this.floatingActionButton,
+    super.key,
+  });
+
+  final void Function(Shop shop)? onShopTap;
+  final Widget? floatingActionButton;
 
   @override
-  ConsumerState<_HomeTabContent> createState() => _HomeTabContentState();
+  ConsumerState<HomeTabContent> createState() => _HomeTabContentState();
 }
 
-class _HomeTabContentState extends ConsumerState<_HomeTabContent> {
+class _HomeTabContentState extends ConsumerState<HomeTabContent> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedFilter = 'All';
@@ -132,6 +140,7 @@ class _HomeTabContentState extends ConsumerState<_HomeTabContent> {
     final horizontalPadding = screenWidth < 360 ? 10.0 : (screenWidth < 400 ? 14.0 : 16.0);
 
     return Scaffold(
+      floatingActionButton: widget.floatingActionButton,
       appBar: AppBar(
         title: Image.asset(
           'assets/images/yummbu_wordmark.png',
@@ -414,7 +423,13 @@ class _HomeTabContentState extends ConsumerState<_HomeTabContent> {
                       final shop = filteredShops[index];
                       return ShopCard(
                         shop: shop,
-                        onTap: () => context.push('/shop/${shop.id}'),
+                        onTap: () {
+                          if (widget.onShopTap != null) {
+                            widget.onShopTap!(shop);
+                          } else {
+                            context.push('/shop/${shop.id}');
+                          }
+                        },
                       );
                     },
                   ),

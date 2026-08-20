@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' hide Category;
 import '../models/category_model.dart';
 import '../models/menu_item_model.dart';
 import '../models/shop_model.dart';
+import 'image_optimization_service.dart';
 
 /// Service class for all Firestore operations.
 /// Handles shops, categories, menu items, and storage assets.
@@ -116,6 +117,84 @@ class FirestoreService {
       debugPrint(
         '❌ FirestoreService.updateShopOpenOverride -> ERROR: $e\n$stack',
       );
+      rethrow;
+    }
+  }
+
+  /// Creates a new shop document in Firestore with optional banner upload.
+  Future<String> createShop(Shop shop, {Uint8List? bannerBytes}) async {
+    debugPrint('📝 FirestoreService.createShop -> creating shops/${shop.id}');
+    try {
+      String bannerUrl = shop.bannerUrl;
+      if (bannerBytes != null && bannerBytes.isNotEmpty) {
+        final uploadedUrl = await uploadImage(
+          shopId: shop.id,
+          path: 'banner',
+          bytes: bannerBytes,
+          fileName: 'shop_banner.jpg',
+        );
+        if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+          bannerUrl = uploadedUrl;
+        }
+      }
+
+      final shopData = shop.toFirestore();
+      shopData['bannerUrl'] = bannerUrl;
+      shopData['createdAt'] = FieldValue.serverTimestamp();
+      shopData['updatedAt'] = FieldValue.serverTimestamp();
+
+      await _firestore.collection('shops').doc(shop.id).set(shopData);
+      debugPrint('✅ FirestoreService.createShop -> SUCCESS for shops/${shop.id}');
+      return shop.id;
+    } catch (e, stack) {
+      debugPrint('❌ FirestoreService.createShop -> ERROR: $e\n$stack');
+      rethrow;
+    }
+  }
+
+  /// Deep cascade delete for a shop (Menu items + Categories + Storage images + Shop doc).
+  Future<void> deleteShopCascade(String shopId, {String? bannerUrl}) async {
+    debugPrint('📝 FirestoreService.deleteShopCascade -> deleting shops/$shopId');
+    try {
+      // 1. Delete all menu items and their storage photos
+      final menuSnapshot = await _firestore
+          .collection('shops')
+          .doc(shopId)
+          .collection('menuItems')
+          .get();
+
+      for (final doc in menuSnapshot.docs) {
+        final data = doc.data();
+        final imageUrl = data['imageUrl'] as String?;
+        if (imageUrl != null && imageUrl.isNotEmpty) {
+          await deleteStorageImageByUrl(imageUrl);
+        }
+        await doc.reference.delete();
+      }
+      debugPrint('✅ Deleted ${menuSnapshot.docs.length} menu items for shops/$shopId');
+
+      // 2. Delete all categories
+      final catSnapshot = await _firestore
+          .collection('shops')
+          .doc(shopId)
+          .collection('categories')
+          .get();
+
+      for (final doc in catSnapshot.docs) {
+        await doc.reference.delete();
+      }
+      debugPrint('✅ Deleted ${catSnapshot.docs.length} categories for shops/$shopId');
+
+      // 3. Delete shop banner image from storage
+      if (bannerUrl != null && bannerUrl.isNotEmpty) {
+        await deleteStorageImageByUrl(bannerUrl);
+      }
+
+      // 4. Delete the parent shop document
+      await _firestore.collection('shops').doc(shopId).delete();
+      debugPrint('✅ FirestoreService.deleteShopCascade -> SUCCESS for shops/$shopId');
+    } catch (e, stack) {
+      debugPrint('❌ FirestoreService.deleteShopCascade -> ERROR: $e\n$stack');
       rethrow;
     }
   }
