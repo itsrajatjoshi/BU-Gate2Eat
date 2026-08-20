@@ -220,6 +220,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         'closeTime': formattedClose,
         'deliveryNote': _pickupNoteController.text.trim(),
         'contactNumber': _contactController.text.trim(),
+        'orderNumber': _contactController.text.trim(),
         'bannerUrl': bannerUrl,
         'isClosedOverride': _isClosedOverride,
       });

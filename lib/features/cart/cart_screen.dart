@@ -38,21 +38,47 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final localStorage = ref.read(localStorageServiceProvider);
     final shopName = cartState.shopName ?? cartItems.first.shopName;
 
-    // Find the shop's order number
+    // Find the shop's contact/order number from Firestore
     final firestoreService = ref.read(firestoreServiceProvider);
-    final shop = await firestoreService.getShop(cartState.shopId ?? cartItems.first.shopId);
-    if (shop == null) {
+    final shopId = cartState.shopId ?? cartItems.first.shopId;
+    final shop = await firestoreService.getShop(shopId);
+
+    final rawTargetNumber = (shop != null && shop.contactNumber.trim().isNotEmpty)
+        ? shop.contactNumber.trim()
+        : (shop != null && shop.orderNumber.trim().isNotEmpty)
+            ? shop.orderNumber.trim()
+            : '';
+
+    final normalizedNumber =
+        WhatsAppService.normalizePhoneNumber(rawTargetNumber);
+
+    if (normalizedNumber.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Shop not found')),
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline_rounded,
+                    color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'This shop has no valid WhatsApp contact number.',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       }
       return;
     }
-
-    final targetNumber = shop.orderNumber.isNotEmpty
-        ? shop.orderNumber
-        : shop.contactNumber;
 
     // Generate the message
     final message = WhatsAppService.generateOrderMessage(
@@ -65,7 +91,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     // Launch WhatsApp
     final success = await WhatsAppService.launchWhatsApp(
-      whatsappNumber: targetNumber,
+      whatsappNumber: normalizedNumber,
       message: message,
     );
 
