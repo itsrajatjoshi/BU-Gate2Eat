@@ -404,10 +404,19 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                                   sigmaX: blurSigma,
                                   sigmaY: blurSigma,
                                 ),
-                                child: Image.network(
-                                  shop.bannerUrl,
+                                child: CachedNetworkImage(
+                                  imageUrl: shop.bannerUrl,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
+                                  memCacheWidth: 800,
+                                  placeholder: (_, __) => Container(
+                                    color: AppColors.surfaceVariant,
+                                    child: const Icon(
+                                      Icons.store_rounded,
+                                      size: 48,
+                                      color: AppColors.textHint,
+                                    ),
+                                  ),
+                                  errorWidget: (_, __, ___) => Container(
                                     color: AppColors.surfaceVariant,
                                     child: const Icon(
                                       Icons.store_rounded,
@@ -1085,10 +1094,14 @@ class _ShopkeeperMenuItemCard extends ConsumerWidget {
                           top: Radius.circular(18),
                         ),
                         child: displayImageUrl.isNotEmpty
-                            ? Image.network(
-                                displayImageUrl,
+                            ? CachedNetworkImage(
+                                imageUrl: displayImageUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
+                                memCacheWidth: 400,
+                                memCacheHeight: 300,
+                                placeholder: (_, __) =>
+                                    _buildImagePlaceholder(context),
+                                errorWidget: (_, __, ___) =>
                                     _buildImagePlaceholder(context),
                               )
                             : _buildImagePlaceholder(context),

@@ -1,7 +1,6 @@
-// BU Gate2Eat — Main Entry Point
-// Initializes Firebase, SharedPreferences, and launches the app
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,8 +38,15 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     debugPrint('🔥 Firebase Initialized Successfully! App Name: ${firebaseApp.name}');
+
+    if (!kIsWeb) {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+    }
   } catch (e, stack) {
-    debugPrint('❌ Firebase Initialization Error: $e\n$stack');
+    debugPrint('❌ Firebase Initialization Note: $e\n$stack');
   }
 
   // Seed sample shop and menu data if database is empty (non-blocking)

@@ -1,8 +1,6 @@
 // BU Gate2Eat — Services
 // Client-side image optimization (resizing & progressive compression in background isolate)
 
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
@@ -62,7 +60,7 @@ class ImageOptimizationService {
       });
 
       debugPrint(
-        '✅ [IMAGE OPTIMIZE] Complete! Final size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB (Target limit: ${limitKb} KB)',
+        '✅ [IMAGE OPTIMIZE] Complete! Final size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB (Target limit: $limitKb KB)',
       );
 
       return optimized;

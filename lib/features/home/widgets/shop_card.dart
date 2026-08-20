@@ -1,6 +1,7 @@
 // BU Gate2Eat — Shop Card Widget
 // Exact pixel match to reference screenshots (Light & Dark modes)
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/shop_model.dart';
@@ -53,10 +54,13 @@ class ShopCard extends StatelessWidget {
                 AspectRatio(
                   aspectRatio: 2.4 / 1,
                   child: shop.bannerUrl.isNotEmpty
-                      ? Image.network(
-                          shop.bannerUrl,
+                      ? CachedNetworkImage(
+                          imageUrl: shop.bannerUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
+                          memCacheWidth: 800,
+                          placeholder: (context, url) =>
+                              _buildPlaceholder(isDark),
+                          errorWidget: (context, url, error) =>
                               _buildPlaceholder(isDark),
                         )
                       : _buildPlaceholder(isDark),

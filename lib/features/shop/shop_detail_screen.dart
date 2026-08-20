@@ -377,10 +377,19 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                                       sigmaX: blurSigma,
                                       sigmaY: blurSigma,
                                     ),
-                                    child: Image.network(
-                                      shop.bannerUrl,
+                                    child: CachedNetworkImage(
+                                      imageUrl: shop.bannerUrl,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
+                                      memCacheWidth: 800,
+                                      placeholder: (_, __) => Container(
+                                        color: AppColors.surfaceVariant,
+                                        child: const Icon(
+                                          Icons.store_rounded,
+                                          size: 48,
+                                          color: AppColors.textHint,
+                                        ),
+                                      ),
+                                      errorWidget: (_, __, ___) => Container(
                                         color: AppColors.surfaceVariant,
                                         child: const Icon(
                                           Icons.store_rounded,
@@ -1183,10 +1192,14 @@ class _MenuItemCard extends ConsumerWidget {
                           top: Radius.circular(18),
                         ),
                         child: displayImageUrl.isNotEmpty
-                            ? Image.network(
-                                displayImageUrl,
+                            ? CachedNetworkImage(
+                                imageUrl: displayImageUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
+                                memCacheWidth: 400,
+                                memCacheHeight: 300,
+                                placeholder: (_, __) =>
+                                    _buildImagePlaceholder(context),
+                                errorWidget: (_, __, ___) =>
                                     _buildImagePlaceholder(context),
                               )
                             : _buildImagePlaceholder(context),
@@ -1680,10 +1693,19 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                               Positioned.fill(
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(20),
-                                  child: Image.network(
-                                    widget.displayImageUrl,
+                                  child: CachedNetworkImage(
+                                    imageUrl: widget.displayImageUrl,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Container(
+                                    memCacheWidth: 600,
+                                    placeholder: (_, __) => Container(
+                                      color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
+                                      child: const Icon(
+                                        Icons.restaurant_menu_rounded,
+                                        size: 48,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    errorWidget: (_, __, ___) => Container(
                                       color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                                       child: const Icon(
                                         Icons.restaurant_menu_rounded,

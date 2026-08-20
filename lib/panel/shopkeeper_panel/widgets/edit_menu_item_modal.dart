@@ -257,7 +257,6 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     try {
       final firestoreService = ref.read(firestoreServiceProvider);
       String categoryId = widget.item.categoryId;
-      final String oldImageUrl = widget.item.imageUrl;
 
       // If category was changed to custom category via "+ Other"
       if (_isOtherCategory) {

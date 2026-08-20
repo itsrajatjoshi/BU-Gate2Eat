@@ -24,6 +24,15 @@ class SeedDataService {
   static Future<void> seedInitialData() async {
     final firestore = FirebaseFirestore.instance;
 
+    final rajatDoc = await firestore.collection('shops').doc('rajat_shop').get();
+    final nayanDoc = await firestore.collection('shops').doc('nayan_shop').get();
+    final kivishaDoc = await firestore.collection('shops').doc('kivisha_shop').get();
+
+    // If all standard shops already exist in Firestore, skip seeding completely
+    if (rajatDoc.exists && nayanDoc.exists && kivishaDoc.exists) {
+      return;
+    }
+
     // Ensure categories subcollections exist with full metadata
     await _ensureCategories('rajat_shop', [
       {'id': 'momos', 'name': 'Momos', 'imageUrl': 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80', 'sortOrder': 1},
@@ -41,15 +50,6 @@ class SeedDataService {
       {'id': 'snacks', 'name': 'Snacks', 'imageUrl': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80', 'sortOrder': 4},
       {'id': 'thalis', 'name': 'Thali', 'imageUrl': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80', 'sortOrder': 5},
     ]);
-
-    final rajatDoc = await firestore.collection('shops').doc('rajat_shop').get();
-    final nayanDoc = await firestore.collection('shops').doc('nayan_shop').get();
-    final kivishaDoc = await firestore.collection('shops').doc('kivisha_shop').get();
-
-    // If all shops already exist in Firestore, DO NOT overwrite shop/menu details!
-    if (rajatDoc.exists && nayanDoc.exists && kivishaDoc.exists) {
-      return;
-    }
 
     // ─── Shop 1: Rajat Shop (Seed ONLY if doc does not exist) ────────
     if (!rajatDoc.exists) {
