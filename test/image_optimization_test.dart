@@ -13,16 +13,16 @@ void main() {
     late Uint8List largeTestImageBytes;
 
     setUp(() {
-      // Generate a synthetic high-resolution test image (2000 x 2000 pixels)
+      // Generate a synthetic high-resolution test image (2000 x 2000 pixels with variation)
       final testImg = img.Image(width: 2000, height: 2000);
       for (var y = 0; y < 2000; y++) {
         for (var x = 0; x < 2000; x++) {
           testImg.setPixelRgba(
             x,
             y,
-            (x * 255) ~/ 2000,
-            (y * 255) ~/ 2000,
-            128,
+            (x * 73 + y * 151) % 256,
+            (x * 199 + y * 37) % 256,
+            (x * 31 + y * 89) % 256,
             255,
           );
         }
@@ -52,6 +52,8 @@ void main() {
 
     test('CASE 2: Large image (>800KB) for Shop Banner is compressed <= 800 KB',
         () async {
+      expect(largeTestImageBytes.lengthInBytes, greaterThan(800 * 1024));
+
       final optimized = await ImageOptimizationService.optimizeImageBytes(
         originalBytes: largeTestImageBytes,
         type: ImageTargetType.shopBanner,
