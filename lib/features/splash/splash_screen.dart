@@ -1,7 +1,8 @@
 // BU Gate2Eat — Splash Screen
 // Plays the full-screen final splash video (H.264 + AAC) edge-to-edge (BoxFit.fill),
-// then transitions smoothly into the app.
+// then transitions smoothly into the app with robust lifecycle and audio-focus recovery.
 
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,15 +19,18 @@ class SplashScreen extends ConsumerStatefulWidget {
   ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen> {
-  late VideoPlayerController _videoController;
+class _SplashScreenState extends ConsumerState<SplashScreen>
+    with WidgetsBindingObserver {
+  VideoPlayerController? _videoController;
   bool _videoInitialized = false;
   bool _hasStartedPlaying = false;
   bool _navigating = false;
+  Timer? _safetyTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     // Make status bar and navigation bar transparent and edge-to-edge
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -39,45 +43,80 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       ),
     );
 
+    // Safety fallback timer (3.5s) to guarantee splash NEVER freezes indefinitely during phone calls
+    _safetyTimer = Timer(const Duration(milliseconds: 3500), () {
+      if (mounted && !_navigating) {
+        _navigateAway();
+      }
+    });
+
     _initializeVideo();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_navigating) return;
+
+    if (state == AppLifecycleState.resumed) {
+      // If returning to the app from a phone call, incoming call banner, or background:
+      final controller = _videoController;
+      if (controller != null && _videoInitialized) {
+        final value = controller.value;
+        if (value.position >= value.duration - const Duration(milliseconds: 300) ||
+            value.isCompleted) {
+          _navigateAway();
+        } else if (!value.isPlaying) {
+          controller.play().catchError((_) {});
+        }
+      } else {
+        _navigateAway();
+      }
+    }
+  }
+
   Future<void> _initializeVideo() async {
-    _videoController =
+    final controller =
         VideoPlayerController.asset('assets/videos/final_splash.mp4');
+    _videoController = controller;
 
     try {
-      await _videoController.initialize();
+      await controller.initialize();
       if (!mounted) return;
 
       // On Android / mobile: full volume (1.0). On web: muted (0.0) for browser autoplay compliance.
       if (kIsWeb) {
-        await _videoController.setVolume(0.0);
+        await controller.setVolume(0.0);
       } else {
-        await _videoController.setVolume(1.0);
+        try {
+          await controller.setVolume(1.0);
+        } catch (_) {
+          // In case audio focus restriction prevents setting volume, continue gracefully
+        }
       }
-      await _videoController.setLooping(false);
+      await controller.setLooping(false);
 
       // Start playback
-      await _videoController.play();
+      await controller.play();
       if (!mounted) return;
 
       _hasStartedPlaying = true;
       setState(() => _videoInitialized = true);
 
       // Listen for video completion
-      _videoController.addListener(_onVideoUpdate);
+      controller.addListener(_onVideoUpdate);
     } catch (e) {
       debugPrint('Splash video initialization error: $e');
-      await Future<void>.delayed(const Duration(seconds: 3));
-      if (mounted) _navigateAway();
+      if (mounted && !_navigating) {
+        _navigateAway();
+      }
     }
   }
 
   void _onVideoUpdate() {
-    if (_navigating || !_hasStartedPlaying) return;
+    final controller = _videoController;
+    if (_navigating || !_hasStartedPlaying || controller == null) return;
 
-    final value = _videoController.value;
+    final value = controller.value;
     if (!value.isInitialized || value.duration <= Duration.zero) return;
 
     // Ensure video has actually begun playback past the first 300ms
@@ -85,7 +124,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       final isAtEnd =
           value.position >= value.duration - const Duration(milliseconds: 100);
 
-      if (isAtEnd) {
+      if (isAtEnd || value.isCompleted) {
         _navigateAway();
       }
     }
@@ -94,6 +133,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   Future<void> _navigateAway() async {
     if (_navigating || !mounted) return;
     _navigating = true;
+
+    _safetyTimer?.cancel();
 
     // Check force update with timeout (same as original splash logic)
     try {
@@ -136,7 +177,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       if (cleanPhone.endsWith('8078643910') || cleanPhone == '8078643910') {
         context.go(AppRoutes.admin);
       } else if (cleanPhone.endsWith('8000383993') ||
-          cleanPhone == '8000383993') {
+          cleanPhone == '8000383993' ||
+          cleanPhone.endsWith('8295643910') ||
+          cleanPhone == '8295643910') {
         context.go(AppRoutes.shopkeeper);
       } else {
         context.go(AppRoutes.home);
@@ -148,27 +191,30 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   void dispose() {
-    _videoController.removeListener(_onVideoUpdate);
-    _videoController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _safetyTimer?.cancel();
+    _videoController?.removeListener(_onVideoUpdate);
+    _videoController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final controller = _videoController;
     return Scaffold(
       backgroundColor: const Color(0xFFF3EEE2),
       body: SizedBox.expand(
-        child: _videoInitialized
+        child: (_videoInitialized && controller != null)
             ? FittedBox(
                 fit: BoxFit.fitWidth,
                 child: SizedBox(
-                  width: _videoController.value.size.width > 0
-                      ? _videoController.value.size.width
+                  width: controller.value.size.width > 0
+                      ? controller.value.size.width
                       : 1440,
-                  height: _videoController.value.size.height > 0
-                      ? _videoController.value.size.height
+                  height: controller.value.size.height > 0
+                      ? controller.value.size.height
                       : 2560,
-                  child: VideoPlayer(_videoController),
+                  child: VideoPlayer(controller),
                 ),
               )
             : const SizedBox.shrink(),

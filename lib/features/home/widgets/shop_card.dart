@@ -57,7 +57,6 @@ class ShopCard extends StatelessWidget {
                       ? CachedNetworkImage(
                           imageUrl: shop.bannerUrl,
                           fit: BoxFit.cover,
-                          memCacheWidth: 800,
                           placeholder: (context, url) =>
                               _buildPlaceholder(isDark),
                           errorWidget: (context, url, error) =>

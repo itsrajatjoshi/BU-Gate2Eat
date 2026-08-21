@@ -3,32 +3,48 @@
 // Visual styling identical to User App HomeScreen
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers.dart';
 import 'shopkeeper_home_screen.dart';
 import 'shopkeeper_orders_screen.dart';
 import 'shopkeeper_profile_screen.dart';
 
-class ShopkeeperMainShell extends StatefulWidget {
+class ShopkeeperMainShell extends ConsumerStatefulWidget {
   const ShopkeeperMainShell({super.key});
 
   @override
-  State<ShopkeeperMainShell> createState() => _ShopkeeperMainShellState();
+  ConsumerState<ShopkeeperMainShell> createState() =>
+      _ShopkeeperMainShellState();
 }
 
-class _ShopkeeperMainShellState extends State<ShopkeeperMainShell> {
+class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
   int _currentIndex = 0;
-
-  final List<Widget> _screens = const [
-    ShopkeeperHomeScreen(),
-    ShopkeeperOrdersScreen(),
-    ShopkeeperProfileScreen(),
-  ];
 
   @override
   Widget build(BuildContext context) {
+    final localStorage = ref.watch(localStorageServiceProvider);
+    final cleanPhone =
+        localStorage.userPhone.replaceAll(RegExp(r'[^0-9]'), '');
+
+    // Dynamically resolve shop ownership by phone number
+    String shopId = 'rajat_shop';
+    if (cleanPhone.endsWith('8295643910') || cleanPhone == '8295643910') {
+      shopId = 'nayan_shop';
+    } else if (cleanPhone.endsWith('8000383993') ||
+        cleanPhone == '8000383993') {
+      shopId = 'rajat_shop';
+    }
+
+    final screens = [
+      ShopkeeperHomeScreen(shopId: shopId),
+      const ShopkeeperOrdersScreen(),
+      const ShopkeeperProfileScreen(),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: screens,
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,

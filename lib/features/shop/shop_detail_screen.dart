@@ -380,7 +380,6 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                                     child: CachedNetworkImage(
                                       imageUrl: shop.bannerUrl,
                                       fit: BoxFit.cover,
-                                      memCacheWidth: 800,
                                       placeholder: (_, __) => Container(
                                         color: AppColors.surfaceVariant,
                                         child: const Icon(
@@ -1195,8 +1194,6 @@ class _MenuItemCard extends ConsumerWidget {
                             ? CachedNetworkImage(
                                 imageUrl: displayImageUrl,
                                 fit: BoxFit.cover,
-                                memCacheWidth: 400,
-                                memCacheHeight: 300,
                                 placeholder: (_, __) =>
                                     _buildImagePlaceholder(context),
                                 errorWidget: (_, __, ___) =>
@@ -1696,7 +1693,6 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                   child: CachedNetworkImage(
                                     imageUrl: widget.displayImageUrl,
                                     fit: BoxFit.cover,
-                                    memCacheWidth: 600,
                                     placeholder: (_, __) => Container(
                                       color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                                       child: const Icon(

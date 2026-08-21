@@ -48,7 +48,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanPhone.endsWith('8078643910') || cleanPhone == '8078643910') {
       context.go(AppRoutes.admin);
-    } else if (cleanPhone.endsWith('8000383993') || cleanPhone == '8000383993') {
+    } else if (cleanPhone.endsWith('8000383993') ||
+        cleanPhone == '8000383993' ||
+        cleanPhone.endsWith('8295643910') ||
+        cleanPhone == '8295643910') {
       context.go(AppRoutes.shopkeeper);
     } else {
       context.go(AppRoutes.home);

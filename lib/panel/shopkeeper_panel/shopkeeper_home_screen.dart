@@ -407,7 +407,6 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                                 child: CachedNetworkImage(
                                   imageUrl: shop.bannerUrl,
                                   fit: BoxFit.cover,
-                                  memCacheWidth: 800,
                                   placeholder: (_, __) => Container(
                                     color: AppColors.surfaceVariant,
                                     child: const Icon(
@@ -1097,8 +1096,6 @@ class _ShopkeeperMenuItemCard extends ConsumerWidget {
                             ? CachedNetworkImage(
                                 imageUrl: displayImageUrl,
                                 fit: BoxFit.cover,
-                                memCacheWidth: 400,
-                                memCacheHeight: 300,
                                 placeholder: (_, __) =>
                                     _buildImagePlaceholder(context),
                                 errorWidget: (_, __, ___) =>
