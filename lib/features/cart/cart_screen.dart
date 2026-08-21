@@ -16,6 +16,7 @@ import '../../models/menu_item_model.dart';
 import '../../models/order_model.dart';
 import '../../services/whatsapp_service.dart';
 import 'cart_provider.dart';
+import 'widgets/minimum_order_progress_bar.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
@@ -40,6 +41,43 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     final shopName = cartState.shopName ?? cartItems.first.shopName;
     final grandTotal = cartState.grandTotal;
+    final shopId = cartState.shopId ?? cartItems.first.shopId;
+
+    // Check Minimum Order Amount
+    final minOrderAmount = ref
+        .read(shopMinimumOrderProvider.notifier)
+        .getMinimumOrderForShop(shopId);
+    if (minOrderAmount > 0 && grandTotal < minOrderAmount) {
+      final diff = (minOrderAmount - grandTotal).ceil();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Minimum order amount for $shopName is ₹$minOrderAmount. Add ₹$diff more to order.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     // 1. Show Confirmation Dialog
     final confirmed = await showDialog<bool>(
@@ -78,7 +116,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     final localStorage = ref.read(localStorageServiceProvider);
     final firestoreService = ref.read(firestoreServiceProvider);
-    final shopId = cartState.shopId ?? cartItems.first.shopId;
     final shop = await firestoreService.getShop(shopId);
     final deliveryNote = (shop != null && shop.deliveryNote.trim().isNotEmpty)
         ? shop.deliveryNote.trim()
@@ -134,12 +171,50 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final cartItems = cartState.items;
     if (cartItems.isEmpty) return;
 
-    final localStorage = ref.read(localStorageServiceProvider);
     final shopName = cartState.shopName ?? cartItems.first.shopName;
+    final grandTotal = cartState.grandTotal;
+    final shopId = cartState.shopId ?? cartItems.first.shopId;
+
+    // Check Minimum Order Amount
+    final minOrderAmount = ref
+        .read(shopMinimumOrderProvider.notifier)
+        .getMinimumOrderForShop(shopId);
+    if (minOrderAmount > 0 && grandTotal < minOrderAmount) {
+      final diff = (minOrderAmount - grandTotal).ceil();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Minimum order amount for $shopName is ₹$minOrderAmount. Add ₹$diff more to order.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final localStorage = ref.read(localStorageServiceProvider);
 
     // Find the shop's contact/order number from Firestore
     final firestoreService = ref.read(firestoreServiceProvider);
-    final shopId = cartState.shopId ?? cartItems.first.shopId;
     final shop = await firestoreService.getShop(shopId);
 
     final rawTargetNumber = (shop != null && shop.contactNumber.trim().isNotEmpty)
@@ -468,6 +543,27 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // 0. Minimum Order Progress Indicator (if minOrderAmount > 0)
+                    MinimumOrderProgressBar(
+                      shopId: shopId,
+                      currentTotal: grandTotal,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final minOrderMap =
+                            ref.watch(shopMinimumOrderProvider);
+                        final minOrderAmount = minOrderMap[shopId] ?? 0;
+                        if (minOrderAmount > 0) {
+                          return const SizedBox(height: 12);
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+
                     // Bill Rows
                     _BillRow(label: 'Subtotal', value: '₹${grandTotal.toStringAsFixed(0)}'),
                     const SizedBox(height: 8),

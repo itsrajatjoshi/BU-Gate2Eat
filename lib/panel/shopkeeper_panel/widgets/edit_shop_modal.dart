@@ -38,6 +38,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
   late TextEditingController _closeTimeController;
   late TextEditingController _pickupNoteController;
   late TextEditingController _contactController;
+  late TextEditingController _minOrderController;
   late bool _isClosedOverride;
   late ShopOrderMethod _selectedOrderMethod;
   bool _isLoading = false;
@@ -61,6 +62,12 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         TextEditingController(text: widget.shop.deliveryNote);
     _contactController =
         TextEditingController(text: widget.shop.contactNumber);
+    final currentMinOrder = ref
+        .read(shopMinimumOrderProvider.notifier)
+        .getMinimumOrderForShop(widget.shop.id);
+    _minOrderController = TextEditingController(
+      text: currentMinOrder > 0 ? currentMinOrder.toString() : '0',
+    );
     _isClosedOverride = widget.shop.isClosedOverride;
     _selectedOrderMethod = ref
         .read(shopOrderMethodProvider.notifier)
@@ -75,6 +82,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     _closeTimeController.dispose();
     _pickupNoteController.dispose();
     _contactController.dispose();
+    _minOrderController.dispose();
     super.dispose();
   }
 
@@ -231,10 +239,15 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       debugPrint('[BANNER] Firestore update completed');
       debugPrint('[BANNER] SAVE SUCCESS');
 
-      // Update shop order method in session state provider
+      // Update shop order method and minimum order in session state provider
       ref
           .read(shopOrderMethodProvider.notifier)
           .setMethodForShop(widget.shop.id, _selectedOrderMethod);
+
+      final minOrderVal = int.tryParse(_minOrderController.text.trim()) ?? 0;
+      ref
+          .read(shopMinimumOrderProvider.notifier)
+          .setMinimumOrderForShop(widget.shop.id, minOrderVal.clamp(0, 10000));
 
       // Invalidate provider so home screen and shop detail refresh immediately
       ref.invalidate(shopsProvider);
@@ -817,7 +830,30 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             ),
             const SizedBox(height: 14),
 
-            // ─── 8. Shop Operational Status Toggle ───────────────────────
+            // ─── 8. Minimum Order Amount Setting ─────────────────────────
+            Text(
+              'Minimum Order Amount (₹)',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _minOrderController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                hintText: '0 (No minimum)',
+                prefixIcon: Icon(Icons.currency_rupee_rounded),
+                helperText: '₹0 means customers can order any amount',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 9. Shop Operational Status Toggle ───────────────────────
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(

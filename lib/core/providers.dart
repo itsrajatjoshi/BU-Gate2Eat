@@ -235,4 +235,23 @@ class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
   }
 }
 
+/// Provider for managing shop minimum order amount in local/session state (shopId -> int).
+/// Defaults to 0 (no minimum).
+final shopMinimumOrderProvider =
+    StateNotifierProvider<ShopMinimumOrderNotifier, Map<String, int>>((ref) {
+  return ShopMinimumOrderNotifier();
+});
+
+class ShopMinimumOrderNotifier extends StateNotifier<Map<String, int>> {
+  ShopMinimumOrderNotifier() : super({});
+
+  int getMinimumOrderForShop(String shopId) {
+    return state[shopId] ?? 0;
+  }
+
+  void setMinimumOrderForShop(String shopId, int minAmount) {
+    state = {...state, shopId: minAmount};
+  }
+}
+
 

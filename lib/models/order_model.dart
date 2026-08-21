@@ -30,10 +30,10 @@ class AppOrder {
     required this.customerPhone,
     required this.items,
     required this.totalAmount,
+    required this.createdAt,
     this.specialInstructions = '',
     this.deliveryNote = 'Bennett University',
     this.status = 'placed',
-    required this.createdAt,
   });
 
   final String orderId;

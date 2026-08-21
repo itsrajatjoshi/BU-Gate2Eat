@@ -18,6 +18,7 @@ import '../../models/menu_item_model.dart';
 import '../../models/shop_model.dart';
 import '../cart/cart_dialog_helper.dart';
 import '../cart/cart_provider.dart';
+import '../cart/widgets/minimum_order_progress_bar.dart';
 
 /// Provider that fetches shop details by ID, reusing cached shops list to eliminate redundant Firestore reads.
 final shopDetailProvider =
@@ -280,20 +281,108 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
     // Count items in cart for badge (sum of quantities)
     final cartItemCount = cartState.totalItemCount;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCurrentShopInCart =
+        cartState.shopId == widget.shopId && cartItemCount > 0;
 
     return Scaffold(
-        // Cart FAB
-        floatingActionButton: cartItemCount > 0
-            ? FloatingActionButton.extended(
-                onPressed: () => context.push(AppRoutes.cart),
-                backgroundColor: AppColors.primary,
-                icon: const Icon(Icons.shopping_cart_rounded, color: Colors.white),
-                label: Text(
-                  '$cartItemCount item${cartItemCount > 1 ? 's' : ''} in cart',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      bottomNavigationBar: isCurrentShopInCart
+          ? Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(18)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 1. Live Minimum Order Progress Indicator (if minOrderAmount > 0)
+                    MinimumOrderProgressBar(
+                      shopId: widget.shopId,
+                      currentTotal: cartState.grandTotal,
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final minOrderMap =
+                            ref.watch(shopMinimumOrderProvider);
+                        final minOrderAmount = minOrderMap[widget.shopId] ?? 0;
+                        if (minOrderAmount > 0) {
+                          return const SizedBox(height: 8);
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                    // 2. View Cart Action Button
+                    InkWell(
+                      onTap: () => context.push(AppRoutes.cart),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.shopping_bag_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '$cartItemCount item${cartItemCount > 1 ? 's' : ''}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  'View Cart • ₹${cartState.grandTotal.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              )
-            : null,
+              ),
+            )
+          : null,
       body: shopAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Scaffold(

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
+import '../../models/order_model.dart';
 import '../../models/shop_model.dart';
 import '../cart/cart_provider.dart';
 import '../cart/cart_screen.dart';
@@ -135,12 +136,41 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
   @override
   Widget build(BuildContext context) {
     final shopsAsync = ref.watch(shopsProvider);
+    final dummyOrders = ref.watch(dummyOrdersProvider);
+    final activeOrders = dummyOrders
+        .where((o) => o.status == 'placed' || o.status == 'accepted')
+        .toList();
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final horizontalPadding = screenWidth < 360 ? 10.0 : (screenWidth < 400 ? 14.0 : 16.0);
 
     return Scaffold(
-      floatingActionButton: widget.floatingActionButton,
+      floatingActionButton: widget.floatingActionButton ??
+          (activeOrders.isNotEmpty
+              ? FloatingActionButton.extended(
+                  onPressed: () {
+                    final order = activeOrders.first;
+                    context.push('/order/${order.orderId}', extra: order);
+                  },
+                  backgroundColor: AppColors.primary,
+                  elevation: 4,
+                  icon: const Icon(
+                    Icons.delivery_dining_rounded,
+                    color: Colors.white,
+                  ),
+                  label: Text(
+                    activeOrders.length > 1
+                        ? 'Track Your Orders (${activeOrders.length})'
+                        : 'Track Your Order',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                )
+              : null),
       appBar: AppBar(
         title: Image.asset(
           'assets/images/yummbu_wordmark.png',
