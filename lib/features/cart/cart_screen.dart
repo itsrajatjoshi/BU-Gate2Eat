@@ -6,6 +6,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
@@ -30,7 +31,37 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     super.dispose();
   }
 
-  Future<void> _placeOrder() async {
+  Future<void> _placeAppOrder() async {
+    final cartState = ref.read(cartProvider);
+    if (cartState.items.isEmpty) return;
+
+    // Temporary placeholder action for Part 1.1 dummy testing
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.info_outline_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'In-app ordering will be available soon.',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _placeWhatsAppOrder() async {
     final cartState = ref.read(cartProvider);
     final cartItems = cartState.items;
     if (cartItems.isEmpty) return;
@@ -402,37 +433,138 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // Place Order Action Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _placeOrder,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary, // Rich Food Orange
-                          foregroundColor: Colors.white,
-                          elevation: 2,
-                          shadowColor: AppColors.primary.withValues(alpha: 0.35),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.send_rounded, color: Colors.white, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Place Order',
-                              style: TextStyle(
-                                fontSize: 16.5,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.2,
+                    // Place Order Action Button(s) based on Shop's Order Method
+                    Builder(
+                      builder: (context) {
+                        final orderMethodMap = ref.watch(shopOrderMethodProvider);
+                        final orderMethod = orderMethodMap[shopId] ?? ShopOrderMethod.whatsapp;
+
+                        if (orderMethod == ShopOrderMethod.both) {
+                          return Row(
+                            children: [
+                              // 1. In-App Place Order Button (Dummy for Part 1.1)
+                              Expanded(
+                                child: SizedBox(
+                                  height: 50,
+                                  child: ElevatedButton(
+                                    onPressed: _placeAppOrder,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.white,
+                                      elevation: 2,
+                                      shadowColor: AppColors.primary.withValues(alpha: 0.35),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    ),
+                                    child: const Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.send_rounded, color: Colors.white, size: 17),
+                                        SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            'Place Order',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.2,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              // 2. WhatsApp Order Button (Existing WhatsApp Flow)
+                              Expanded(
+                                child: SizedBox(
+                                  height: 50,
+                                  child: ElevatedButton(
+                                    onPressed: _placeWhatsAppOrder,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF25D366),
+                                      foregroundColor: Colors.white,
+                                      elevation: 2,
+                                      shadowColor: const Color(0xFF25D366).withValues(alpha: 0.35),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        SvgPicture.asset(
+                                          'assets/icons/whatsapp.svg',
+                                          width: 19,
+                                          height: 19,
+                                          colorFilter: const ColorFilter.mode(
+                                            Colors.white,
+                                            BlendMode.srcIn,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        const Flexible(
+                                          child: Text(
+                                            'Order via WhatsApp',
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.2,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+
+                        return SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: orderMethod == ShopOrderMethod.app
+                                ? _placeAppOrder
+                                : _placeWhatsAppOrder,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary, // Rich Food Orange
+                              foregroundColor: Colors.white,
+                              elevation: 2,
+                              shadowColor: AppColors.primary.withValues(alpha: 0.35),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Place Order',
+                                  style: TextStyle(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

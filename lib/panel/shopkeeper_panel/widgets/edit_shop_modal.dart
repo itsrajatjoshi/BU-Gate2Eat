@@ -39,6 +39,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
   late TextEditingController _pickupNoteController;
   late TextEditingController _contactController;
   late bool _isClosedOverride;
+  late ShopOrderMethod _selectedOrderMethod;
   bool _isLoading = false;
   bool _isOptimizingImage = false;
 
@@ -61,6 +62,9 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     _contactController =
         TextEditingController(text: widget.shop.contactNumber);
     _isClosedOverride = widget.shop.isClosedOverride;
+    _selectedOrderMethod = ref
+        .read(shopOrderMethodProvider.notifier)
+        .getMethodForShop(widget.shop.id);
   }
 
   @override
@@ -226,6 +230,11 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       });
       debugPrint('[BANNER] Firestore update completed');
       debugPrint('[BANNER] SAVE SUCCESS');
+
+      // Update shop order method in session state provider
+      ref
+          .read(shopOrderMethodProvider.notifier)
+          .setMethodForShop(widget.shop.id, _selectedOrderMethod);
 
       // Invalidate provider so home screen and shop detail refresh immediately
       ref.invalidate(shopsProvider);
@@ -750,7 +759,65 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             ),
             const SizedBox(height: 14),
 
-            // ─── 7. Shop Operational Status Toggle ───────────────────────
+            // ─── 7. Order Method Setting ─────────────────────────────────
+            Text(
+              'Order Method',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: isDark
+                    ? AppColors.darkTextSecondary
+                    : AppColors.textSecondary,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.darkSurfaceVariant
+                    : AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? AppColors.darkDivider : AppColors.divider,
+                ),
+              ),
+              child: Column(
+                children: [
+                  _buildOrderMethodOption(
+                    title: 'WhatsApp Only',
+                    subtitle: 'Customers order via WhatsApp chat',
+                    value: ShopOrderMethod.whatsapp,
+                    isDark: isDark,
+                  ),
+                  Divider(
+                    height: 1,
+                    thickness: 0.8,
+                    color: isDark ? AppColors.darkDivider : AppColors.divider,
+                  ),
+                  _buildOrderMethodOption(
+                    title: 'YummBU Only',
+                    subtitle: 'In-app ordering directly through YummBU',
+                    value: ShopOrderMethod.app,
+                    isDark: isDark,
+                  ),
+                  Divider(
+                    height: 1,
+                    thickness: 0.8,
+                    color: isDark ? AppColors.darkDivider : AppColors.divider,
+                  ),
+                  _buildOrderMethodOption(
+                    title: 'YummBU + WhatsApp',
+                    subtitle: 'Customers can choose either In-App or WhatsApp',
+                    value: ShopOrderMethod.both,
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 8. Shop Operational Status Toggle ───────────────────────
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
@@ -856,6 +923,74 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderMethodOption({
+    required String title,
+    required String subtitle,
+    required ShopOrderMethod value,
+    required bool isDark,
+  }) {
+    final isSelected = _selectedOrderMethod == value;
+    return InkWell(
+      onTap: _isLoading
+          ? null
+          : () => setState(() => _selectedOrderMethod = value),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Radio<ShopOrderMethod>(
+              value: value,
+              groupValue: _selectedOrderMethod,
+              activeColor: AppColors.primary,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              onChanged: _isLoading
+                  ? null
+                  : (val) {
+                      if (val != null) {
+                        setState(() => _selectedOrderMethod = val);
+                      }
+                    },
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w600,
+                      fontSize: 13.5,
+                      color: isSelected
+                          ? (isDark
+                              ? AppColors.primary
+                              : AppColors.primaryDark)
+                          : (isDark
+                              ? AppColors.darkTextPrimary
+                              : AppColors.textPrimary),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.textHint,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

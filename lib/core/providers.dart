@@ -177,4 +177,30 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
   return results;
 });
 
+/// Represents the supported ordering methods for a shop.
+enum ShopOrderMethod {
+  whatsapp,
+  app,
+  both,
+}
+
+/// Provider for managing shop order method in local state (shopId -> ShopOrderMethod).
+/// Defaults to 'whatsapp' if unset.
+final shopOrderMethodProvider =
+    StateNotifierProvider<ShopOrderMethodNotifier, Map<String, ShopOrderMethod>>((ref) {
+  return ShopOrderMethodNotifier();
+});
+
+class ShopOrderMethodNotifier extends StateNotifier<Map<String, ShopOrderMethod>> {
+  ShopOrderMethodNotifier() : super({});
+
+  ShopOrderMethod getMethodForShop(String shopId) {
+    return state[shopId] ?? ShopOrderMethod.whatsapp;
+  }
+
+  void setMethodForShop(String shopId, ShopOrderMethod method) {
+    state = {...state, shopId: method};
+  }
+}
+
 
