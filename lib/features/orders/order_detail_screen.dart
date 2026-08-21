@@ -1,0 +1,692 @@
+// BU Gate2Eat — Features
+// Order Detail Screen (Customer In-App Order Status & Item Overview)
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/constants/app_constants.dart';
+import '../../core/providers.dart';
+import '../../models/order_model.dart';
+
+class OrderDetailScreen extends ConsumerWidget {
+  const OrderDetailScreen({
+    required this.orderId,
+    this.initialOrder,
+    super.key,
+  });
+
+  final String orderId;
+  final AppOrder? initialOrder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dummyOrders = ref.watch(dummyOrdersProvider);
+
+    // Resolve order from local dummy provider or initialOrder fallback
+    AppOrder? order;
+    try {
+      order = dummyOrders.firstWhere((o) => o.orderId == orderId);
+    } catch (_) {
+      order = initialOrder;
+    }
+
+    if (order == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Order Details'),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              const Text(
+                'Order not found',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () => context.pop(),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final isCancelled = order.status == 'cancelled';
+    final isDelivered = order.status == 'delivered';
+    final isAccepted = order.status == 'accepted';
+    final isPlaced = order.status == 'placed';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Order Details',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              order.orderId,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.pop(),
+        ),
+      ),
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ─── 1. Status Stepper Card ─────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        order.shopName,
+                        style: const TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      _buildStatusBadge(order.status, isDark),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (isCancelled)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.cancel_outlined, color: AppColors.error, size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'This order was cancelled.',
+                            style: TextStyle(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    _buildStatusStepper(
+                      isPlaced: isPlaced,
+                      isAccepted: isAccepted,
+                      isDelivered: isDelivered,
+                      isDark: isDark,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ─── 2. Ordered Items List ──────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Items (${order.totalItemCount})',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1, thickness: 0.8),
+                  const SizedBox(height: 12),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: order.items.length,
+                    separatorBuilder: (_, __) => const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(height: 1, thickness: 0.5),
+                    ),
+                    itemBuilder: (context, index) {
+                      final item = order!.items[index];
+                      return Row(
+                        children: [
+                          // Item Thumbnail
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: item.imageUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: item.imageUrl,
+                                    width: 44,
+                                    height: 44,
+                                    fit: BoxFit.cover,
+                                    errorWidget: (_, __, ___) => Container(
+                                      width: 44,
+                                      height: 44,
+                                      color: isDark
+                                          ? AppColors.darkSurfaceVariant
+                                          : AppColors.surfaceVariant,
+                                      child: const Icon(
+                                        Icons.fastfood_rounded,
+                                        size: 20,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 44,
+                                    height: 44,
+                                    color: isDark
+                                        ? AppColors.darkSurfaceVariant
+                                        : AppColors.surfaceVariant,
+                                    child: const Icon(
+                                      Icons.fastfood_rounded,
+                                      size: 20,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+
+                          // Name & Quantity
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Qty: ${item.quantity} × ₹${item.price}',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: isDark
+                                        ? AppColors.darkTextSecondary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Total
+                          Text(
+                            '₹${item.totalPrice.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14.5,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ─── 3. Special Instructions (if any) ───────────────────────
+            if (order.specialInstructions.trim().isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkDivider : AppColors.divider,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.note_alt_outlined,
+                          size: 16,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Special Instructions',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      order.specialInstructions.trim(),
+                      style: const TextStyle(fontSize: 13.5, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // ─── 4. Delivery Pickup Location Card ───────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark ? AppColors.darkDivider : AppColors.divider,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.location_on_rounded,
+                      size: 20,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Delivery Location',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          order.deliveryNote.isNotEmpty
+                              ? order.deliveryNote
+                              : 'Bennett University • Gate No. 2',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ─── 5. Bill Summary Card ───────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Payment Summary',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildBillRow('Subtotal', order.formattedTotal, isDark),
+                  const SizedBox(height: 6),
+                  _buildBillRow('Tax (5%)', 'Included', isDark),
+                  const SizedBox(height: 6),
+                  _buildBillRow('Delivery / Service', 'Free (Gate 2)', isDark),
+                  const SizedBox(height: 10),
+                  const Divider(height: 1, thickness: 0.8),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total Payable',
+                        style: TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        order.formattedTotal,
+                        style: const TextStyle(
+                          fontSize: 18.5,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Payment: Cash / UPI at delivery',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // ─── 6. Cancel Order Button (Available only when placed) ────
+            if (isPlaced) ...[
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: () => _confirmCancelDialog(context, ref, order!.orderId),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error, width: 1.2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.close_rounded, size: 18),
+                      SizedBox(width: 6),
+                      Text(
+                        'Cancel Order',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _buildStatusBadge(String status, bool isDark) {
+    Color color = AppColors.warning;
+    String label = 'Placed 🟡';
+
+    if (status == 'accepted') {
+      color = AppColors.success;
+      label = 'Accepted 🟢';
+    } else if (status == 'delivered') {
+      color = AppColors.success;
+      label = 'Delivered ✅';
+    } else if (status == 'cancelled') {
+      color = AppColors.error;
+      label = 'Cancelled ❌';
+    } else if (status == 'rejected') {
+      color = AppColors.error;
+      label = 'Rejected ❌';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 12.5,
+        ),
+      ),
+    );
+  }
+
+  static Widget _buildStatusStepper({
+    required bool isPlaced,
+    required bool isAccepted,
+    required bool isDelivered,
+    required bool isDark,
+  }) {
+    return Row(
+      children: [
+        _buildStepNode(
+          title: 'Placed',
+          isReached: true,
+          isDark: isDark,
+        ),
+        _buildStepLine(isDone: isAccepted || isDelivered, isDark: isDark),
+        _buildStepNode(
+          title: 'Accepted',
+          isReached: isAccepted || isDelivered,
+          isDark: isDark,
+        ),
+        _buildStepLine(isDone: isDelivered, isDark: isDark),
+        _buildStepNode(
+          title: 'Delivered',
+          isReached: isDelivered,
+          isDark: isDark,
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildStepNode({
+    required String title,
+    required bool isReached,
+    required bool isDark,
+  }) {
+    return Column(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: isReached
+                ? AppColors.success
+                : (isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isReached
+                  ? AppColors.success
+                  : (isDark ? AppColors.darkDivider : AppColors.divider),
+              width: 1.5,
+            ),
+          ),
+          child: Center(
+            child: isReached
+                ? const Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  )
+                : Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkTextHint : AppColors.textHint,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: isReached ? FontWeight.w700 : FontWeight.w500,
+            color: isReached
+                ? AppColors.success
+                : (isDark ? AppColors.darkTextSecondary : AppColors.textHint),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildStepLine({required bool isDone, required bool isDark}) {
+    return Expanded(
+      child: Container(
+        height: 2.5,
+        margin: const EdgeInsets.only(bottom: 20),
+        color: isDone
+            ? AppColors.success
+            : (isDark ? AppColors.darkDivider : AppColors.divider),
+      ),
+    );
+  }
+
+  static Widget _buildBillRow(String label, String value, bool isDark) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmCancelDialog(BuildContext context, WidgetRef ref, String orderId) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Cancel Order?',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Are you sure you want to cancel this order? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('No, Keep Order'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(dummyOrdersProvider.notifier).cancelOrder(orderId);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Order has been cancelled.'),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+}

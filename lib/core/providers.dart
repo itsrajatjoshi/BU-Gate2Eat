@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/category_model.dart';
 import '../models/menu_item_model.dart';
+import '../models/order_model.dart';
 import '../models/shop_model.dart';
 import '../services/firestore_service.dart';
 import '../services/force_update_service.dart';
@@ -200,6 +201,37 @@ class ShopOrderMethodNotifier extends StateNotifier<Map<String, ShopOrderMethod>
 
   void setMethodForShop(String shopId, ShopOrderMethod method) {
     state = {...state, shopId: method};
+  }
+}
+
+/// Local/session state provider for dummy customer orders (Part 1.2 & Part 1.3)
+final dummyOrdersProvider =
+    StateNotifierProvider<DummyOrdersNotifier, List<AppOrder>>((ref) {
+  return DummyOrdersNotifier();
+});
+
+class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
+  DummyOrdersNotifier() : super([]);
+
+  void addOrder(AppOrder order) {
+    state = [order, ...state];
+  }
+
+  void cancelOrder(String orderId) {
+    state = state.map((order) {
+      if (order.orderId == orderId) {
+        return order.copyWith(status: 'cancelled');
+      }
+      return order;
+    }).toList();
+  }
+
+  AppOrder? getOrder(String orderId) {
+    try {
+      return state.firstWhere((o) => o.orderId == orderId);
+    } catch (_) {
+      return null;
+    }
   }
 }
 

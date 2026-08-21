@@ -7,11 +7,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/cart_item_model.dart';
 import '../../models/menu_item_model.dart';
+import '../../models/order_model.dart';
 import '../../services/whatsapp_service.dart';
 import 'cart_provider.dart';
 
@@ -33,30 +35,96 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   Future<void> _placeAppOrder() async {
     final cartState = ref.read(cartProvider);
-    if (cartState.items.isEmpty) return;
+    final cartItems = cartState.items;
+    if (cartItems.isEmpty) return;
 
-    // Temporary placeholder action for Part 1.1 dummy testing
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.info_outline_rounded, color: Colors.white, size: 20),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'In-app ordering will be available soon.',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppColors.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+    final shopName = cartState.shopName ?? cartItems.first.shopName;
+    final grandTotal = cartState.grandTotal;
+
+    // 1. Show Confirmation Dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Confirm Order',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        content: Text(
+          'Confirm order from $shopName for ₹${grandTotal.toStringAsFixed(0)}?',
+          style: const TextStyle(fontSize: 14.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final localStorage = ref.read(localStorageServiceProvider);
+    final firestoreService = ref.read(firestoreServiceProvider);
+    final shopId = cartState.shopId ?? cartItems.first.shopId;
+    final shop = await firestoreService.getShop(shopId);
+    final deliveryNote = (shop != null && shop.deliveryNote.trim().isNotEmpty)
+        ? shop.deliveryNote.trim()
+        : 'Bennett University • Gate No. 2';
+
+    final now = DateTime.now();
+    final timeSuffix =
+        '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
+    final dateSuffix =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final orderId = 'YB-$dateSuffix-$timeSuffix';
+
+    // 2. Create local dummy order
+    final dummyOrder = AppOrder(
+      orderId: orderId,
+      shopId: shopId,
+      shopName: shopName,
+      customerName: localStorage.userName,
+      customerPhone: localStorage.userPhone,
+      items: cartItems
+          .map((ci) => OrderItem(
+                menuItemId: ci.menuItem.id,
+                name: ci.menuItem.name,
+                price: ci.menuItem.price,
+                quantity: ci.quantity,
+                imageUrl: ci.menuItem.imageUrl,
+              ))
+          .toList(),
+      totalAmount: grandTotal,
+      specialInstructions: _specialInstructionsController.text.trim(),
+      deliveryNote: deliveryNote,
+      status: 'placed',
+      createdAt: now,
+    );
+
+    // Save in session dummy orders
+    ref.read(dummyOrdersProvider.notifier).addOrder(dummyOrder);
+
+    // 3. Clear Cart immediately
+    ref.read(cartProvider.notifier).clearCart();
+
+    // 4. Navigate to Order Detail Screen
+    if (mounted) {
+      context.push(
+        '/order/$orderId',
+        extra: dummyOrder,
       );
     }
   }

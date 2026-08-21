@@ -7,9 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../features/cart/cart_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/orders/order_detail_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shop/shop_detail_screen.dart';
 import '../features/splash/splash_screen.dart';
+import '../models/order_model.dart';
 import '../panel/admin_panel/admin_main_shell.dart';
 import '../panel/admin_panel/admin_shop_detail_screen.dart';
 import '../panel/shopkeeper_panel/shopkeeper_main_shell.dart';
@@ -23,6 +25,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String shopDetail = '/shop/:shopId';
   static const String cart = '/cart';
+  static const String orderDetail = '/order/:orderId';
   static const String settings = '/settings';
   static const String shopkeeper = '/shopkeeper';
   static const String admin = '/admin';
@@ -98,6 +101,14 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.cart,
       builder: (context, state) => const CartScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.orderDetail,
+      builder: (context, state) {
+        final orderId = state.pathParameters['orderId'] ?? '';
+        final extraOrder = state.extra as AppOrder?;
+        return OrderDetailScreen(orderId: orderId, initialOrder: extraOrder);
+      },
     ),
     GoRoute(
       path: AppRoutes.settings,
