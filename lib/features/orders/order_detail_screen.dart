@@ -385,107 +385,101 @@ class OrderDetailScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-
-            // ─── 5. Bill Summary Card ───────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ],
+        ),
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+              blurRadius: 14,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Bill Rows
+              _buildBillRow('Subtotal', order.formattedTotal, isDark),
+              const SizedBox(height: 6),
+              _buildBillRow('Tax (5%)', 'Included', isDark),
+              const SizedBox(height: 6),
+              _buildBillRow('Delivery / Service', 'Free (Gate 2)', isDark),
+              const SizedBox(height: 8),
+              const Divider(height: 1, thickness: 0.8),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Payment Summary',
+                    'Total Payable',
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _buildBillRow('Subtotal', order.formattedTotal, isDark),
-                  const SizedBox(height: 6),
-                  _buildBillRow('Tax (5%)', 'Included', isDark),
-                  const SizedBox(height: 6),
-                  _buildBillRow('Delivery / Service', 'Free (Gate 2)', isDark),
-                  const SizedBox(height: 10),
-                  const Divider(height: 1, thickness: 0.8),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total Payable',
-                        style: TextStyle(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        order.formattedTotal,
-                        style: const TextStyle(
-                          fontSize: 18.5,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
                   Text(
-                    'Payment: Cash / UPI at delivery',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                    order.formattedTotal,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.primary,
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-
-            // ─── 6. Cancel Order Button (Available only when placed) ────
-            if (isPlaced) ...[
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton(
-                  onPressed: () => _confirmCancelDialog(context, ref, order!.orderId),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.error,
-                    side: const BorderSide(color: AppColors.error, width: 1.2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.close_rounded, size: 18),
-                      SizedBox(width: 6),
-                      Text(
-                        'Cancel Order',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ],
+              const SizedBox(height: 2),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Payment: Cash / UPI at delivery',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
                   ),
                 ),
               ),
+              if (isPlaced) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton(
+                    onPressed: () =>
+                        _confirmCancelDialog(context, ref, order!.orderId),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.error, width: 1.2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.close_rounded, size: 18),
+                        SizedBox(width: 6),
+                        Text(
+                          'Cancel Order',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
