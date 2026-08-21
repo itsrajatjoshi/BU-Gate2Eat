@@ -36,8 +36,8 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
     }
 
     final screens = [
-      ShopkeeperHomeScreen(shopId: shopId),
       const ShopkeeperOrdersScreen(),
+      ShopkeeperHomeScreen(shopId: shopId),
       const ShopkeeperProfileScreen(),
     ];
 
@@ -51,13 +51,13 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
             icon: Icon(Icons.receipt_long_outlined),
             activeIcon: Icon(Icons.receipt_long_rounded),
             label: 'Orders',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_rounded),
+            label: 'Home',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline_rounded),
