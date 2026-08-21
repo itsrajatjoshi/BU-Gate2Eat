@@ -12,7 +12,7 @@ void main() {
   group('BU Gate2Eat — Image Optimization Pipeline', () {
     late Uint8List largeTestImageBytes;
 
-    setUp(() {
+    setUpAll(() {
       // Generate a synthetic high-resolution test image (2000 x 2000 pixels with variation)
       final testImg = img.Image(width: 2000, height: 2000);
       for (var y = 0; y < 2000; y++) {

@@ -3,7 +3,6 @@
 
 import 'package:bugate2eat_app/core/providers.dart';
 import 'package:bugate2eat_app/features/cart/cart_provider.dart';
-import 'package:bugate2eat_app/models/cart_item_model.dart';
 import 'package:bugate2eat_app/models/menu_item_model.dart';
 import 'package:bugate2eat_app/models/shop_model.dart';
 import 'package:bugate2eat_app/services/local_storage_service.dart';
