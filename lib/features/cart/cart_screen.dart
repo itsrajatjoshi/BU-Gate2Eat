@@ -272,7 +272,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       message: message,
     );
 
-    if (!success && mounted) {
+    if (success) {
+      ref.read(cartProvider.notifier).clearCart();
+    } else if (mounted) {
       showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(

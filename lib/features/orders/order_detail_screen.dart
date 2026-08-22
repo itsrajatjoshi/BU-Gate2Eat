@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/order_model.dart';
+import 'reorder_helper.dart';
 
 class OrderDetailScreen extends ConsumerWidget {
   const OrderDetailScreen({
@@ -510,6 +511,41 @@ class OrderDetailScreen extends ConsumerWidget {
                         SizedBox(width: 6),
                         Text(
                           'Cancel Order',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else if (isDelivered) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => ReorderHelper.handleReorder(
+                      context: context,
+                      ref: ref,
+                      order: order,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.replay_rounded, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'Reorder',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14.5,

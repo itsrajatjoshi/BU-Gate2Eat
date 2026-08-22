@@ -226,6 +226,22 @@ class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
     }).toList();
   }
 
+  void updateOrderStatus(
+    String orderId,
+    String newStatus, {
+    String? rejectionReason,
+  }) {
+    state = state.map((order) {
+      if (order.orderId == orderId) {
+        return order.copyWith(
+          status: newStatus,
+          rejectionReason: rejectionReason,
+        );
+      }
+      return order;
+    }).toList();
+  }
+
   AppOrder? getOrder(String orderId) {
     try {
       return state.firstWhere((o) => o.orderId == orderId);

@@ -3,6 +3,7 @@
 import 'package:bugate2eat_app/core/providers.dart';
 import 'package:bugate2eat_app/features/orders/active_orders_screen.dart';
 import 'package:bugate2eat_app/features/orders/order_detail_screen.dart';
+import 'package:bugate2eat_app/features/orders/order_history_screen.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,11 +12,11 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('Active Orders State & Multi-Order Logic Tests', () {
+  group('Active Orders & Order History State Separation Tests', () {
     late DummyOrdersNotifier notifier;
 
-    final order1 = AppOrder(
-      orderId: 'YB-20260822-1001',
+    final orderPlaced = AppOrder(
+      orderId: 'YB-1001',
       shopId: 'rajat_shop',
       shopName: 'Rajat Shop',
       customerName: 'Test Student',
@@ -30,11 +31,11 @@ void main() {
       ],
       totalAmount: 120,
       status: 'placed',
-      createdAt: DateTime.now(),
+      createdAt: DateTime.now().subtract(const Duration(minutes: 10)),
     );
 
-    final order2 = AppOrder(
-      orderId: 'YB-20260822-1002',
+    final orderAccepted = AppOrder(
+      orderId: 'YB-1002',
       shopId: 'nayan_shop',
       shopName: 'Nayan Shop',
       customerName: 'Test Student',
@@ -49,43 +50,271 @@ void main() {
       ],
       totalAmount: 90,
       status: 'accepted',
-      createdAt: DateTime.now(),
+      createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
+    );
+
+    final orderDelivered = AppOrder(
+      orderId: 'YB-1003',
+      shopId: 'rajat_shop',
+      shopName: 'Rajat Shop',
+      customerName: 'Test Student',
+      customerPhone: '9876543210',
+      items: const [
+        OrderItem(
+          menuItemId: 'chai',
+          name: 'Chai',
+          price: 20,
+          quantity: 2,
+        ),
+      ],
+      totalAmount: 40,
+      status: 'delivered',
+      createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+    );
+
+    final orderCancelled = AppOrder(
+      orderId: 'YB-1004',
+      shopId: 'rajat_shop',
+      shopName: 'Rajat Shop',
+      customerName: 'Test Student',
+      customerPhone: '9876543210',
+      items: const [
+        OrderItem(
+          menuItemId: 'fries',
+          name: 'Fries',
+          price: 80,
+          quantity: 1,
+        ),
+      ],
+      totalAmount: 80,
+      status: 'cancelled',
+      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+    );
+
+    final orderRejected = AppOrder(
+      orderId: 'YB-1005',
+      shopId: 'nayan_shop',
+      shopName: 'Nayan Shop',
+      customerName: 'Test Student',
+      customerPhone: '9876543210',
+      items: const [
+        OrderItem(
+          menuItemId: 'burger',
+          name: 'Burger',
+          price: 150,
+          quantity: 1,
+        ),
+      ],
+      totalAmount: 150,
+      status: 'rejected',
+      rejectionReason: 'Shop is currently closing',
+      createdAt: DateTime.now().subtract(const Duration(hours: 3)),
     );
 
     setUp(() {
       notifier = DummyOrdersNotifier();
     });
 
-    test('Initial active orders list is empty', () {
+    test('Initial orders list is empty', () {
       expect(notifier.state.isEmpty, isTrue);
     });
 
-    test('Adding multiple active orders stores them simultaneously', () {
-      notifier.addOrder(order1);
-      notifier.addOrder(order2);
+    test('Active vs History orders are strictly separated with zero overlap', () {
+      notifier.addOrder(orderPlaced);
+      notifier.addOrder(orderAccepted);
+      notifier.addOrder(orderDelivered);
+      notifier.addOrder(orderCancelled);
+      notifier.addOrder(orderRejected);
 
-      expect(notifier.state.length, equals(2));
+      expect(notifier.state.length, equals(5));
+
       final active = notifier.state
           .where((o) => o.status == 'placed' || o.status == 'accepted')
           .toList();
+      final history = notifier.state
+          .where((o) =>
+              o.status == 'delivered' ||
+              o.status == 'rejected' ||
+              o.status == 'cancelled')
+          .toList();
+
       expect(active.length, equals(2));
-      expect(active.any((o) => o.shopName == 'Rajat Shop'), isTrue);
-      expect(active.any((o) => o.shopName == 'Nayan Shop'), isTrue);
+      expect(history.length, equals(3));
+
+      // Check IDs in Active Orders
+      final activeIds = active.map((o) => o.orderId).toSet();
+      expect(activeIds, containsAll(['YB-1001', 'YB-1002']));
+      expect(activeIds.contains('YB-1003'), isFalse);
+      expect(activeIds.contains('YB-1004'), isFalse);
+      expect(activeIds.contains('YB-1005'), isFalse);
+
+      // Check IDs in History Orders
+      final historyIds = history.map((o) => o.orderId).toSet();
+      expect(historyIds, containsAll(['YB-1003', 'YB-1004', 'YB-1005']));
+      expect(historyIds.contains('YB-1001'), isFalse);
+      expect(historyIds.contains('YB-1002'), isFalse);
     });
 
-    test('Cancelling a placed order removes it from active list', () {
-      notifier.addOrder(order1);
-      notifier.addOrder(order2);
+    test('Cancelling a placed order immediately moves it to history', () {
+      notifier.addOrder(orderPlaced);
+      notifier.addOrder(orderAccepted);
 
-      // Cancel order1
-      notifier.cancelOrder('YB-20260822-1001');
+      // Initially 2 active, 0 history
+      expect(
+        notifier.state
+            .where((o) => o.status == 'placed' || o.status == 'accepted')
+            .length,
+        equals(2),
+      );
+      expect(
+        notifier.state
+            .where((o) =>
+                o.status == 'delivered' ||
+                o.status == 'rejected' ||
+                o.status == 'cancelled')
+            .length,
+        equals(0),
+      );
 
+      // Cancel YB-1001
+      notifier.cancelOrder('YB-1001');
+
+      // Now 1 active, 1 history
       final active = notifier.state
           .where((o) => o.status == 'placed' || o.status == 'accepted')
           .toList();
+      final history = notifier.state
+          .where((o) =>
+              o.status == 'delivered' ||
+              o.status == 'rejected' ||
+              o.status == 'cancelled')
+          .toList();
+
       expect(active.length, equals(1));
-      expect(active.first.orderId, equals('YB-20260822-1002'));
-      expect(active.first.status, equals('accepted'));
+      expect(active.first.orderId, equals('YB-1002'));
+      expect(history.length, equals(1));
+      expect(history.first.orderId, equals('YB-1001'));
+      expect(history.first.status, equals('cancelled'));
+    });
+  });
+
+  group('OrderHistoryScreen Widget Render Tests', () {
+    testWidgets('Renders empty state when no terminal orders exist',
+        (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: OrderHistoryScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Orders'), findsOneWidget);
+      expect(find.text('No order history yet'), findsOneWidget);
+      expect(
+        find.text(
+          'Your completed, cancelled and rejected orders will appear here.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'Renders terminal orders (delivered, rejected, cancelled) with correct badges',
+        (tester) async {
+      final container = ProviderContainer();
+      final now = DateTime.now();
+
+      container.read(dummyOrdersProvider.notifier).addOrder(
+            AppOrder(
+              orderId: 'YB-1003',
+              shopId: 'rajat_shop',
+              shopName: 'Rajat Shop',
+              customerName: 'Test Student',
+              customerPhone: '9876543210',
+              items: const [
+                OrderItem(
+                  menuItemId: 'chai',
+                  name: 'Special Masala Chai',
+                  price: 20,
+                  quantity: 2,
+                ),
+              ],
+              totalAmount: 40,
+              status: 'delivered',
+              createdAt: now.subtract(const Duration(minutes: 30)),
+            ),
+          );
+
+      container.read(dummyOrdersProvider.notifier).addOrder(
+            AppOrder(
+              orderId: 'YB-1004',
+              shopId: 'nayan_shop',
+              shopName: 'Nayan Shop',
+              customerName: 'Test Student',
+              customerPhone: '9876543210',
+              items: const [
+                OrderItem(
+                  menuItemId: 'burger',
+                  name: 'Chicken Burger',
+                  price: 150,
+                  quantity: 1,
+                ),
+              ],
+              totalAmount: 150,
+              status: 'rejected',
+              rejectionReason: 'Kitchen closed for dinner',
+              createdAt: now.subtract(const Duration(minutes: 15)),
+            ),
+          );
+
+      container.read(dummyOrdersProvider.notifier).addOrder(
+            AppOrder(
+              orderId: 'YB-1005',
+              shopId: 'rajat_shop',
+              shopName: 'Rajat Shop',
+              customerName: 'Test Student',
+              customerPhone: '9876543210',
+              items: const [
+                OrderItem(
+                  menuItemId: 'fries',
+                  name: 'Peri Peri Fries',
+                  price: 80,
+                  quantity: 1,
+                ),
+              ],
+              totalAmount: 80,
+              status: 'cancelled',
+              createdAt: now,
+            ),
+          );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: OrderHistoryScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Check status badges
+      expect(find.text('DELIVERED ✓'), findsOneWidget);
+      expect(find.text('REJECTED'), findsOneWidget);
+      expect(find.text('CANCELLED'), findsOneWidget);
+
+      // Check rejection reason
+      expect(find.text('Reason: Kitchen closed for dinner'), findsOneWidget);
+
+      // Check order totals and View Details
+      expect(find.text('2 items • ₹40'), findsOneWidget);
+      expect(find.text('1 item • ₹150'), findsOneWidget);
+      expect(find.text('1 item • ₹80'), findsOneWidget);
+      expect(find.text('View Details'), findsNWidgets(3));
     });
   });
 

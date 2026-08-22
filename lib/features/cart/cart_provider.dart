@@ -81,6 +81,56 @@ class CartNotifier extends StateNotifier<CartState> {
     _enforceInvariant();
   }
 
+  /// Adds multiple items to the cart (for Reorder flow).
+  /// Merges quantities for existing items in the same shop, or replaces if clearExisting is true.
+  void addMultipleItems(
+    List<({MenuItem item, int quantity})> itemsToAdd,
+    String shopId,
+    String shopName, {
+    bool clearExisting = false,
+  }) {
+    if (itemsToAdd.isEmpty) return;
+
+    if (clearExisting || state.isEmpty || state.shopId != shopId) {
+      state = CartState(
+        shopId: shopId,
+        shopName: shopName,
+        items: itemsToAdd
+            .map((entry) => CartItem(
+                  menuItem: entry.item,
+                  quantity: entry.quantity,
+                  shopId: shopId,
+                  shopName: shopName,
+                ))
+            .toList(),
+      );
+    } else {
+      // Merge with existing items
+      final currentList = [...state.items];
+      for (final entry in itemsToAdd) {
+        final idx = currentList.indexWhere(
+          (ci) => ci.menuItem.id == entry.item.id && ci.shopId == shopId,
+        );
+        if (idx >= 0) {
+          currentList[idx] = currentList[idx].copyWith(
+            quantity: currentList[idx].quantity + entry.quantity,
+          );
+        } else {
+          currentList.add(
+            CartItem(
+              menuItem: entry.item,
+              quantity: entry.quantity,
+              shopId: shopId,
+              shopName: shopName,
+            ),
+          );
+        }
+      }
+      state = state.copyWith(items: currentList);
+    }
+    _enforceInvariant();
+  }
+
   /// Decrements quantity or removes item completely if quantity becomes 0.
   void removeItem(String menuItemId, [String? shopId]) {
     final existingIndex = state.items.indexWhere(
