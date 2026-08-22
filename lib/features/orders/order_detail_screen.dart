@@ -26,14 +26,14 @@ class OrderDetailScreen extends ConsumerWidget {
     final dummyOrders = ref.watch(dummyOrdersProvider);
 
     // Resolve order from local dummy provider or initialOrder fallback
-    AppOrder? order;
+    AppOrder? resolvedOrder;
     try {
-      order = dummyOrders.firstWhere((o) => o.orderId == orderId);
+      resolvedOrder = dummyOrders.firstWhere((o) => o.orderId == orderId);
     } catch (_) {
-      order = initialOrder;
+      resolvedOrder = initialOrder;
     }
 
-    if (order == null) {
+    if (resolvedOrder == null) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Order Details'),
@@ -59,7 +59,9 @@ class OrderDetailScreen extends ConsumerWidget {
       );
     }
 
+    final order = resolvedOrder;
     final isCancelled = order.status == 'cancelled';
+    final isRejected = order.status == 'rejected';
     final isDelivered = order.status == 'delivered';
     final isAccepted = order.status == 'accepted';
     final isPlaced = order.status == 'placed';
@@ -149,6 +151,46 @@ class OrderDetailScreen extends ConsumerWidget {
                         ],
                       ),
                     )
+                  else if (isRejected)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.cancel_outlined, color: AppColors.error, size: 18),
+                              SizedBox(width: 8),
+                              Text(
+                                'This order was rejected by shopkeeper.',
+                                style: TextStyle(
+                                  color: AppColors.error,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (order.rejectionReason.trim().isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Reason: ${order.rejectionReason.trim()}',
+                              style: TextStyle(
+                                color: isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.textSecondary,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    )
                   else
                     _buildStatusStepper(
                       isPlaced: isPlaced,
@@ -198,7 +240,7 @@ class OrderDetailScreen extends ConsumerWidget {
                       child: Divider(height: 1, thickness: 0.5),
                     ),
                     itemBuilder: (context, index) {
-                      final item = order!.items[index];
+                      final item = order.items[index];
                       return Row(
                         children: [
                           // Item Thumbnail
@@ -453,7 +495,7 @@ class OrderDetailScreen extends ConsumerWidget {
                   height: 44,
                   child: OutlinedButton(
                     onPressed: () =>
-                        _confirmCancelDialog(context, ref, order!.orderId),
+                        _confirmCancelDialog(context, ref, order.orderId),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
                       side: const BorderSide(color: AppColors.error, width: 1.2),

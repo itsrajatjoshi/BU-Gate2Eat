@@ -123,7 +123,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     final now = DateTime.now();
     final timeSuffix =
-        '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
+        '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
     final dateSuffix =
         '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
     final orderId = 'YB-$dateSuffix-$timeSuffix';

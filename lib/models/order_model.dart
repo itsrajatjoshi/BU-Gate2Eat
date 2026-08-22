@@ -34,6 +34,7 @@ class AppOrder {
     this.specialInstructions = '',
     this.deliveryNote = 'Bennett University',
     this.status = 'placed',
+    this.rejectionReason = '',
   });
 
   final String orderId;
@@ -46,6 +47,7 @@ class AppOrder {
   final String specialInstructions;
   final String deliveryNote;
   final String status;
+  final String rejectionReason;
   final DateTime createdAt;
 
   int get totalItemCount =>
@@ -55,6 +57,7 @@ class AppOrder {
 
   AppOrder copyWith({
     String? status,
+    String? rejectionReason,
   }) {
     return AppOrder(
       orderId: orderId,
@@ -67,6 +70,7 @@ class AppOrder {
       specialInstructions: specialInstructions,
       deliveryNote: deliveryNote,
       status: status ?? this.status,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
       createdAt: createdAt,
     );
   }

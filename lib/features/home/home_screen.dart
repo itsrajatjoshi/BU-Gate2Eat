@@ -149,8 +149,7 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
           (activeOrders.isNotEmpty
               ? FloatingActionButton.extended(
                   onPressed: () {
-                    final order = activeOrders.first;
-                    context.push('/order/${order.orderId}', extra: order);
+                    context.push(AppRoutes.activeOrders);
                   },
                   backgroundColor: AppColors.primary,
                   elevation: 4,
@@ -160,7 +159,7 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
                   ),
                   label: Text(
                     activeOrders.length > 1
-                        ? 'Track Your Orders (${activeOrders.length})'
+                        ? 'Active Orders (${activeOrders.length})'
                         : 'Track Your Order',
                     style: const TextStyle(
                       color: Colors.white,

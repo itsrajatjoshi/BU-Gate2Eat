@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../features/cart/cart_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/orders/active_orders_screen.dart';
 import '../features/orders/order_detail_screen.dart';
 import '../features/orders/order_history_screen.dart';
 import '../features/profile/profile_screen.dart';
@@ -28,6 +29,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String shopDetail = '/shop/:shopId';
   static const String cart = '/cart';
+  static const String activeOrders = '/active-orders';
   static const String orderDetail = '/order/:orderId';
   static const String orderHistory = '/order-history';
   static const String profile = '/profile';
@@ -107,6 +109,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.cart,
       builder: (context, state) => const CartScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.activeOrders,
+      builder: (context, state) => const ActiveOrdersScreen(),
     ),
     GoRoute(
       path: AppRoutes.orderDetail,
