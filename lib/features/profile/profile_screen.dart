@@ -200,17 +200,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   width: 58,
                   height: 58,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
+                    color: AppColors.primary.withValues(
+                      alpha: isDark ? 0.20 : 0.12,
+                    ),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(
+                        alpha: isDark ? 0.50 : 0.35,
                       ),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.person_rounded,
+                      size: 32,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),

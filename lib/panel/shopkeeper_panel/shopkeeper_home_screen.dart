@@ -7,9 +7,11 @@ import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers.dart';
+import '../../../core/router.dart';
 import '../../../models/category_model.dart';
 import '../../../models/menu_item_model.dart';
 import '../../../models/shop_model.dart';
@@ -370,12 +372,52 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                     ),
                   ],
                 )
-              else
+              else ...[
                 IconButton(
                   tooltip: 'Edit Shop Info',
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: () => EditShopModal.show(context, shop),
                 ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 14),
+                  child: InkWell(
+                    onTap: () => context.push(AppRoutes.shopkeeperProfile),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.primary.withValues(
+                          alpha: isDark ? 0.20 : 0.12,
+                        ),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(
+                            alpha: isDark ? 0.50 : 0.35,
+                          ),
+                          width: 1.3,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isDark
+                                ? Colors.black.withValues(alpha: 0.30)
+                                : AppColors.primary.withValues(alpha: 0.10),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.person_rounded,
+                          size: 20,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
             flexibleSpace: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {

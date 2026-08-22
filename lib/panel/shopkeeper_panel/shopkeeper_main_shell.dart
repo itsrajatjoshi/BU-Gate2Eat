@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import 'shopkeeper_home_screen.dart';
+import 'shopkeeper_order_history_screen.dart';
 import 'shopkeeper_orders_screen.dart';
-import 'shopkeeper_profile_screen.dart';
 
 class ShopkeeperMainShell extends ConsumerStatefulWidget {
   const ShopkeeperMainShell({super.key});
@@ -37,8 +37,8 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
 
     final screens = [
       const ShopkeeperOrdersScreen(),
+      const ShopkeeperOrderHistoryScreen(),
       ShopkeeperHomeScreen(shopId: shopId),
-      const ShopkeeperProfileScreen(),
     ];
 
     return Scaffold(
@@ -56,13 +56,14 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
             label: 'Orders',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Home',
+            icon: Icon(Icons.history_outlined),
+            activeIcon: Icon(Icons.history_rounded),
+            label: 'Order History',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
-            activeIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
+            icon: Icon(Icons.storefront_outlined),
+            activeIcon: Icon(Icons.storefront_rounded),
+            label: 'Shop',
           ),
         ],
       ),

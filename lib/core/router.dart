@@ -8,6 +8,8 @@ import '../features/cart/cart_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/orders/order_detail_screen.dart';
+import '../features/orders/order_history_screen.dart';
+import '../features/profile/profile_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shop/shop_detail_screen.dart';
 import '../features/splash/splash_screen.dart';
@@ -15,6 +17,7 @@ import '../models/order_model.dart';
 import '../panel/admin_panel/admin_main_shell.dart';
 import '../panel/admin_panel/admin_shop_detail_screen.dart';
 import '../panel/shopkeeper_panel/shopkeeper_main_shell.dart';
+import '../panel/shopkeeper_panel/shopkeeper_profile_screen.dart';
 
 /// App route paths.
 class AppRoutes {
@@ -26,8 +29,11 @@ class AppRoutes {
   static const String shopDetail = '/shop/:shopId';
   static const String cart = '/cart';
   static const String orderDetail = '/order/:orderId';
+  static const String orderHistory = '/order-history';
+  static const String profile = '/profile';
   static const String settings = '/settings';
   static const String shopkeeper = '/shopkeeper';
+  static const String shopkeeperProfile = '/shopkeeper/profile';
   static const String admin = '/admin';
   static const String adminShopDetail = '/admin/shop/:shopId';
 }
@@ -109,6 +115,18 @@ final GoRouter appRouter = GoRouter(
         final extraOrder = state.extra as AppOrder?;
         return OrderDetailScreen(orderId: orderId, initialOrder: extraOrder);
       },
+    ),
+    GoRoute(
+      path: AppRoutes.orderHistory,
+      builder: (context, state) => const OrderHistoryScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.profile,
+      builder: (context, state) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.shopkeeperProfile,
+      builder: (context, state) => const ShopkeeperProfileScreen(),
     ),
     GoRoute(
       path: AppRoutes.settings,

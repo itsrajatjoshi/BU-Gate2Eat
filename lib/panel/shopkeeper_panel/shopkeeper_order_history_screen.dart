@@ -1,13 +1,14 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Orders Screen (UI/UX Prototype: Empty State Only — No Backend)
+// Order History Screen (UI/UX Prototype: Empty State Only — No Backend)
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/constants/app_constants.dart';
 import '../../../core/router.dart';
 
-class ShopkeeperOrdersScreen extends StatelessWidget {
-  const ShopkeeperOrdersScreen({super.key});
+class ShopkeeperOrderHistoryScreen extends StatelessWidget {
+  const ShopkeeperOrderHistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +17,7 @@ class ShopkeeperOrdersScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Orders',
+          'Order History',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -67,37 +68,34 @@ class ShopkeeperOrdersScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Icon container with gentle primary tint
               Container(
                 width: 96,
                 height: 96,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
+                  color: AppColors.primary.withValues(
+                    alpha: isDark ? 0.15 : 0.08,
+                  ),
                   shape: BoxShape.circle,
                 ),
                 child: const Center(
                   child: Icon(
-                    Icons.receipt_long_outlined,
+                    Icons.history_rounded,
                     size: 48,
                     color: AppColors.primary,
                   ),
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Title
               Text(
-                'No orders yet',
+                'No order history yet',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                       fontSize: 20,
                     ),
               ),
               const SizedBox(height: 8),
-
-              // Subtitle
               Text(
-                "When customers place orders, they'll appear here.",
+                'Completed, rejected and cancelled orders will appear here.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,

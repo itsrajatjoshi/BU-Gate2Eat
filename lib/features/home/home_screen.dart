@@ -9,12 +9,11 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
-import '../../models/order_model.dart';
 import '../../models/shop_model.dart';
 import '../cart/cart_provider.dart';
 import '../cart/cart_screen.dart';
 import '../favourites/favourites_screen.dart';
-import '../profile/profile_screen.dart';
+import '../orders/order_history_screen.dart';
 import 'widgets/shop_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -39,7 +38,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           HomeTabContent(),
           FavouritesScreen(),
           CartScreen(),
-          ProfileScreen(),
+          OrderHistoryScreen(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -87,9 +86,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             label: 'Cart',
           ),
           const BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
-            activeIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
+            icon: Icon(Icons.receipt_long_outlined),
+            activeIcon: Icon(Icons.receipt_long_rounded),
+            label: 'Orders',
           ),
         ],
       ),
@@ -178,9 +177,44 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
           fit: BoxFit.contain,
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push(AppRoutes.settings),
+          Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: InkWell(
+              onTap: () => context.push(AppRoutes.profile),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary.withValues(
+                    alpha: isDark ? 0.20 : 0.12,
+                  ),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(
+                      alpha: isDark ? 0.50 : 0.35,
+                    ),
+                    width: 1.3,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.30)
+                          : AppColors.primary.withValues(alpha: 0.10),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.person_rounded,
+                    size: 21,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),

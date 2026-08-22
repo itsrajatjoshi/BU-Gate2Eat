@@ -4,31 +4,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers.dart';
 
-/// A customer-facing live visual progress indicator for shop minimum order requirements.
-///
-/// Displays:
-/// - Target minimum order amount
-/// - Animated progress bar with vibrant green branding
-/// - Remaining amount needed (or completion checkmark)
-/// - Automatically hides if minimumOrderAmount <= 0 or cart has no items for this shop
+/// Compact Zepto-inspired minimum order progress bar.
+/// Displays circular progress ring, remaining amount needed, and minimum order target.
 class MinimumOrderProgressBar extends ConsumerWidget {
   const MinimumOrderProgressBar({
     required this.shopId,
     required this.currentTotal,
-    this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    this.padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    this.compact = false,
     super.key,
   });
 
   final String shopId;
   final double currentTotal;
   final EdgeInsetsGeometry padding;
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final minOrderMap = ref.watch(shopMinimumOrderProvider);
     final minOrderAmount = minOrderMap[shopId] ?? 0;
 
-    // Hide if no minimum is configured for this shop
     if (minOrderAmount <= 0) {
       return const SizedBox.shrink();
     }
@@ -41,83 +37,80 @@ class MinimumOrderProgressBar extends ConsumerWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: AppColors.success.withValues(
-          alpha: isDark ? 0.12 : 0.08,
-        ),
-        borderRadius: BorderRadius.circular(12),
+        color: isDark ? const Color(0xFF1B2420) : const Color(0xFFEDF7F2),
+        borderRadius: BorderRadius.circular(compact ? 24 : 14),
         border: Border.all(
           color: AppColors.success.withValues(
-            alpha: isDark ? 0.35 : 0.22,
+            alpha: isDark ? 0.35 : 0.25,
           ),
           width: 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Minimum order ₹$minOrderAmount',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isDark
-                      ? AppColors.darkTextSecondary
-                      : AppColors.textSecondary,
+          // Circular Progress Ring with Center Icon
+          SizedBox(
+            width: compact ? 30 : 34,
+            height: compact ? 30 : 34,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 3,
+                  backgroundColor:
+                      isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppColors.success,
+                  ),
                 ),
-              ),
-              Text(
-                isReached ? '✓ 100%' : '${(progress * 100).toInt()}%',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                Icon(
+                  isReached
+                      ? Icons.check_rounded
+                      : Icons.delivery_dining_rounded,
+                  size: compact ? 15 : 17,
                   color: AppColors.success,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              backgroundColor:
-                  isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                AppColors.success,
-              ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(
-                Icons.check_circle_rounded,
-                size: 14,
-                color: AppColors.success,
-              ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
+          const SizedBox(width: 8),
+          // Text Details
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   isReached
                       ? 'Minimum order reached ✓'
-                      : '₹$diff more to reach minimum ₹$minOrderAmount',
+                      : 'Add ₹$diff more to place order',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: compact ? 11.5 : 12.5,
                     fontWeight: FontWeight.w700,
                     color: isReached
                         ? AppColors.success
-                        : (isDark
-                            ? Colors.green.shade300
-                            : const Color(0xFF1B8755)),
+                        : (isDark ? Colors.white : AppColors.textPrimary),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+                const SizedBox(height: 1),
+                Text(
+                  'Minimum order ₹$minOrderAmount',
+                  style: TextStyle(
+                    fontSize: compact ? 10 : 10.5,
+                    fontWeight: FontWeight.w500,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),
