@@ -49,28 +49,40 @@ class MinimumOrderProgressBar extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Circular Progress Ring with Center Icon
+          // Circular Progress Ring with Smooth Fill Animation
           SizedBox(
             width: compact ? 30 : 34,
             height: compact ? 30 : 34,
             child: Stack(
               alignment: Alignment.center,
               children: [
-                CircularProgressIndicator(
-                  value: progress,
-                  strokeWidth: 3,
-                  backgroundColor:
-                      isDark ? Colors.grey.shade800 : Colors.grey.shade300,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.success,
-                  ),
+                TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0.0, end: progress),
+                  duration: const Duration(milliseconds: 600),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, animatedProgress, _) {
+                    return CircularProgressIndicator(
+                      value: animatedProgress,
+                      strokeWidth: 3,
+                      backgroundColor: isDark
+                          ? Colors.grey.shade800
+                          : Colors.grey.shade300,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.success,
+                      ),
+                    );
+                  },
                 ),
-                Icon(
-                  isReached
-                      ? Icons.check_rounded
-                      : Icons.delivery_dining_rounded,
-                  size: compact ? 15 : 17,
-                  color: AppColors.success,
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Icon(
+                    isReached
+                        ? Icons.check_rounded
+                        : Icons.delivery_dining_rounded,
+                    key: ValueKey<bool>(isReached),
+                    size: compact ? 15 : 17,
+                    color: AppColors.success,
+                  ),
                 ),
               ],
             ),
