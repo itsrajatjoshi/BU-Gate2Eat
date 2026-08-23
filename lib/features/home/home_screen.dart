@@ -135,10 +135,8 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
   @override
   Widget build(BuildContext context) {
     final shopsAsync = ref.watch(shopsProvider);
-    final dummyOrders = ref.watch(dummyOrdersProvider);
-    final activeOrders = dummyOrders
-        .where((o) => o.status == 'placed' || o.status == 'accepted')
-        .toList();
+    final activeOrders =
+        ref.watch(customerActiveOrdersStreamProvider).valueOrNull ?? [];
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;

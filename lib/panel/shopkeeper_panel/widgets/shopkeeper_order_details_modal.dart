@@ -13,7 +13,7 @@ import 'accept_order_dialog.dart';
 import 'mark_delivered_dialog.dart';
 import 'reject_order_dialog.dart';
 
-class ShopkeeperOrderDetailsModal extends ConsumerWidget {
+class ShopkeeperOrderDetailsModal extends ConsumerStatefulWidget {
   const ShopkeeperOrderDetailsModal({
     required this.order,
     super.key,
@@ -33,96 +33,186 @@ class ShopkeeperOrderDetailsModal extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleAccept(BuildContext context, WidgetRef ref) async {
-    final confirmed = await AcceptOrderDialog.show(context, order: order);
-    if (confirmed == true) {
-      ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
-            order.orderId,
-            'accepted',
+  @override
+  ConsumerState<ShopkeeperOrderDetailsModal> createState() =>
+      _ShopkeeperOrderDetailsModalState();
+}
+
+class _ShopkeeperOrderDetailsModalState
+    extends ConsumerState<ShopkeeperOrderDetailsModal> {
+  bool _isSubmitting = false;
+
+  Future<void> _handleAccept() async {
+    if (_isSubmitting) return;
+    final confirmed = await AcceptOrderDialog.show(context, order: widget.order);
+    if (confirmed == true && mounted) {
+      setState(() => _isSubmitting = true);
+      try {
+        await ref.read(orderServiceProvider).updateOrderStatus(
+              widget.order.orderId,
+              'accepted',
+            );
+        ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
+              widget.order.orderId,
+              'accepted',
+            );
+
+        if (mounted) {
+          Navigator.pop(context); // Close bottom sheet
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Order #${widget.order.orderId} accepted successfully',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 2),
+            ),
           );
-
-      if (context.mounted) {
-        Navigator.pop(context); // Close bottom sheet
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Order #${order.orderId} accepted successfully',
-              style: const TextStyle(fontWeight: FontWeight.w600),
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to accept order: $e',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 4),
             ),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+          );
+        }
       }
     }
   }
 
-  Future<void> _handleMarkDelivered(BuildContext context, WidgetRef ref) async {
-    final confirmed = await MarkDeliveredDialog.show(context, order: order);
-    if (confirmed == true) {
-      ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
-            order.orderId,
-            'delivered',
+  Future<void> _handleMarkDelivered() async {
+    if (_isSubmitting) return;
+    final confirmed =
+        await MarkDeliveredDialog.show(context, order: widget.order);
+    if (confirmed == true && mounted) {
+      setState(() => _isSubmitting = true);
+      try {
+        await ref.read(orderServiceProvider).updateOrderStatus(
+              widget.order.orderId,
+              'delivered',
+            );
+        ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
+              widget.order.orderId,
+              'delivered',
+            );
+
+        if (mounted) {
+          Navigator.pop(context); // Close bottom sheet
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Order #${widget.order.orderId} marked as delivered',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 2),
+            ),
           );
-
-      if (context.mounted) {
-        Navigator.pop(context); // Close bottom sheet
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Order #${order.orderId} marked as delivered',
-              style: const TextStyle(fontWeight: FontWeight.w600),
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to mark order as delivered: $e',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 4),
             ),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+          );
+        }
       }
     }
   }
 
-  Future<void> _handleReject(BuildContext context, WidgetRef ref) async {
-    final reason = await RejectOrderDialog.show(context, order: order);
-    if (reason != null && reason.trim().isNotEmpty) {
-      ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
-            order.orderId,
-            'rejected',
-            rejectionReason: reason.trim(),
+  Future<void> _handleReject() async {
+    if (_isSubmitting) return;
+    final reason = await RejectOrderDialog.show(context, order: widget.order);
+    if (reason != null && reason.trim().isNotEmpty && mounted) {
+      setState(() => _isSubmitting = true);
+      try {
+        await ref.read(orderServiceProvider).updateOrderStatus(
+              widget.order.orderId,
+              'rejected',
+              rejectionReason: reason.trim(),
+            );
+        ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
+              widget.order.orderId,
+              'rejected',
+              rejectionReason: reason.trim(),
+            );
+
+        if (mounted) {
+          Navigator.pop(context); // Close bottom sheet
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Order #${widget.order.orderId} rejected',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 2),
+            ),
           );
-
-      if (context.mounted) {
-        Navigator.pop(context); // Close bottom sheet
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Order #${order.orderId} rejected',
-              style: const TextStyle(fontWeight: FontWeight.w600),
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to reject order: $e',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 4),
             ),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+          );
+        }
       }
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final order = widget.order;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isPlaced = order.status == 'placed';
     final isAccepted = order.status == 'accepted';
@@ -739,7 +829,7 @@ class ShopkeeperOrderDetailsModal extends ConsumerWidget {
                           Expanded(
                             flex: 1,
                             child: OutlinedButton(
-                              onPressed: () => _handleReject(context, ref),
+                              onPressed: _isSubmitting ? null : _handleReject,
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.error,
                                 side: BorderSide(
@@ -766,15 +856,26 @@ class ShopkeeperOrderDetailsModal extends ConsumerWidget {
                           Expanded(
                             flex: 2,
                             child: ElevatedButton.icon(
-                              onPressed: () =>
-                                  _handleMarkDelivered(context, ref),
-                              icon: const Icon(
-                                Icons.task_alt_rounded,
-                                size: 18,
-                              ),
-                              label: const Text(
-                                'Mark as Delivered',
-                                style: TextStyle(
+                              onPressed:
+                                  _isSubmitting ? null : _handleMarkDelivered,
+                              icon: _isSubmitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.task_alt_rounded,
+                                      size: 18,
+                                    ),
+                              label: Text(
+                                _isSubmitting
+                                    ? 'Updating...'
+                                    : 'Mark as Delivered',
+                                style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14.5,
                                 ),
@@ -799,7 +900,7 @@ class ShopkeeperOrderDetailsModal extends ConsumerWidget {
                           Expanded(
                             flex: 1,
                             child: OutlinedButton(
-                              onPressed: () => _handleReject(context, ref),
+                              onPressed: _isSubmitting ? null : _handleReject,
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.error,
                                 side: BorderSide(
@@ -826,14 +927,23 @@ class ShopkeeperOrderDetailsModal extends ConsumerWidget {
                           Expanded(
                             flex: 2,
                             child: ElevatedButton.icon(
-                              onPressed: () => _handleAccept(context, ref),
-                              icon: const Icon(
-                                Icons.check_rounded,
-                                size: 18,
-                              ),
-                              label: const Text(
-                                'Accept Order',
-                                style: TextStyle(
+                              onPressed: _isSubmitting ? null : _handleAccept,
+                              icon: _isSubmitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.check_rounded,
+                                      size: 18,
+                                    ),
+                              label: Text(
+                                _isSubmitting ? 'Updating...' : 'Accept Order',
+                                style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14.5,
                                 ),

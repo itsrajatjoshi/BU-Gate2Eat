@@ -330,6 +330,74 @@ final singleOrderStreamProvider =
   });
 });
 
+/// Real-time stream provider for a shop's active orders (placed, accepted).
+final shopActiveOrdersStreamProvider =
+    StreamProvider.family<List<AppOrder>, String?>((ref, shopId) async* {
+  final orderService = ref.watch(orderServiceProvider);
+  final dummyOrders = ref.watch(dummyOrdersProvider);
+  final effectiveShopId = (shopId != null && shopId.isNotEmpty)
+      ? shopId
+      : ref.watch(currentShopkeeperShopIdProvider);
+
+  if (!orderService.isAvailable) {
+    yield dummyOrders
+        .where((o) =>
+            o.shopId == effectiveShopId &&
+            (o.status == 'placed' || o.status == 'accepted'))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return;
+  }
+
+  yield* orderService
+      .watchShopActiveOrders(effectiveShopId)
+      .map((firestoreOrders) {
+    if (firestoreOrders.isNotEmpty) return firestoreOrders;
+    return dummyOrders
+        .where((o) =>
+            o.shopId == effectiveShopId &&
+            (o.status == 'placed' || o.status == 'accepted'))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  });
+});
+
+/// Real-time stream provider for a shop's order history (delivered, rejected, cancelled).
+final shopOrderHistoryStreamProvider =
+    StreamProvider.family<List<AppOrder>, String?>((ref, shopId) async* {
+  final orderService = ref.watch(orderServiceProvider);
+  final dummyOrders = ref.watch(dummyOrdersProvider);
+  final effectiveShopId = (shopId != null && shopId.isNotEmpty)
+      ? shopId
+      : ref.watch(currentShopkeeperShopIdProvider);
+
+  if (!orderService.isAvailable) {
+    yield dummyOrders
+        .where((o) =>
+            o.shopId == effectiveShopId &&
+            (o.status == 'delivered' ||
+                o.status == 'rejected' ||
+                o.status == 'cancelled'))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return;
+  }
+
+  yield* orderService
+      .watchShopOrderHistory(effectiveShopId)
+      .map((firestoreOrders) {
+    if (firestoreOrders.isNotEmpty) return firestoreOrders;
+    return dummyOrders
+        .where((o) =>
+            o.shopId == effectiveShopId &&
+            (o.status == 'delivered' ||
+                o.status == 'rejected' ||
+                o.status == 'cancelled'))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  });
+});
+
 /// Local/session state provider for dummy customer orders (Used by Shopkeeper until Part 3.4)
 final dummyOrdersProvider =
     StateNotifierProvider<DummyOrdersNotifier, List<AppOrder>>((ref) {
@@ -398,13 +466,15 @@ class ShopMinimumOrderNotifier extends StateNotifier<Map<String, int>> {
 
 /// Provider for resolving active shopkeeper's shopId based on logged-in phone number.
 final currentShopkeeperShopIdProvider = Provider<String>((ref) {
-  final localStorage = ref.watch(localStorageServiceProvider);
-  final cleanPhone =
-      localStorage.userPhone.replaceAll(RegExp(r'[^0-9]'), '');
+  try {
+    final localStorage = ref.watch(localStorageServiceProvider);
+    final cleanPhone =
+        localStorage.userPhone.replaceAll(RegExp(r'[^0-9]'), '');
 
-  if (cleanPhone.endsWith('8295643910') || cleanPhone == '8295643910') {
-    return 'nayan_shop';
-  }
+    if (cleanPhone.endsWith('8295643910') || cleanPhone == '8295643910') {
+      return 'nayan_shop';
+    }
+  } catch (_) {}
   return 'rajat_shop';
 });
 

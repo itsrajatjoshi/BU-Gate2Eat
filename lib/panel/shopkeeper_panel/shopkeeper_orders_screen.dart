@@ -26,15 +26,8 @@ class ShopkeeperOrdersScreen extends ConsumerWidget {
     final effectiveShopId =
         shopId ?? ref.watch(currentShopkeeperShopIdProvider);
 
-    final allOrders = ref.watch(dummyOrdersProvider);
-
-    // Active orders only: placed or accepted for this specific shopkeeper's shop
-    final activeOrders = allOrders
-        .where((o) =>
-            o.shopId == effectiveShopId &&
-            (o.status == 'placed' || o.status == 'accepted'))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt)); // Newest first
+    final activeOrdersAsync =
+        ref.watch(shopActiveOrdersStreamProvider(effectiveShopId));
 
     return Scaffold(
       appBar: AppBar(
@@ -84,72 +77,127 @@ class ShopkeeperOrdersScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: activeOrders.isEmpty
-          ? _EmptyActiveOrdersView(isDark: isDark)
-          : ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              children: [
-                // 1. Active Orders Section Header with Count Badge
-                Row(
-                  children: [
-                    Text(
-                      'Active Orders',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: isDark
-                            ? AppColors.darkTextPrimary
-                            : AppColors.textPrimary,
-                      ),
+      body: activeOrdersAsync.when(
+        data: (activeOrders) {
+          if (activeOrders.isEmpty) {
+            return _EmptyActiveOrdersView(isDark: isDark);
+          }
+          return ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            children: [
+              // 1. Active Orders Section Header with Count Badge
+              Row(
+                children: [
+                  Text(
+                    'Active Orders',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? AppColors.darkTextPrimary
+                          : AppColors.textPrimary,
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2.5,
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(
+                        alpha: isDark ? 0.25 : 0.12,
                       ),
-                      decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
                         color: AppColors.primary.withValues(
-                          alpha: isDark ? 0.25 : 0.12,
+                          alpha: isDark ? 0.50 : 0.30,
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.primary.withValues(
-                            alpha: isDark ? 0.50 : 0.30,
-                          ),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        '${activeOrders.length}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                        ),
+                        width: 1,
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
+                    child: Text(
+                      '${activeOrders.length}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
 
-                // 2. Compact Active Order Cards (placed & accepted)
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: activeOrders.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final order = activeOrders[index];
-                    return _CompactShopkeeperOrderCard(
-                      order: order,
-                      isDark: isDark,
-                    );
-                  },
+              // 2. Compact Active Order Cards (placed & accepted)
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: activeOrders.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final order = activeOrders[index];
+                  return _CompactShopkeeperOrderCard(
+                    order: order,
+                    isDark: isDark,
+                  );
+                },
+              ),
+            ],
+          );
+        },
+        loading: () => const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+          ),
+        ),
+        error: (err, stack) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  size: 48,
+                  color: AppColors.error,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Failed to load active orders',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  err.toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => ref.invalidate(
+                    shopActiveOrdersStreamProvider(effectiveShopId),
+                  ),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
                 ),
               ],
             ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -204,6 +204,7 @@ class OrderService {
 
   /// Real-time stream of a shop's active orders (placed, accepted).
   Stream<List<AppOrder>> watchShopActiveOrders(String shopId) {
+    if (!isAvailable) return const Stream.empty();
     return _ordersRef
         .where('shopId', isEqualTo: shopId)
         .where('status', whereIn: OrderStatusRules.activeStatuses.toList())
@@ -218,6 +219,7 @@ class OrderService {
 
   /// Real-time stream of a shop's order history (delivered, rejected, cancelled).
   Stream<List<AppOrder>> watchShopOrderHistory(String shopId) {
+    if (!isAvailable) return const Stream.empty();
     return _ordersRef
         .where('shopId', isEqualTo: shopId)
         .where('status', whereIn: OrderStatusRules.terminalStatuses.toList())
@@ -238,6 +240,7 @@ class OrderService {
     String newStatus, {
     String? rejectionReason,
   }) async {
+    if (!isAvailable) return;
     try {
       final docRef = _ordersRef.doc(orderId);
       final doc = await docRef.get();
