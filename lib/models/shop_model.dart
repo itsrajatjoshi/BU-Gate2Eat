@@ -3,6 +3,25 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Available ordering channels for a shop.
+enum ShopOrderMethod {
+  whatsapp,
+  app,
+  both;
+
+  static ShopOrderMethod fromString(dynamic val) {
+    if (val == null) return ShopOrderMethod.whatsapp;
+    final str = val.toString().trim().toLowerCase();
+    if (str == 'app' || str == 'inapp' || str == 'yummbu') {
+      return ShopOrderMethod.app;
+    }
+    if (str == 'both' || str == 'all') {
+      return ShopOrderMethod.both;
+    }
+    return ShopOrderMethod.whatsapp;
+  }
+}
+
 /// Represents a food shop near Bennett University.
 class Shop {
   /// Creates a Shop instance.
@@ -22,6 +41,8 @@ class Shop {
     required this.deliveryNote,
     required this.createdAt,
     required this.updatedAt,
+    this.orderMethod = ShopOrderMethod.whatsapp,
+    this.minimumOrderAmount = 0,
   });
 
   /// Creates a Shop from a Firestore document snapshot.
@@ -47,6 +68,8 @@ class Shop {
       deliveryNote: (data['deliveryNote'] as String?) ?? 'Pickup from Gate 2',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      orderMethod: ShopOrderMethod.fromString(data['orderMethod']),
+      minimumOrderAmount: (data['minimumOrderAmount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -65,6 +88,48 @@ class Shop {
   final String deliveryNote;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final ShopOrderMethod orderMethod;
+  final int minimumOrderAmount;
+
+  Shop copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? bannerUrl,
+    String? contactNumber,
+    String? orderNumber,
+    String? openTime,
+    String? closeTime,
+    bool? isClosedOverride,
+    bool? isActive,
+    int? sortOrder,
+    List<String>? searchKeywords,
+    String? deliveryNote,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    ShopOrderMethod? orderMethod,
+    int? minimumOrderAmount,
+  }) {
+    return Shop(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      bannerUrl: bannerUrl ?? this.bannerUrl,
+      contactNumber: contactNumber ?? this.contactNumber,
+      orderNumber: orderNumber ?? this.orderNumber,
+      openTime: openTime ?? this.openTime,
+      closeTime: closeTime ?? this.closeTime,
+      isClosedOverride: isClosedOverride ?? this.isClosedOverride,
+      isActive: isActive ?? this.isActive,
+      sortOrder: sortOrder ?? this.sortOrder,
+      searchKeywords: searchKeywords ?? this.searchKeywords,
+      deliveryNote: deliveryNote ?? this.deliveryNote,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      orderMethod: orderMethod ?? this.orderMethod,
+      minimumOrderAmount: minimumOrderAmount ?? this.minimumOrderAmount,
+    );
+  }
 
   /// Converts any time string ("08:00", "8:00 AM", "23:30", "11:30 PM") into minutes from midnight (0..1439).
   static int parseTimeToMinutes(String timeStr, {int defaultMinutes = 0}) {
@@ -126,6 +191,8 @@ class Shop {
       'sortOrder': sortOrder,
       'searchKeywords': searchKeywords,
       'deliveryNote': deliveryNote,
+      'orderMethod': orderMethod.name,
+      'minimumOrderAmount': minimumOrderAmount,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

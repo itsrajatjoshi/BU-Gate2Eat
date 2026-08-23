@@ -56,10 +56,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final grandTotal = cartState.grandTotal;
     final shopId = cartState.shopId ?? cartItems.first.shopId;
 
-    // Check Minimum Order Amount
-    final minOrderAmount = ref
-        .read(shopMinimumOrderProvider.notifier)
-        .getMinimumOrderForShop(shopId);
+    // Check Minimum Order Amount (source of truth: Firestore shop document)
+    final currentShop = ref
+        .read(shopsProvider)
+        .valueOrNull
+        ?.where((s) => s.id == shopId)
+        .firstOrNull;
+    final minOrderAmount = currentShop?.minimumOrderAmount ?? 0;
     if (minOrderAmount > 0 && grandTotal < minOrderAmount) {
       final diff = (minOrderAmount - grandTotal).ceil();
       if (mounted) {
@@ -236,10 +239,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final grandTotal = cartState.grandTotal;
     final shopId = cartState.shopId ?? cartItems.first.shopId;
 
-    // Check Minimum Order Amount
-    final minOrderAmount = ref
-        .read(shopMinimumOrderProvider.notifier)
-        .getMinimumOrderForShop(shopId);
+    // Check Minimum Order Amount (source of truth: Firestore shop document)
+    final currentShop = ref
+        .read(shopsProvider)
+        .valueOrNull
+        ?.where((s) => s.id == shopId)
+        .firstOrNull;
+    final minOrderAmount = currentShop?.minimumOrderAmount ?? 0;
     if (minOrderAmount > 0 && grandTotal < minOrderAmount) {
       final diff = (minOrderAmount - grandTotal).ceil();
       if (mounted) {
@@ -617,9 +623,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ),
                     Builder(
                       builder: (context) {
-                        final minOrderMap =
-                            ref.watch(shopMinimumOrderProvider);
-                        final minOrderAmount = minOrderMap[shopId] ?? 0;
+                        final currentShop = ref
+                            .watch(shopsProvider)
+                            .valueOrNull
+                            ?.where((s) => s.id == shopId)
+                            .firstOrNull;
+                        final minOrderAmount =
+                            currentShop?.minimumOrderAmount ?? 0;
                         if (minOrderAmount > 0) {
                           return const SizedBox(height: 12);
                         }
@@ -663,8 +673,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     // Place Order Action Button(s) based on Shop's Order Method
                     Builder(
                       builder: (context) {
-                        final orderMethodMap = ref.watch(shopOrderMethodProvider);
-                        final orderMethod = orderMethodMap[shopId] ?? ShopOrderMethod.whatsapp;
+                        final currentShop = ref
+                            .watch(shopsProvider)
+                            .valueOrNull
+                            ?.where((s) => s.id == shopId)
+                            .firstOrNull;
+                        final orderMethod = currentShop?.orderMethod ??
+                            ShopOrderMethod.whatsapp;
 
                         if (orderMethod == ShopOrderMethod.both) {
                           return Row(

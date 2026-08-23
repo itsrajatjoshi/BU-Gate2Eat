@@ -62,16 +62,13 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         TextEditingController(text: widget.shop.deliveryNote);
     _contactController =
         TextEditingController(text: widget.shop.contactNumber);
-    final currentMinOrder = ref
-        .read(shopMinimumOrderProvider.notifier)
-        .getMinimumOrderForShop(widget.shop.id);
     _minOrderController = TextEditingController(
-      text: currentMinOrder > 0 ? currentMinOrder.toString() : '0',
+      text: widget.shop.minimumOrderAmount > 0
+          ? widget.shop.minimumOrderAmount.toString()
+          : '0',
     );
     _isClosedOverride = widget.shop.isClosedOverride;
-    _selectedOrderMethod = ref
-        .read(shopOrderMethodProvider.notifier)
-        .getMethodForShop(widget.shop.id);
+    _selectedOrderMethod = widget.shop.orderMethod;
   }
 
   @override
@@ -225,6 +222,9 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
           ? '11:30 PM'
           : Shop.format12hr(_closeTimeController.text.trim());
 
+      final minOrderVal = int.tryParse(_minOrderController.text.trim()) ?? 0;
+      final clampedMinOrder = minOrderVal.clamp(0, 10000);
+
       await firestoreService.updateShop(widget.shop.id, {
         'name': name,
         'description': _descController.text.trim(),
@@ -235,19 +235,11 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         'orderNumber': _contactController.text.trim(),
         'bannerUrl': bannerUrl,
         'isClosedOverride': _isClosedOverride,
+        'orderMethod': _selectedOrderMethod.name,
+        'minimumOrderAmount': clampedMinOrder,
       });
       debugPrint('[BANNER] Firestore update completed');
       debugPrint('[BANNER] SAVE SUCCESS');
-
-      // Update shop order method and minimum order in session state provider
-      ref
-          .read(shopOrderMethodProvider.notifier)
-          .setMethodForShop(widget.shop.id, _selectedOrderMethod);
-
-      final minOrderVal = int.tryParse(_minOrderController.text.trim()) ?? 0;
-      ref
-          .read(shopMinimumOrderProvider.notifier)
-          .setMinimumOrderForShop(widget.shop.id, minOrderVal.clamp(0, 10000));
 
       // Invalidate provider so home screen and shop detail refresh immediately
       ref.invalidate(shopsProvider);

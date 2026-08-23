@@ -204,7 +204,9 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
         // Find existing category ID or generate slug
         final matched = widget.categories
             .where(
-              (c) => c.name.toLowerCase() == effectiveCategory.toLowerCase(),
+              (c) =>
+                  c.name.toLowerCase() == effectiveCategory.toLowerCase() ||
+                  c.id.toLowerCase() == effectiveCategory.toLowerCase(),
             )
             .firstOrNull;
         if (matched != null) {

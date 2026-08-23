@@ -256,7 +256,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
 
     try {
       final firestoreService = ref.read(firestoreServiceProvider);
-      String categoryId = widget.item.categoryId;
+      String categoryId = '';
 
       // If category was changed to custom category via "+ Other"
       if (_isOtherCategory) {
@@ -268,11 +268,19 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
       } else {
         final matched = widget.categories
             .where(
-              (c) => c.name.toLowerCase() == effectiveCategory.toLowerCase(),
+              (c) =>
+                  c.name.toLowerCase() == effectiveCategory.toLowerCase() ||
+                  c.id.toLowerCase() == effectiveCategory.toLowerCase(),
             )
             .firstOrNull;
         if (matched != null) {
           categoryId = matched.id;
+        } else {
+          final createdCategory = await firestoreService.createCustomCategory(
+            widget.shopId,
+            effectiveCategory,
+          );
+          categoryId = createdCategory.id;
         }
       }
 
@@ -419,6 +427,9 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     }
     for (final def in _defaultCategories) {
       set.add(def);
+    }
+    if (_selectedCategory.isNotEmpty && !_isOtherCategory) {
+      set.add(_selectedCategory);
     }
     return set.toList();
   }

@@ -854,8 +854,10 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
           final categoryItems = filtered.where((item) {
             final catId = item.categoryId.toLowerCase();
             final target = category.id.toLowerCase();
+            final targetName = category.name.toLowerCase();
 
             return catId == target ||
+                catId == targetName ||
                 (target == 'thalis' && catId == 'thali') ||
                 (target == 'thali' && catId == 'thalis') ||
                 (target == 'momos' && catId == 'momo') ||

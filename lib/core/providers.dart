@@ -12,6 +12,8 @@ import '../services/force_update_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/order_service.dart';
 
+export '../models/shop_model.dart' show ShopOrderMethod;
+
 /// Provider for the Firestore service (singleton).
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService();
@@ -217,31 +219,7 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
   return results;
 });
 
-/// Represents the supported ordering methods for a shop.
-enum ShopOrderMethod {
-  whatsapp,
-  app,
-  both,
-}
-
-/// Provider for managing shop order method in local state (shopId -> ShopOrderMethod).
-/// Defaults to 'whatsapp' if unset.
-final shopOrderMethodProvider =
-    StateNotifierProvider<ShopOrderMethodNotifier, Map<String, ShopOrderMethod>>((ref) {
-  return ShopOrderMethodNotifier();
-});
-
-class ShopOrderMethodNotifier extends StateNotifier<Map<String, ShopOrderMethod>> {
-  ShopOrderMethodNotifier() : super({});
-
-  ShopOrderMethod getMethodForShop(String shopId) {
-    return state[shopId] ?? ShopOrderMethod.whatsapp;
-  }
-
-  void setMethodForShop(String shopId, ShopOrderMethod method) {
-    state = {...state, shopId: method};
-  }
-}
+// shopOrderMethodProvider REMOVED — shop.orderMethod from Firestore is the single source of truth.
 
 /// Real-time stream provider for current customer's active orders (placed, accepted).
 final customerActiveOrdersStreamProvider =
@@ -261,13 +239,7 @@ final customerActiveOrdersStreamProvider =
       .watchCustomerActiveOrders(
         customerId: identity.customerId,
         customerPhone: identity.phone,
-      )
-      .map((firestoreOrders) {
-        if (firestoreOrders.isNotEmpty) return firestoreOrders;
-        return dummyOrders
-            .where((o) => o.status == 'placed' || o.status == 'accepted')
-            .toList();
-      });
+      );
 });
 
 /// Real-time stream provider for current customer's order history (delivered, rejected, cancelled).
@@ -292,17 +264,7 @@ final customerOrderHistoryStreamProvider =
       .watchCustomerOrderHistory(
         customerId: identity.customerId,
         customerPhone: identity.phone,
-      )
-      .map((firestoreOrders) {
-        if (firestoreOrders.isNotEmpty) return firestoreOrders;
-        return dummyOrders
-            .where((o) =>
-                o.status == 'delivered' ||
-                o.status == 'rejected' ||
-                o.status == 'cancelled')
-            .toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      });
+      );
 });
 
 /// Real-time stream provider for watching a single order by orderId.
@@ -324,10 +286,7 @@ final singleOrderStreamProvider =
     return;
   }
 
-  yield* orderService.watchOrder(orderId).map((liveOrder) {
-    if (liveOrder != null) return liveOrder;
-    return getDummy();
-  });
+  yield* orderService.watchOrder(orderId);
 });
 
 /// Real-time stream provider for a shop's active orders (placed, accepted).
@@ -349,17 +308,7 @@ final shopActiveOrdersStreamProvider =
     return;
   }
 
-  yield* orderService
-      .watchShopActiveOrders(effectiveShopId)
-      .map((firestoreOrders) {
-    if (firestoreOrders.isNotEmpty) return firestoreOrders;
-    return dummyOrders
-        .where((o) =>
-            o.shopId == effectiveShopId &&
-            (o.status == 'placed' || o.status == 'accepted'))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  });
+  yield* orderService.watchShopActiveOrders(effectiveShopId);
 });
 
 /// Real-time stream provider for a shop's order history (delivered, rejected, cancelled).
@@ -383,19 +332,7 @@ final shopOrderHistoryStreamProvider =
     return;
   }
 
-  yield* orderService
-      .watchShopOrderHistory(effectiveShopId)
-      .map((firestoreOrders) {
-    if (firestoreOrders.isNotEmpty) return firestoreOrders;
-    return dummyOrders
-        .where((o) =>
-            o.shopId == effectiveShopId &&
-            (o.status == 'delivered' ||
-                o.status == 'rejected' ||
-                o.status == 'cancelled'))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  });
+  yield* orderService.watchShopOrderHistory(effectiveShopId);
 });
 
 /// Local/session state provider for dummy customer orders (Used by Shopkeeper until Part 3.4)
@@ -445,24 +382,7 @@ class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
   }
 }
 
-/// Provider for managing shop minimum order amount in local/session state (shopId -> int).
-/// Defaults to 0 (no minimum).
-final shopMinimumOrderProvider =
-    StateNotifierProvider<ShopMinimumOrderNotifier, Map<String, int>>((ref) {
-  return ShopMinimumOrderNotifier();
-});
-
-class ShopMinimumOrderNotifier extends StateNotifier<Map<String, int>> {
-  ShopMinimumOrderNotifier() : super({});
-
-  int getMinimumOrderForShop(String shopId) {
-    return state[shopId] ?? 0;
-  }
-
-  void setMinimumOrderForShop(String shopId, int minAmount) {
-    state = {...state, shopId: minAmount};
-  }
-}
+// shopMinimumOrderProvider REMOVED — shop.minimumOrderAmount from Firestore is the single source of truth.
 
 /// Provider for resolving active shopkeeper's shopId based on logged-in phone number.
 final currentShopkeeperShopIdProvider = Provider<String>((ref) {

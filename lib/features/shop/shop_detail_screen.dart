@@ -145,7 +145,9 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
       final hasItems = menuItems.any((item) {
         final itemCat = item.categoryId.toLowerCase();
         final target = catId.toLowerCase();
+        final targetName = categoryObj.name.toLowerCase();
         return itemCat == target ||
+            itemCat == targetName ||
             (target == 'thalis' && itemCat == 'thali') ||
             (target == 'thali' && itemCat == 'thalis') ||
             (target == 'momos' && itemCat == 'momo') ||
@@ -283,8 +285,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     final cartItemCount = cartState.totalItemCount;
     final isCurrentShopInCart =
         cartState.shopId == widget.shopId && cartItemCount > 0;
-    final minOrderMap = ref.watch(shopMinimumOrderProvider);
-    final minOrderAmount = minOrderMap[widget.shopId] ?? 0;
+    final minOrderAmount = shopAsync.valueOrNull?.minimumOrderAmount ?? 0;
 
     return Scaffold(
       floatingActionButtonLocation: (isCurrentShopInCart && minOrderAmount > 0)
@@ -766,8 +767,10 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           final categoryItems = filtered.where((item) {
             final catId = item.categoryId.toLowerCase();
             final target = category.id.toLowerCase();
+            final targetName = category.name.toLowerCase();
 
             return catId == target ||
+                catId == targetName ||
                 (target == 'thalis' && catId == 'thali') ||
                 (target == 'thali' && catId == 'thalis') ||
                 (target == 'momos' && catId == 'momo') ||

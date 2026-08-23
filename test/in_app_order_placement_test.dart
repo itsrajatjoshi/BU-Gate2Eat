@@ -16,26 +16,34 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeFirestoreService extends FirestoreService {
+  ShopOrderMethod testOrderMethod = ShopOrderMethod.whatsapp;
+  int testMinimumOrderAmount = 0;
+
+  Shop _buildTestShop() => Shop(
+    id: 'rajat_shop',
+    name: 'Rajat Shop',
+    description: 'Chinese, Fast Food & Thalis',
+    bannerUrl: '',
+    contactNumber: '9876543210',
+    orderNumber: '9876543210',
+    openTime: '09:00',
+    closeTime: '23:00',
+    isClosedOverride: false,
+    isActive: true,
+    sortOrder: 1,
+    searchKeywords: const ['chinese', 'momos'],
+    deliveryNote: 'Bennett University • Gate No. 2',
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+    orderMethod: testOrderMethod,
+    minimumOrderAmount: testMinimumOrderAmount,
+  );
+
   @override
-  Future<Shop?> getShop(String shopId) async {
-    return Shop(
-      id: 'rajat_shop',
-      name: 'Rajat Shop',
-      description: 'Chinese, Fast Food & Thalis',
-      bannerUrl: '',
-      contactNumber: '9876543210',
-      orderNumber: '9876543210',
-      openTime: '09:00',
-      closeTime: '23:00',
-      isClosedOverride: false,
-      isActive: true,
-      sortOrder: 1,
-      searchKeywords: const ['chinese', 'momos'],
-      deliveryNote: 'Bennett University • Gate No. 2',
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-  }
+  Future<Shop?> getShop(String shopId) async => _buildTestShop();
+
+  @override
+  Future<List<Shop>> getShops() async => [_buildTestShop()];
 
   @override
   Future<List<MenuItem>> getMenuItems(String shopId) async => [];
@@ -147,11 +155,10 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      // Set order method for shop to in-app
-      container.read(shopOrderMethodProvider.notifier).setMethodForShop(
-            'rajat_shop',
-            ShopOrderMethod.app,
-          );
+      // Set order method for shop to in-app via FakeFirestoreService
+      fakeFirestoreService.testOrderMethod = ShopOrderMethod.app;
+      // Invalidate shopsProvider to pick up new orderMethod
+      container.invalidate(shopsProvider);
 
       // Add items to cart
       final cartNotifier = container.read(cartProvider.notifier);
@@ -225,10 +232,8 @@ void main() {
       // Simulate failure in OrderService
       fakeOrderService.shouldFail = true;
 
-      container.read(shopOrderMethodProvider.notifier).setMethodForShop(
-            'rajat_shop',
-            ShopOrderMethod.app,
-          );
+      fakeFirestoreService.testOrderMethod = ShopOrderMethod.app;
+      container.invalidate(shopsProvider);
 
       final cartNotifier = container.read(cartProvider.notifier);
       cartNotifier.addItem(testMenuItem1, 'rajat_shop', 'Rajat Shop');
@@ -264,15 +269,10 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      // Set minimum order for shop to ₹200
-      container.read(shopMinimumOrderProvider.notifier).setMinimumOrderForShop(
-            'rajat_shop',
-            200,
-          );
-      container.read(shopOrderMethodProvider.notifier).setMethodForShop(
-            'rajat_shop',
-            ShopOrderMethod.app,
-          );
+      // Set minimum order for shop to ₹200 and order method to app via FakeFirestoreService
+      fakeFirestoreService.testMinimumOrderAmount = 200;
+      fakeFirestoreService.testOrderMethod = ShopOrderMethod.app;
+      container.invalidate(shopsProvider);
 
       // Add item of ₹80 (below ₹200)
       final cartNotifier = container.read(cartProvider.notifier);
@@ -304,10 +304,8 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      container.read(shopOrderMethodProvider.notifier).setMethodForShop(
-            'rajat_shop',
-            ShopOrderMethod.whatsapp,
-          );
+      fakeFirestoreService.testOrderMethod = ShopOrderMethod.whatsapp;
+      container.invalidate(shopsProvider);
 
       final cartNotifier = container.read(cartProvider.notifier);
       cartNotifier.addItem(testMenuItem1, 'rajat_shop', 'Rajat Shop');

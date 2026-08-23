@@ -22,8 +22,9 @@ class MinimumOrderProgressBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final minOrderMap = ref.watch(shopMinimumOrderProvider);
-    final minOrderAmount = minOrderMap[shopId] ?? 0;
+    final currentShop =
+        ref.watch(shopsProvider).valueOrNull?.where((s) => s.id == shopId).firstOrNull;
+    final minOrderAmount = currentShop?.minimumOrderAmount ?? 0;
 
     if (minOrderAmount <= 0) {
       return const SizedBox.shrink();

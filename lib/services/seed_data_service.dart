@@ -28,7 +28,24 @@ class SeedDataService {
     final nayanDoc = await firestore.collection('shops').doc('nayan_shop').get();
     final kivishaDoc = await firestore.collection('shops').doc('kivisha_shop').get();
 
-    // If all standard shops already exist in Firestore, skip seeding completely
+    // Backfill orderMethod & minimumOrderAmount to existing shops if missing
+    for (final shopDoc in [rajatDoc, nayanDoc, kivishaDoc]) {
+      if (shopDoc.exists) {
+        final data = shopDoc.data() ?? {};
+        final Map<String, dynamic> patch = {};
+        if (!data.containsKey('orderMethod')) {
+          patch['orderMethod'] = 'whatsapp';
+        }
+        if (!data.containsKey('minimumOrderAmount')) {
+          patch['minimumOrderAmount'] = 0;
+        }
+        if (patch.isNotEmpty) {
+          await shopDoc.reference.set(patch, SetOptions(merge: true));
+        }
+      }
+    }
+
+    // If all standard shops already exist in Firestore, skip creating new shops
     if (rajatDoc.exists && nayanDoc.exists && kivishaDoc.exists) {
       return;
     }
@@ -67,6 +84,8 @@ class SeedDataService {
         'sortOrder': 1,
         'searchKeywords': ['momos', 'chinese', 'fast food', 'snacks', 'thali', 'rajat'],
         'deliveryNote': 'Pickup from Gate 2',
+        'orderMethod': 'whatsapp',
+        'minimumOrderAmount': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -138,6 +157,8 @@ class SeedDataService {
         'sortOrder': 2,
         'searchKeywords': ['momos', 'chinese', 'fast food', 'nayan', 'chicken'],
         'deliveryNote': 'Pickup from Gate 2',
+        'orderMethod': 'whatsapp',
+        'minimumOrderAmount': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -209,6 +230,8 @@ class SeedDataService {
         'sortOrder': 3,
         'searchKeywords': ['kivisha', 'snacks', 'fast food', 'food'],
         'deliveryNote': 'Pickup from Gate 2',
+        'orderMethod': 'whatsapp',
+        'minimumOrderAmount': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
