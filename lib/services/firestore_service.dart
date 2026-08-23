@@ -13,8 +13,18 @@ import 'image_optimization_service.dart';
 /// Service class for all Firestore operations.
 /// Handles shops, categories, menu items, and storage assets.
 class FirestoreService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  FirestoreService({
+    FirebaseFirestore? firestore,
+    FirebaseStorage? storage,
+  })  : _customFirestore = firestore,
+        _customStorage = storage;
+
+  final FirebaseFirestore? _customFirestore;
+  final FirebaseStorage? _customStorage;
+
+  FirebaseFirestore get _firestore =>
+      _customFirestore ?? FirebaseFirestore.instance;
+  FirebaseStorage get _storage => _customStorage ?? FirebaseStorage.instance;
 
   // Fixed neutral category image for new custom categories
   static const String defaultNeutralCategoryImageUrl =

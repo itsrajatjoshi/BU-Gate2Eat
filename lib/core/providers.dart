@@ -11,10 +11,16 @@ import '../models/shop_model.dart';
 import '../services/firestore_service.dart';
 import '../services/force_update_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/order_service.dart';
 
 /// Provider for the Firestore service (singleton).
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService();
+});
+
+/// Provider for the Order service (singleton).
+final orderServiceProvider = Provider<OrderService>((ref) {
+  return OrderService();
 });
 
 /// Cached provider for fetching active shops list.
@@ -48,6 +54,32 @@ final recommendedMenuItemsProvider =
 /// Must be overridden in main.dart after initialization.
 final localStorageServiceProvider = Provider<LocalStorageService>((ref) {
   throw UnimplementedError('LocalStorageService must be overridden at startup');
+});
+
+/// Immutable customer identity representation for development and testing.
+class CustomerIdentity {
+  const CustomerIdentity({
+    required this.customerId,
+    required this.name,
+    required this.phone,
+  });
+
+  final String customerId;
+  final String name;
+  final String phone;
+}
+
+/// Provider for the current customer's identity.
+/// Easily swappable with Firebase Auth UID in future phases.
+final customerIdentityProvider = Provider<CustomerIdentity>((ref) {
+  final localStorage = ref.watch(localStorageServiceProvider);
+  final phone = localStorage.userPhone.trim();
+  final name = localStorage.userName.trim();
+  return CustomerIdentity(
+    customerId: localStorage.customerId,
+    name: name.isNotEmpty ? name : 'Student',
+    phone: phone,
+  );
 });
 
 /// Provider for the ForceUpdate service.
@@ -269,5 +301,17 @@ class ShopMinimumOrderNotifier extends StateNotifier<Map<String, int>> {
     state = {...state, shopId: minAmount};
   }
 }
+
+/// Provider for resolving active shopkeeper's shopId based on logged-in phone number.
+final currentShopkeeperShopIdProvider = Provider<String>((ref) {
+  final localStorage = ref.watch(localStorageServiceProvider);
+  final cleanPhone =
+      localStorage.userPhone.replaceAll(RegExp(r'[^0-9]'), '');
+
+  if (cleanPhone.endsWith('8295643910') || cleanPhone == '8295643910') {
+    return 'nayan_shop';
+  }
+  return 'rajat_shop';
+});
 
 

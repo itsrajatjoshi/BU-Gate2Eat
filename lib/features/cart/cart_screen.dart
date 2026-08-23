@@ -27,6 +27,7 @@ class CartScreen extends ConsumerStatefulWidget {
 
 class _CartScreenState extends ConsumerState<CartScreen> {
   final _specialInstructionsController = TextEditingController();
+  bool _isPlacingOrder = false;
 
   @override
   void dispose() {
@@ -34,7 +35,19 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     super.dispose();
   }
 
+  String _generateOrderId() {
+    final now = DateTime.now();
+    final timeSuffix =
+        '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+    final dateSuffix =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final microSuffix = (now.microsecond % 1000).toString().padLeft(3, '0');
+    return 'YB-$dateSuffix-$timeSuffix-$microSuffix';
+  }
+
   Future<void> _placeAppOrder() async {
+    if (_isPlacingOrder) return;
+
     final cartState = ref.read(cartProvider);
     final cartItems = cartState.items;
     if (cartItems.isEmpty) return;
@@ -114,55 +127,103 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    final localStorage = ref.read(localStorageServiceProvider);
-    final firestoreService = ref.read(firestoreServiceProvider);
-    final shop = await firestoreService.getShop(shopId);
-    final deliveryNote = (shop != null && shop.deliveryNote.trim().isNotEmpty)
-        ? shop.deliveryNote.trim()
-        : 'Bennett University • Gate No. 2';
+    setState(() => _isPlacingOrder = true);
 
-    final now = DateTime.now();
-    final timeSuffix =
-        '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
-    final dateSuffix =
-        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    final orderId = 'YB-$dateSuffix-$timeSuffix';
+    try {
+      final localStorage = ref.read(localStorageServiceProvider);
+      final customerIdentity = ref.read(customerIdentityProvider);
+      final firestoreService = ref.read(firestoreServiceProvider);
+      final shop = await firestoreService.getShop(shopId);
+      final deliveryNote = (shop != null && shop.deliveryNote.trim().isNotEmpty)
+          ? shop.deliveryNote.trim()
+          : 'Bennett University • Gate No. 2';
 
-    // 2. Create local dummy order
-    final dummyOrder = AppOrder(
-      orderId: orderId,
-      shopId: shopId,
-      shopName: shopName,
-      customerName: localStorage.userName,
-      customerPhone: localStorage.userPhone,
-      items: cartItems
-          .map((ci) => OrderItem(
-                menuItemId: ci.menuItem.id,
-                name: ci.menuItem.name,
-                price: ci.menuItem.price,
-                quantity: ci.quantity,
-                imageUrl: ci.menuItem.imageUrl,
-              ))
-          .toList(),
-      totalAmount: grandTotal,
-      specialInstructions: _specialInstructionsController.text.trim(),
-      deliveryNote: deliveryNote,
-      status: 'placed',
-      createdAt: now,
-    );
+      final now = DateTime.now();
+      final orderId = _generateOrderId();
 
-    // Save in session dummy orders
-    ref.read(dummyOrdersProvider.notifier).addOrder(dummyOrder);
+      final customerName = customerIdentity.name.trim().isNotEmpty
+          ? customerIdentity.name.trim()
+          : (localStorage.userName.isNotEmpty
+              ? localStorage.userName
+              : 'Student');
+      final customerPhone = customerIdentity.phone.trim().isNotEmpty
+          ? customerIdentity.phone.trim()
+          : localStorage.userPhone;
 
-    // 3. Clear Cart immediately
-    ref.read(cartProvider.notifier).clearCart();
-
-    // 4. Navigate to Order Detail Screen
-    if (mounted) {
-      context.push(
-        '/order/$orderId',
-        extra: dummyOrder,
+      // 2. Build immutable Order Snapshot
+      final newOrder = AppOrder(
+        orderId: orderId,
+        shopId: shopId,
+        shopName: shopName,
+        customerId: customerIdentity.customerId,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        items: cartItems
+            .map((ci) => OrderItem(
+                  menuItemId: ci.menuItem.id,
+                  name: ci.menuItem.name,
+                  price: ci.menuItem.price,
+                  quantity: ci.quantity,
+                  imageUrl: ci.menuItem.imageUrl,
+                ))
+            .toList(),
+        totalAmount: grandTotal,
+        specialInstructions: _specialInstructionsController.text.trim(),
+        deliveryNote: deliveryNote,
+        status: 'placed',
+        createdAt: now,
       );
+
+      // 3. Create real Firestore order document
+      await ref.read(orderServiceProvider).createOrder(newOrder);
+
+      // 4. Temporary UI bridge: update local dummy state so existing screens reflect it
+      ref.read(dummyOrdersProvider.notifier).addOrder(newOrder);
+
+      // 5. Clear Cart ONLY after Firestore confirmation
+      ref.read(cartProvider.notifier).clearCart();
+
+      // 6. Navigate to Order Detail Screen
+      if (mounted) {
+        context.push(
+          '/order/$orderId',
+          extra: newOrder,
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ In-App Order placement error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(
+                  Icons.error_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Failed to place order. Please check your connection and try again.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPlacingOrder = false);
+      }
     }
   }
 
@@ -608,41 +669,60 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         if (orderMethod == ShopOrderMethod.both) {
                           return Row(
                             children: [
-                              // 1. In-App Place Order Button (Dummy for Part 1.1)
+                              // 1. In-App Place Order Button
                               Expanded(
                                 child: SizedBox(
                                   height: 50,
                                   child: ElevatedButton(
-                                    onPressed: _placeAppOrder,
+                                    onPressed: _isPlacingOrder
+                                        ? null
+                                        : _placeAppOrder,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppColors.primary,
                                       foregroundColor: Colors.white,
                                       elevation: 2,
-                                      shadowColor: AppColors.primary.withValues(alpha: 0.35),
+                                      shadowColor: AppColors.primary
+                                          .withValues(alpha: 0.35),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
+                                        borderRadius:
+                                            BorderRadius.circular(14),
                                       ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6),
                                     ),
-                                    child: const Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.send_rounded, color: Colors.white, size: 17),
-                                        SizedBox(width: 6),
-                                        Flexible(
-                                          child: Text(
-                                            'Place Order',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              letterSpacing: 0.2,
+                                    child: _isPlacingOrder
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2.2,
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                          )
+                                        : const Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.send_rounded,
+                                                  color: Colors.white,
+                                                  size: 17),
+                                              SizedBox(width: 6),
+                                              Flexible(
+                                                child: Text(
+                                                  'Place Order',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                    letterSpacing: 0.2,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
                                 ),
                               ),
@@ -652,25 +732,33 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                 child: SizedBox(
                                   height: 50,
                                   child: ElevatedButton(
-                                    onPressed: _placeWhatsAppOrder,
+                                    onPressed: _isPlacingOrder
+                                        ? null
+                                        : _placeWhatsAppOrder,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF25D366),
+                                      backgroundColor:
+                                          const Color(0xFF25D366),
                                       foregroundColor: Colors.white,
                                       elevation: 2,
-                                      shadowColor: const Color(0xFF25D366).withValues(alpha: 0.35),
+                                      shadowColor: const Color(0xFF25D366)
+                                          .withValues(alpha: 0.35),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
+                                        borderRadius:
+                                            BorderRadius.circular(14),
                                       ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6),
                                     ),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         SvgPicture.asset(
                                           'assets/icons/whatsapp.svg',
                                           width: 19,
                                           height: 19,
-                                          colorFilter: const ColorFilter.mode(
+                                          colorFilter:
+                                              const ColorFilter.mode(
                                             Colors.white,
                                             BlendMode.srcIn,
                                           ),
@@ -702,32 +790,75 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           height: 50,
                           child: ElevatedButton(
                             onPressed: orderMethod == ShopOrderMethod.app
-                                ? _placeAppOrder
-                                : _placeWhatsAppOrder,
+                                ? (_isPlacingOrder ? null : _placeAppOrder)
+                                : (_isPlacingOrder
+                                    ? null
+                                    : _placeWhatsAppOrder),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary, // Rich Food Orange
+                              backgroundColor:
+                                  orderMethod == ShopOrderMethod.whatsapp
+                                      ? const Color(0xFF25D366)
+                                      : AppColors.primary,
                               foregroundColor: Colors.white,
                               elevation: 2,
-                              shadowColor: AppColors.primary.withValues(alpha: 0.35),
+                              shadowColor: (orderMethod ==
+                                          ShopOrderMethod.whatsapp
+                                      ? const Color(0xFF25D366)
+                                      : AppColors.primary)
+                                  .withValues(alpha: 0.35),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.send_rounded, color: Colors.white, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Place Order',
-                                  style: TextStyle(
-                                    fontSize: 16.5,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.2,
+                            child: _isPlacingOrder
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2.2,
+                                    ),
+                                  )
+                                : Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
+                                      if (orderMethod ==
+                                          ShopOrderMethod.whatsapp) ...[
+                                        SvgPicture.asset(
+                                          'assets/icons/whatsapp.svg',
+                                          width: 20,
+                                          height: 20,
+                                          colorFilter:
+                                              const ColorFilter.mode(
+                                            Colors.white,
+                                            BlendMode.srcIn,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'Order via WhatsApp',
+                                          style: TextStyle(
+                                            fontSize: 16.5,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        const Icon(Icons.send_rounded,
+                                            color: Colors.white, size: 20),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'Place Order',
+                                          style: TextStyle(
+                                            fontSize: 16.5,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                ),
-                              ],
-                            ),
                           ),
                         );
                       },

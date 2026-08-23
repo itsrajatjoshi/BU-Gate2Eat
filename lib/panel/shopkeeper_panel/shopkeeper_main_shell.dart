@@ -36,8 +36,8 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
     }
 
     final screens = [
-      const ShopkeeperOrdersScreen(),
-      const ShopkeeperOrderHistoryScreen(),
+      ShopkeeperOrdersScreen(shopId: shopId),
+      ShopkeeperOrderHistoryScreen(shopId: shopId),
       ShopkeeperHomeScreen(shopId: shopId),
     ];
 

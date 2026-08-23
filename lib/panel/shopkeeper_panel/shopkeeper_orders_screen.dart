@@ -1,17 +1,40 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Orders Screen (UI/UX Prototype: Empty State Only — No Backend)
+// Orders Screen (Phase 2 — Part 2.2: Shopkeeper Order Details Bottom Sheet)
+// Connected to local dummy order state with strict shopId filtering & card tap details
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../../core/router.dart';
 
-class ShopkeeperOrdersScreen extends StatelessWidget {
-  const ShopkeeperOrdersScreen({super.key});
+import '../../../core/constants/app_constants.dart';
+import '../../../core/providers.dart';
+import '../../../core/router.dart';
+import '../../../models/order_model.dart';
+import 'widgets/shopkeeper_order_details_modal.dart';
+
+class ShopkeeperOrdersScreen extends ConsumerWidget {
+  const ShopkeeperOrdersScreen({
+    this.shopId,
+    super.key,
+  });
+
+  final String? shopId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveShopId =
+        shopId ?? ref.watch(currentShopkeeperShopIdProvider);
+
+    final allOrders = ref.watch(dummyOrdersProvider);
+
+    // Active orders only: placed or accepted for this specific shopkeeper's shop
+    final activeOrders = allOrders
+        .where((o) =>
+            o.shopId == effectiveShopId &&
+            (o.status == 'placed' || o.status == 'accepted'))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt)); // Newest first
 
     return Scaffold(
       appBar: AppBar(
@@ -61,54 +84,329 @@ class ShopkeeperOrdersScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Icon container with gentle primary tint
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
+      body: activeOrders.isEmpty
+          ? _EmptyActiveOrdersView(isDark: isDark)
+          : ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              children: [
+                // 1. Active Orders Section Header with Count Badge
+                Row(
+                  children: [
+                    Text(
+                      'Active Orders',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(
+                          alpha: isDark ? 0.25 : 0.12,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(
+                            alpha: isDark ? 0.50 : 0.30,
+                          ),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        '${activeOrders.length}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Center(
-                  child: Icon(
-                    Icons.receipt_long_outlined,
-                    size: 48,
-                    color: AppColors.primary,
+                const SizedBox(height: 12),
+
+                // 2. Compact Active Order Cards (placed & accepted)
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: activeOrders.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final order = activeOrders[index];
+                    return _CompactShopkeeperOrderCard(
+                      order: order,
+                      isDark: isDark,
+                    );
+                  },
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _CompactShopkeeperOrderCard extends StatelessWidget {
+  const _CompactShopkeeperOrderCard({
+    required this.order,
+    required this.isDark,
+  });
+
+  final AppOrder order;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = order.customerName.trim().isNotEmpty
+        ? order.customerName.trim()
+        : 'Customer';
+
+    final isAccepted = order.status == 'accepted';
+
+    final Color statusColor =
+        isAccepted ? AppColors.success : AppColors.warning;
+    final String statusText = isAccepted ? 'ACCEPTED' : 'PLACED';
+    final IconData statusIcon = isAccepted
+        ? Icons.check_circle_outline_rounded
+        : Icons.fiber_new_rounded;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.darkDivider : AppColors.divider,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => ShopkeeperOrderDetailsModal.show(context, order: order),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Row: Customer Name & Status Badge (PLACED or ACCEPTED)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(
+                                alpha: isDark ? 0.20 : 0.10,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.person_outline_rounded,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              displayName,
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(
+                          alpha: isDark ? 0.20 : 0.12,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: statusColor.withValues(
+                            alpha: isDark ? 0.45 : 0.35,
+                          ),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            statusIcon,
+                            size: 14,
+                            color: statusColor,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              color: statusColor,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Middle Row: Order ID
+                Text(
+                  'Order #${order.orderId}',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'monospace',
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 10),
+                const Divider(height: 1, thickness: 0.8),
+                const SizedBox(height: 10),
 
-              // Title
-              Text(
-                'No orders yet',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
+                // Bottom Row: Item Count, Total Amount & Time
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${order.totalItemCount} item${order.totalItemCount > 1 ? 's' : ''} • ${order.formattedTotal}',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.textPrimary,
+                      ),
                     ),
-              ),
-              const SizedBox(height: 8),
+                    Text(
+                      _formatTimeAgo(order.createdAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-              // Subtitle
-              Text(
-                "When customers place orders, they'll appear here.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isDark
-                      ? AppColors.darkTextSecondary
-                      : AppColors.textSecondary,
-                  height: 1.4,
+  String _formatTimeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 45) {
+      return 'Just now';
+    } else if (diff.inMinutes < 60) {
+      final mins = diff.inMinutes;
+      return '$mins min${mins > 1 ? 's' : ''} ago';
+    } else if (diff.inHours < 24) {
+      final hrs = diff.inHours;
+      return '$hrs hour${hrs > 1 ? 's' : ''} ago';
+    } else {
+      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final period = dt.hour >= 12 ? 'PM' : 'AM';
+      return '$hour:$minute $period';
+    }
+  }
+}
+
+class _EmptyActiveOrdersView extends StatelessWidget {
+  const _EmptyActiveOrdersView({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.receipt_long_outlined,
+                  size: 44,
+                  color: AppColors.primary,
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'No active orders',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 19,
+                    color: isDark
+                        ? AppColors.darkTextPrimary
+                        : AppColors.textPrimary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Customer orders will appear here when placed.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13.5,
+                color: isDark
+                    ? AppColors.darkTextSecondary
+                    : AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+          ],
         ),
       ),
     );

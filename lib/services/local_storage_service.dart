@@ -12,6 +12,7 @@ class LocalStorageService {
   static const String _keyName = 'user_name';
   static const String _keyPhone = 'user_phone';
   static const String _keyAge = 'user_age';
+  static const String _keyCustomerId = 'customer_id';
   static const String _keyIsOnboarded = 'is_onboarded';
   static const String _keyThemeMode = 'theme_mode';
 
@@ -33,7 +34,23 @@ class LocalStorageService {
     await _prefs.setBool(_keyIsOnboarded, true);
   }
 
-  // ─── User Profile ──────────────────────────────────────────
+  // ─── User Profile & Identity ───────────────────────────────
+
+  /// Gets the stored customer ID or initializes a stable device/phone identifier.
+  String get customerId {
+    var id = _prefs.getString(_keyCustomerId);
+    if (id == null || id.isEmpty) {
+      final phone = userPhone.trim();
+      if (phone.isNotEmpty) {
+        id = 'cust_$phone';
+      } else {
+        final rand = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+        id = 'cust_anon_$rand';
+      }
+      _prefs.setString(_keyCustomerId, id);
+    }
+    return id;
+  }
 
   /// Gets the stored user name.
   String get userName => _prefs.getString(_keyName) ?? '';
