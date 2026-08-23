@@ -1,5 +1,5 @@
 // BU Gate2Eat — Features
-// Active Orders Screen (Customer In-App Active Orders List — Dummy Data only)
+// Active Orders Screen (Customer In-App Active Orders List — Connected to real-time Firestore stream)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,12 +16,7 @@ class ActiveOrdersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dummyOrders = ref.watch(dummyOrdersProvider);
-
-    // Active orders only: placed or accepted
-    final activeOrders = dummyOrders
-        .where((o) => o.status == 'placed' || o.status == 'accepted')
-        .toList();
+    final activeOrdersAsync = ref.watch(customerActiveOrdersStreamProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -34,18 +29,82 @@ class ActiveOrdersScreen extends ConsumerWidget {
           onPressed: () => context.pop(),
         ),
       ),
-      body: activeOrders.isEmpty
-          ? _EmptyActiveOrdersView(isDark: isDark)
-          : ListView.separated(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              itemCount: activeOrders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 14),
-              itemBuilder: (context, index) {
-                final order = activeOrders[index];
-                return _ActiveOrderCard(order: order, isDark: isDark);
-              },
+      body: activeOrdersAsync.when(
+        data: (activeOrders) {
+          // Double filter to guarantee only placed or accepted
+          final filtered = activeOrders
+              .where((o) => o.status == 'placed' || o.status == 'accepted')
+              .toList();
+
+          if (filtered.isEmpty) {
+            return _EmptyActiveOrdersView(isDark: isDark);
+          }
+
+          return ListView.separated(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            itemCount: filtered.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 14),
+            itemBuilder: (context, index) {
+              final order = filtered[index];
+              return _ActiveOrderCard(order: order, isDark: isDark);
+            },
+          );
+        },
+        loading: () => const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+          ),
+        ),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.cloud_off_rounded,
+                  size: 48,
+                  color: AppColors.error,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Unable to load orders',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Please check your connection and try again.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () =>
+                      ref.refresh(customerActiveOrdersStreamProvider),
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+        ),
+      ),
     );
   }
 }

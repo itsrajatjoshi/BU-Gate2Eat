@@ -24,43 +24,154 @@ class OrderDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final orderAsync = ref.watch(singleOrderStreamProvider(orderId));
     final dummyOrders = ref.watch(dummyOrdersProvider);
 
-    // Resolve order from local dummy provider or initialOrder fallback
-    AppOrder? resolvedOrder;
+    // Fallback resolution for local testing/transitional orders
+    AppOrder? dummyFallback;
     try {
-      resolvedOrder = dummyOrders.firstWhere((o) => o.orderId == orderId);
+      dummyFallback = dummyOrders.firstWhere((o) => o.orderId == orderId);
     } catch (_) {
-      resolvedOrder = initialOrder;
+      dummyFallback = initialOrder;
     }
 
-    if (resolvedOrder == null) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Order Details'),
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey),
-              const SizedBox(height: 16),
-              const Text(
-                'Order not found',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: () => context.pop(),
-                child: const Text('Go Back'),
-              ),
-            ],
+    return orderAsync.when(
+      data: (liveOrder) {
+        final order = liveOrder ?? dummyFallback;
+        if (order == null) {
+          return _buildNotFoundScreen(context);
+        }
+        return _buildOrderContent(context, ref, order, isDark);
+      },
+      loading: () {
+        if (dummyFallback != null) {
+          return _buildOrderContent(context, ref, dummyFallback, isDark);
+        }
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Order Details'),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () => context.pop(),
+            ),
           ),
-        ),
-      );
-    }
+          body: const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          ),
+        );
+      },
+      error: (error, _) {
+        if (dummyFallback != null) {
+          return _buildOrderContent(context, ref, dummyFallback, isDark);
+        }
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Order Details'),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () => context.pop(),
+            ),
+          ),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.cloud_off_rounded,
+                    size: 48,
+                    color: AppColors.error,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Unable to load order details',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Please check your connection and try again.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        ref.refresh(singleOrderStreamProvider(orderId)),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Retry'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-    final order = resolvedOrder;
+  Widget _buildNotFoundScreen(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Order Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.pop(),
+        ),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.receipt_long_outlined,
+              size: 64,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Order not found',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () => context.pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('Go Back'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderContent(
+    BuildContext context,
+    WidgetRef ref,
+    AppOrder order,
+    bool isDark,
+  ) {
     final isCancelled = order.status == 'cancelled';
     final isRejected = order.status == 'rejected';
     final isDelivered = order.status == 'delivered';
@@ -80,7 +191,9 @@ class OrderDetailScreen extends ConsumerWidget {
               order.orderId,
               style: TextStyle(
                 fontSize: 12,
-                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                color: isDark
+                    ? AppColors.darkTextSecondary
+                    : AppColors.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -716,7 +829,8 @@ class OrderDetailScreen extends ConsumerWidget {
     );
   }
 
-  void _confirmCancelDialog(BuildContext context, WidgetRef ref, String orderId) {
+  void _confirmCancelDialog(
+      BuildContext context, WidgetRef ref, String orderId) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -734,19 +848,40 @@ class OrderDetailScreen extends ConsumerWidget {
             child: const Text('No, Keep Order'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ref.read(dummyOrdersProvider.notifier).cancelOrder(orderId);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Order has been cancelled.'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              );
+              try {
+                // Real Firestore Cancellation
+                await ref.read(orderServiceProvider).cancelOrder(orderId);
+                // Also update local dummy state for safety in transitional phase
+                ref.read(dummyOrdersProvider.notifier).cancelOrder(orderId);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Order has been cancelled.'),
+                      backgroundColor: AppColors.error,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to cancel order: $e'),
+                      backgroundColor: AppColors.error,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,

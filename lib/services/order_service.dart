@@ -3,6 +3,7 @@
 // Handles order creation, retrieval, real-time streams, status transitions, and lifecycle validation.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/order_model.dart';
@@ -84,6 +85,16 @@ class OrderService {
 
   final FirebaseFirestore? _customFirestore;
 
+  /// Checks if Firebase is initialized or custom firestore instance is provided.
+  bool get isAvailable {
+    try {
+      if (_customFirestore != null) return true;
+      return Firebase.apps.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   FirebaseFirestore get _firestore =>
       _customFirestore ?? FirebaseFirestore.instance;
 
@@ -130,6 +141,7 @@ class OrderService {
 
   /// Watches a single order for real-time status and detail updates.
   Stream<AppOrder?> watchOrder(String orderId) {
+    if (!isAvailable) return const Stream.empty();
     return _ordersRef.doc(orderId).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) return null;
       return AppOrder.fromFirestore(doc);
@@ -143,6 +155,7 @@ class OrderService {
     String? customerId,
     String? customerPhone,
   }) {
+    if (!isAvailable) return const Stream.empty();
     Query<Map<String, dynamic>> query = _ordersRef;
 
     if (customerId != null && customerId.isNotEmpty) {
@@ -167,6 +180,7 @@ class OrderService {
     String? customerId,
     String? customerPhone,
   }) {
+    if (!isAvailable) return const Stream.empty();
     Query<Map<String, dynamic>> query = _ordersRef;
 
     if (customerId != null && customerId.isNotEmpty) {

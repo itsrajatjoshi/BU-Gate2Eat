@@ -1,5 +1,4 @@
-// BU Gate2Eat — Core Providers
-// Global Riverpod providers for services and shared state
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -72,14 +71,22 @@ class CustomerIdentity {
 /// Provider for the current customer's identity.
 /// Easily swappable with Firebase Auth UID in future phases.
 final customerIdentityProvider = Provider<CustomerIdentity>((ref) {
-  final localStorage = ref.watch(localStorageServiceProvider);
-  final phone = localStorage.userPhone.trim();
-  final name = localStorage.userName.trim();
-  return CustomerIdentity(
-    customerId: localStorage.customerId,
-    name: name.isNotEmpty ? name : 'Student',
-    phone: phone,
-  );
+  try {
+    final localStorage = ref.watch(localStorageServiceProvider);
+    final phone = localStorage.userPhone.trim();
+    final name = localStorage.userName.trim();
+    return CustomerIdentity(
+      customerId: localStorage.customerId,
+      name: name.isNotEmpty ? name : 'Student',
+      phone: phone,
+    );
+  } catch (_) {
+    return const CustomerIdentity(
+      customerId: 'cust_default',
+      name: 'Student',
+      phone: '9876543210',
+    );
+  }
 });
 
 /// Provider for the ForceUpdate service.
@@ -236,7 +243,94 @@ class ShopOrderMethodNotifier extends StateNotifier<Map<String, ShopOrderMethod>
   }
 }
 
-/// Local/session state provider for dummy customer orders (Part 1.2 & Part 1.3)
+/// Real-time stream provider for current customer's active orders (placed, accepted).
+final customerActiveOrdersStreamProvider =
+    StreamProvider<List<AppOrder>>((ref) async* {
+  final orderService = ref.watch(orderServiceProvider);
+  final identity = ref.watch(customerIdentityProvider);
+  final dummyOrders = ref.watch(dummyOrdersProvider);
+
+  if (!orderService.isAvailable) {
+    yield dummyOrders
+        .where((o) => o.status == 'placed' || o.status == 'accepted')
+        .toList();
+    return;
+  }
+
+  yield* orderService
+      .watchCustomerActiveOrders(
+        customerId: identity.customerId,
+        customerPhone: identity.phone,
+      )
+      .map((firestoreOrders) {
+        if (firestoreOrders.isNotEmpty) return firestoreOrders;
+        return dummyOrders
+            .where((o) => o.status == 'placed' || o.status == 'accepted')
+            .toList();
+      });
+});
+
+/// Real-time stream provider for current customer's order history (delivered, rejected, cancelled).
+final customerOrderHistoryStreamProvider =
+    StreamProvider<List<AppOrder>>((ref) async* {
+  final orderService = ref.watch(orderServiceProvider);
+  final identity = ref.watch(customerIdentityProvider);
+  final dummyOrders = ref.watch(dummyOrdersProvider);
+
+  if (!orderService.isAvailable) {
+    yield dummyOrders
+        .where((o) =>
+            o.status == 'delivered' ||
+            o.status == 'rejected' ||
+            o.status == 'cancelled')
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return;
+  }
+
+  yield* orderService
+      .watchCustomerOrderHistory(
+        customerId: identity.customerId,
+        customerPhone: identity.phone,
+      )
+      .map((firestoreOrders) {
+        if (firestoreOrders.isNotEmpty) return firestoreOrders;
+        return dummyOrders
+            .where((o) =>
+                o.status == 'delivered' ||
+                o.status == 'rejected' ||
+                o.status == 'cancelled')
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      });
+});
+
+/// Real-time stream provider for watching a single order by orderId.
+final singleOrderStreamProvider =
+    StreamProvider.family<AppOrder?, String>((ref, orderId) async* {
+  final orderService = ref.watch(orderServiceProvider);
+  final dummyOrders = ref.watch(dummyOrdersProvider);
+
+  AppOrder? getDummy() {
+    try {
+      return dummyOrders.firstWhere((o) => o.orderId == orderId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  if (!orderService.isAvailable) {
+    yield getDummy();
+    return;
+  }
+
+  yield* orderService.watchOrder(orderId).map((liveOrder) {
+    if (liveOrder != null) return liveOrder;
+    return getDummy();
+  });
+});
+
+/// Local/session state provider for dummy customer orders (Used by Shopkeeper until Part 3.4)
 final dummyOrdersProvider =
     StateNotifierProvider<DummyOrdersNotifier, List<AppOrder>>((ref) {
   return DummyOrdersNotifier();

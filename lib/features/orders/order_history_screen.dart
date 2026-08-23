@@ -1,5 +1,5 @@
 // BU Gate2Eat — Order History Screen
-// Customer Order History page (Connected to local dummy order state)
+// Customer Order History page (Connected to real-time Firestore stream)
 // Displays completed (delivered), cancelled, and rejected orders.
 
 import 'package:flutter/material.dart';
@@ -17,16 +17,7 @@ class OrderHistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dummyOrders = ref.watch(dummyOrdersProvider);
-
-    // Terminal orders only: delivered, rejected, cancelled (sorted newest first)
-    final historyOrders = dummyOrders
-        .where((o) =>
-            o.status == 'delivered' ||
-            o.status == 'rejected' ||
-            o.status == 'cancelled')
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final historyOrdersAsync = ref.watch(customerOrderHistoryStreamProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -36,18 +27,86 @@ class OrderHistoryScreen extends ConsumerWidget {
         ),
         automaticallyImplyLeading: false,
       ),
-      body: historyOrders.isEmpty
-          ? _EmptyOrderHistoryView(isDark: isDark)
-          : ListView.separated(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              itemCount: historyOrders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 14),
-              itemBuilder: (context, index) {
-                final order = historyOrders[index];
-                return _HistoryOrderCard(order: order, isDark: isDark);
-              },
+      body: historyOrdersAsync.when(
+        data: (historyOrders) {
+          // Terminal orders only: delivered, rejected, cancelled (sorted newest first)
+          final filtered = historyOrders
+              .where((o) =>
+                  o.status == 'delivered' ||
+                  o.status == 'rejected' ||
+                  o.status == 'cancelled')
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+          if (filtered.isEmpty) {
+            return _EmptyOrderHistoryView(isDark: isDark);
+          }
+
+          return ListView.separated(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            itemCount: filtered.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 14),
+            itemBuilder: (context, index) {
+              final order = filtered[index];
+              return _HistoryOrderCard(order: order, isDark: isDark);
+            },
+          );
+        },
+        loading: () => const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+          ),
+        ),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.cloud_off_rounded,
+                  size: 48,
+                  color: AppColors.error,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Unable to load orders',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Please check your connection and try again.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () =>
+                      ref.refresh(customerOrderHistoryStreamProvider),
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+        ),
+      ),
     );
   }
 }
