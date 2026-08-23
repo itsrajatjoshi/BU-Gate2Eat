@@ -392,7 +392,7 @@ final currentShopkeeperShopIdProvider = Provider<String>((ref) {
         localStorage.userPhone.replaceAll(RegExp(r'[^0-9]'), '');
 
     if (cleanPhone.endsWith('8745007244') || cleanPhone.endsWith('8745950335')) {
-      return 'up16_shop';
+      return 'up16_junction_fast_food';
     }
     if (cleanPhone.endsWith('8875344034') || cleanPhone == '8875344034') {
       return 'nayan_shop';

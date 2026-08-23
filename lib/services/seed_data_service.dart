@@ -2,6 +2,7 @@
 // Seed service for populating shop & menu data in Firestore ONLY when missing
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 /// Populates initial shop data into Firestore using custom document IDs.
 /// NEVER overwrites existing shops or manually edited prices.
@@ -23,6 +24,13 @@ class SeedDataService {
 
   static Future<void> seedInitialData() async {
     final firestore = FirebaseFirestore.instance;
+
+    // ─── Ensure UP 16 Junction Fast Food Shop & Complete Menu (Always Sync) ──
+    try {
+      await _seedUP16Shop(firestore);
+    } catch (e) {
+      debugPrint('Error seeding UP16: $e');
+    }
 
     final rajatDoc = await firestore.collection('shops').doc('rajat_shop').get();
     final nayanDoc = await firestore.collection('shops').doc('nayan_shop').get();
@@ -243,7 +251,8 @@ class SeedDataService {
 
   /// Populates or updates the complete UP 16 Junction Fast Food shop, 8 categories, and 60 menu items.
   static Future<void> _seedUP16Shop(FirebaseFirestore firestore) async {
-    final up16Ref = firestore.collection('shops').doc('up16_shop');
+    const shopId = 'up16_junction_fast_food';
+    final up16Ref = firestore.collection('shops').doc(shopId);
     final up16Doc = await up16Ref.get();
 
     if (!up16Doc.exists) {
@@ -266,7 +275,7 @@ class SeedDataService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } else {
-      // Ensure essential fields exist on existing up16_shop
+      // Ensure essential fields exist on existing up16_junction_fast_food
       final data = up16Doc.data() ?? {};
       final Map<String, dynamic> patch = {};
       if (!data.containsKey('orderMethod')) patch['orderMethod'] = 'both';
@@ -338,7 +347,7 @@ class SeedDataService {
         'sortOrder': cat['sortOrder'],
         'displayOrder': cat['sortOrder'],
         'isActive': true,
-        'shopId': 'up16_shop',
+        'shopId': shopId,
       }, SetOptions(merge: true));
     }
 

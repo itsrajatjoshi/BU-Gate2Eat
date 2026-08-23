@@ -291,7 +291,7 @@ void main() {
     });
 
     test('Admin: Delete Test Shop safety guard protects existing shops', () {
-      final coreShopIds = {'rajat_shop', 'nayan_shop', 'kivisha_shop', 'up16_shop'};
+      final coreShopIds = {'rajat_shop', 'nayan_shop', 'kivisha_shop', 'up16_junction_fast_food'};
       const deleteTargetId = 'qa_test_cafe';
 
       // Verify that deleting test shop target does not contain core shop IDs

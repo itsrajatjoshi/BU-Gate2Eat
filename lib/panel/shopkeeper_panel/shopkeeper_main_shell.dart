@@ -30,7 +30,7 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
     String shopId = 'rajat_shop';
     if (cleanPhone.endsWith('8745007244') ||
         cleanPhone.endsWith('8745950335')) {
-      shopId = 'up16_shop';
+      shopId = 'up16_junction_fast_food';
     } else if (cleanPhone.endsWith('8875344034') ||
         cleanPhone == '8875344034') {
       shopId = 'nayan_shop';
