@@ -4,7 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'admin_home_screen.dart';
-import 'admin_orders_screen.dart';
+import 'admin_order_stats_screen.dart';
 import 'admin_profile_screen.dart';
 
 class AdminMainShell extends StatefulWidget {
@@ -19,7 +19,7 @@ class _AdminMainShellState extends State<AdminMainShell> {
 
   final List<Widget> _screens = const [
     AdminHomeScreen(),
-    AdminOrdersScreen(),
+    AdminOrderStatsScreen(),
     AdminProfileScreen(),
   ];
 
@@ -39,9 +39,9 @@ class _AdminMainShellState extends State<AdminMainShell> {
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.receipt_long_outlined),
-            activeIcon: Icon(Icons.receipt_long_rounded),
-            label: 'Orders',
+            icon: Icon(Icons.analytics_outlined),
+            activeIcon: Icon(Icons.analytics_rounded),
+            label: 'Order Stats',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline_rounded),

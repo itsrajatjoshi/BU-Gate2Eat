@@ -17,6 +17,8 @@ import '../features/splash/splash_screen.dart';
 import '../models/order_model.dart';
 import '../panel/admin_panel/admin_main_shell.dart';
 import '../panel/admin_panel/admin_shop_detail_screen.dart';
+import '../panel/admin_panel/admin_shop_orders_screen.dart';
+import '../panel/admin_panel/admin_shop_stats_detail_screen.dart';
 import '../panel/shopkeeper_panel/shopkeeper_main_shell.dart';
 import '../panel/shopkeeper_panel/shopkeeper_profile_screen.dart';
 
@@ -38,6 +40,8 @@ class AppRoutes {
   static const String shopkeeperProfile = '/shopkeeper/profile';
   static const String admin = '/admin';
   static const String adminShopDetail = '/admin/shop/:shopId';
+  static const String adminShopStats = '/admin/stats/:shopId';
+  static const String adminShopOrders = '/admin/stats/:shopId/orders';
 }
 
 /// GoRouter configuration for the app.
@@ -97,6 +101,20 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final shopId = state.pathParameters['shopId'] ?? '';
         return AdminShopDetailScreen(shopId: shopId);
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.adminShopStats,
+      builder: (context, state) {
+        final shopId = state.pathParameters['shopId'] ?? '';
+        return AdminShopStatsDetailScreen(shopId: shopId);
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.adminShopOrders,
+      builder: (context, state) {
+        final shopId = state.pathParameters['shopId'] ?? '';
+        return AdminShopOrdersScreen(shopId: shopId);
       },
     ),
     GoRoute(

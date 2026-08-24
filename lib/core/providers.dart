@@ -7,10 +7,12 @@ import '../models/category_model.dart';
 import '../models/menu_item_model.dart';
 import '../models/order_model.dart';
 import '../models/shop_model.dart';
+import '../models/shop_stats_model.dart';
 import '../services/firestore_service.dart';
 import '../services/force_update_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/order_service.dart';
+import '../services/shop_stats_service.dart';
 
 export '../models/shop_model.dart' show ShopOrderMethod;
 
@@ -22,6 +24,24 @@ final firestoreServiceProvider = Provider<FirestoreService>((ref) {
 /// Provider for the Order service (singleton).
 final orderServiceProvider = Provider<OrderService>((ref) {
   return OrderService();
+});
+
+/// Provider for the Shop Statistics service (singleton).
+final shopStatsServiceProvider = Provider<ShopStatsService>((ref) {
+  return ShopStatsService();
+});
+
+/// Real-time stream of all shops' statistics for admin dashboard.
+final allShopStatsStreamProvider = StreamProvider<List<ShopStats>>((ref) {
+  final statsService = ref.watch(shopStatsServiceProvider);
+  return statsService.watchAllShopStats();
+});
+
+/// Real-time stream of a single shop's statistics.
+final shopStatsStreamProvider =
+    StreamProvider.family<ShopStats?, String>((ref, shopId) {
+  final statsService = ref.watch(shopStatsServiceProvider);
+  return statsService.watchShopStats(shopId);
 });
 
 /// Cached provider for fetching active shops list.
@@ -333,6 +353,18 @@ final shopOrderHistoryStreamProvider =
   }
 
   yield* orderService.watchShopOrderHistory(effectiveShopId);
+});
+
+/// Real-time stream of ALL in-app orders for a specific shop (isolated by shopId).
+/// Used by Admin Panel for Shop In-App Orders List.
+final shopOrdersStreamProvider =
+    StreamProvider.family<List<AppOrder>, String>((ref, shopId) async* {
+  final orderService = ref.watch(orderServiceProvider);
+  if (!orderService.isAvailable) {
+    yield [];
+    return;
+  }
+  yield* orderService.watchShopOrders(shopId);
 });
 
 /// Local/session state provider for dummy customer orders (Used by Shopkeeper until Part 3.4)

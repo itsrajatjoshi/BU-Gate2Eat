@@ -104,9 +104,23 @@ class _ShopkeeperOrderDetailsModalState
     if (confirmed == true && mounted) {
       setState(() => _isSubmitting = true);
       try {
+        String deliveryPersonId = '8295643910';
+        String deliveryPersonName = 'Shopkeeper';
+        try {
+          final localStorage = ref.read(localStorageServiceProvider);
+          if (localStorage.userPhone.trim().isNotEmpty) {
+            deliveryPersonId = localStorage.userPhone.trim();
+          }
+          if (localStorage.userName.trim().isNotEmpty) {
+            deliveryPersonName = localStorage.userName.trim();
+          }
+        } catch (_) {}
+
         await ref.read(orderServiceProvider).updateOrderStatus(
               widget.order.orderId,
               'delivered',
+              deliveryPersonId: deliveryPersonId,
+              deliveryPersonName: deliveryPersonName,
             );
         ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
               widget.order.orderId,
@@ -823,76 +837,120 @@ class _ShopkeeperOrderDetailsModalState
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
                 child: isAccepted
-                    ? Row(
-                        children: [
-                          // Reject Order Button (Phase 2.3 Functional Rejection Flow)
-                          Expanded(
-                            flex: 1,
-                            child: OutlinedButton(
-                              onPressed: _isSubmitting ? null : _handleReject,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.error,
-                                side: BorderSide(
-                                  color: AppColors.error.withValues(alpha: 0.4),
-                                ),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: const Text(
-                                'Reject Order',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
+                    ? Builder(
+                        builder: (context) {
+                          final canRejectAccepted = order.rejectDeadline != null
+                              ? DateTime.now().isBefore(order.rejectDeadline!)
+                              : (order.acceptedAt != null
+                                  ? DateTime.now().difference(order.acceptedAt!).inMinutes < 15
+                                  : true);
 
-                          // Mark Delivered Button (Phase 2.5 Functional Delivery Flow)
-                          Expanded(
-                            flex: 2,
-                            child: ElevatedButton.icon(
-                              onPressed:
-                                  _isSubmitting ? null : _handleMarkDelivered,
-                              icon: _isSubmitting
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
+                          if (!canRejectAccepted) {
+                            // 15-min rejection window has expired: Only show Mark Delivered button
+                            return SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _isSubmitting ? null : _handleMarkDelivered,
+                                icon: _isSubmitting
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.task_alt_rounded,
+                                        size: 18,
                                       ),
-                                    )
-                                  : const Icon(
-                                      Icons.task_alt_rounded,
-                                      size: 18,
+                                label: Text(
+                                  _isSubmitting ? 'Updating...' : 'Mark as Delivered',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14.5,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.success,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
+                          return Row(
+                            children: [
+                              // Reject Order Button (Active only within 15-min window)
+                              Expanded(
+                                flex: 1,
+                                child: OutlinedButton(
+                                  onPressed: _isSubmitting ? null : _handleReject,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.error,
+                                    side: BorderSide(
+                                      color: AppColors.error.withValues(alpha: 0.4),
                                     ),
-                              label: Text(
-                                _isSubmitting
-                                    ? 'Updating...'
-                                    : 'Mark as Delivered',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14.5,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Reject Order',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.success,
-                                foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                              const SizedBox(width: 12),
+
+                              // Mark Delivered Button (Phase 2.5 Functional Delivery Flow)
+                              Expanded(
+                                flex: 2,
+                                child: ElevatedButton.icon(
+                                  onPressed: _isSubmitting ? null : _handleMarkDelivered,
+                                  icon: _isSubmitting
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.task_alt_rounded,
+                                          size: 18,
+                                        ),
+                                  label: Text(
+                                    _isSubmitting ? 'Updating...' : 'Mark as Delivered',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14.5,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.success,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                        ],
+                            ],
+                          );
+                        },
                       )
                     : Row(
                         children: [

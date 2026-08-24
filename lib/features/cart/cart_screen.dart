@@ -340,6 +340,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
 
     if (success) {
+      // Atomic shop-wise WhatsApp counter increment (Rule 9: No order doc, only counter)
+      await ref.read(shopStatsServiceProvider).incrementWhatsappOrders(shopId);
       ref.read(cartProvider.notifier).clearCart();
     } else if (mounted) {
       showDialog<void>(

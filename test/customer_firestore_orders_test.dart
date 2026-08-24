@@ -143,6 +143,9 @@ class MockOrderService extends OrderService {
     String orderId,
     String newStatus, {
     String? rejectionReason,
+    String? deliveryPersonId,
+    String? deliveryPersonName,
+    DateTime? customNow,
   }) async {
     final index = _orders.indexWhere((o) => o.orderId == orderId);
     if (index != -1) {

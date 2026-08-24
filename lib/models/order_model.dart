@@ -62,11 +62,16 @@ class AppOrder {
     this.deliveryNote = 'Bennett University',
     this.status = 'placed',
     this.rejectionReason = '',
+    this.deliveryPersonId = '',
+    this.deliveryPersonName = '',
     this.updatedAt,
     this.acceptedAt,
     this.deliveredAt,
     this.rejectedAt,
     this.cancelledAt,
+    this.acceptDeadline,
+    this.rejectDeadline,
+    this.deliveryDeadline,
   });
 
   final String orderId;
@@ -81,12 +86,22 @@ class AppOrder {
   final String deliveryNote;
   final String status;
   final String rejectionReason;
+  /// Delivery person identity (testing: phone, production: Firebase UID).
+  /// Not exposed to Customer UI — only visible to Shopkeeper and Admin.
+  final String deliveryPersonId;
+  final String deliveryPersonName;
+
   final DateTime createdAt;
   final DateTime? updatedAt;
   final DateTime? acceptedAt;
   final DateTime? deliveredAt;
   final DateTime? rejectedAt;
   final DateTime? cancelledAt;
+
+  /// Timer deadlines (set via server timestamps at order creation / acceptance).
+  final DateTime? acceptDeadline;
+  final DateTime? rejectDeadline;
+  final DateTime? deliveryDeadline;
 
   int get totalItemCount =>
       items.fold<int>(0, (acc, item) => acc + item.quantity);
@@ -109,12 +124,17 @@ class AppOrder {
     String? deliveryNote,
     String? status,
     String? rejectionReason,
+    String? deliveryPersonId,
+    String? deliveryPersonName,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? acceptedAt,
     DateTime? deliveredAt,
     DateTime? rejectedAt,
     DateTime? cancelledAt,
+    DateTime? acceptDeadline,
+    DateTime? rejectDeadline,
+    DateTime? deliveryDeadline,
   }) {
     return AppOrder(
       orderId: orderId ?? this.orderId,
@@ -129,12 +149,17 @@ class AppOrder {
       deliveryNote: deliveryNote ?? this.deliveryNote,
       status: status ?? this.status,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      deliveryPersonId: deliveryPersonId ?? this.deliveryPersonId,
+      deliveryPersonName: deliveryPersonName ?? this.deliveryPersonName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       acceptedAt: acceptedAt ?? this.acceptedAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       rejectedAt: rejectedAt ?? this.rejectedAt,
       cancelledAt: cancelledAt ?? this.cancelledAt,
+      acceptDeadline: acceptDeadline ?? this.acceptDeadline,
+      rejectDeadline: rejectDeadline ?? this.rejectDeadline,
+      deliveryDeadline: deliveryDeadline ?? this.deliveryDeadline,
     );
   }
 
@@ -155,12 +180,17 @@ class AppOrder {
       'deliveryNote': deliveryNote,
       'status': status,
       'rejectionReason': rejectionReason,
+      if (deliveryPersonId.isNotEmpty) 'deliveryPersonId': deliveryPersonId,
+      if (deliveryPersonName.isNotEmpty) 'deliveryPersonName': deliveryPersonName,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt ?? createdAt),
       if (acceptedAt != null) 'acceptedAt': Timestamp.fromDate(acceptedAt!),
       if (deliveredAt != null) 'deliveredAt': Timestamp.fromDate(deliveredAt!),
       if (rejectedAt != null) 'rejectedAt': Timestamp.fromDate(rejectedAt!),
       if (cancelledAt != null) 'cancelledAt': Timestamp.fromDate(cancelledAt!),
+      if (acceptDeadline != null) 'acceptDeadline': Timestamp.fromDate(acceptDeadline!),
+      if (rejectDeadline != null) 'rejectDeadline': Timestamp.fromDate(rejectDeadline!),
+      if (deliveryDeadline != null) 'deliveryDeadline': Timestamp.fromDate(deliveryDeadline!),
     };
   }
 
@@ -211,12 +241,17 @@ class AppOrder {
       deliveryNote: (map['deliveryNote'] as String?) ?? 'Bennett University',
       status: (map['status'] as String?) ?? 'placed',
       rejectionReason: (map['rejectionReason'] as String?) ?? '',
+      deliveryPersonId: (map['deliveryPersonId'] as String?) ?? '',
+      deliveryPersonName: (map['deliveryPersonName'] as String?) ?? '',
       createdAt: _parseDateTime(map['createdAt']),
       updatedAt: _parseNullableDateTime(map['updatedAt']),
       acceptedAt: _parseNullableDateTime(map['acceptedAt']),
       deliveredAt: _parseNullableDateTime(map['deliveredAt']),
       rejectedAt: _parseNullableDateTime(map['rejectedAt']),
       cancelledAt: _parseNullableDateTime(map['cancelledAt']),
+      acceptDeadline: _parseNullableDateTime(map['acceptDeadline']),
+      rejectDeadline: _parseNullableDateTime(map['rejectDeadline']),
+      deliveryDeadline: _parseNullableDateTime(map['deliveryDeadline']),
     );
   }
 

@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class MockShopkeeperOrderService implements OrderService {
+class MockShopkeeperOrderService extends OrderService {
   MockShopkeeperOrderService([List<AppOrder>? initialOrders])
       : _orders = List.from(initialOrders ?? []);
 
@@ -106,6 +106,9 @@ class MockShopkeeperOrderService implements OrderService {
     String orderId,
     String newStatus, {
     String? rejectionReason,
+    String? deliveryPersonId,
+    String? deliveryPersonName,
+    DateTime? customNow,
   }) async {
     final index = _orders.indexWhere((o) => o.orderId == orderId);
     if (index != -1) {
@@ -119,6 +122,8 @@ class MockShopkeeperOrderService implements OrderService {
       final updated = current.copyWith(
         status: newStatus,
         rejectionReason: rejectionReason ?? '',
+        deliveryPersonId: deliveryPersonId,
+        deliveryPersonName: deliveryPersonName,
         acceptedAt: newStatus == 'accepted' ? DateTime.now() : null,
         deliveredAt: newStatus == 'delivered' ? DateTime.now() : null,
         rejectedAt: newStatus == 'rejected' ? DateTime.now() : null,
@@ -137,7 +142,7 @@ class MockShopkeeperOrderService implements OrderService {
   }
 
   @override
-  Future<void> createOrder(AppOrder order) async {
+  Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
     seedOrder(order);
   }
 
