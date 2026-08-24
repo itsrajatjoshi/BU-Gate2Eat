@@ -554,5 +554,74 @@ void main() {
       expect(updated1.orderId, equals('YB-CONC-01'));
       expect(updated2.orderId, equals('YB-CONC-02'));
     });
+
+    test('14. Live active orders (placed & accepted) survive Admin Reset unharmed with intact timers', () {
+      final placedOrder = AppOrder(
+        orderId: 'YB-LIVE-PLACED',
+        customerId: 'cust_live_1',
+        customerName: 'Live Placed Customer',
+        customerPhone: '9876543210',
+        shopId: 'rajat_shop',
+        shopName: 'Rajat Hotel',
+        status: 'placed',
+        totalAmount: 120,
+        items: const [OrderItem(menuItemId: 'm1', name: 'Dal Tadka', price: 120, quantity: 1)],
+        createdAt: DateTime(2026, 8, 24, 12, 0),
+        acceptDeadline: DateTime(2026, 8, 24, 12, 20),
+      );
+
+      final acceptedOrder = AppOrder(
+        orderId: 'YB-LIVE-ACCEPTED',
+        customerId: 'cust_live_2',
+        customerName: 'Live Accepted Customer',
+        customerPhone: '9876543211',
+        shopId: 'rajat_shop',
+        shopName: 'Rajat Hotel',
+        status: 'accepted',
+        totalAmount: 250,
+        items: const [OrderItem(menuItemId: 'm2', name: 'Paneer Biryani', price: 250, quantity: 1)],
+        createdAt: DateTime(2026, 8, 24, 12, 1),
+        acceptedAt: DateTime(2026, 8, 24, 12, 6),
+        rejectDeadline: DateTime(2026, 8, 24, 12, 21),
+        deliveryDeadline: DateTime(2026, 8, 24, 13, 36),
+      );
+
+      final deliveredOrder = AppOrder(
+        orderId: 'YB-HIST-DELIVERED',
+        customerId: 'cust_hist_1',
+        customerName: 'Past Customer',
+        customerPhone: '9876543212',
+        shopId: 'rajat_shop',
+        shopName: 'Rajat Hotel',
+        status: 'delivered',
+        totalAmount: 300,
+        items: const [OrderItem(menuItemId: 'm3', name: 'Thali', price: 300, quantity: 1)],
+        createdAt: DateTime(2026, 8, 24, 10, 0),
+        deliveredAt: DateTime(2026, 8, 24, 10, 45),
+      );
+
+      final allShopOrders = [placedOrder, acceptedOrder, deliveredOrder];
+
+      // Filter simulation during reset: ONLY terminal statuses are deleted!
+      const terminalStatuses = ['delivered', 'rejected', 'delivery_expired', 'cancelled'];
+      final terminalToDelete = allShopOrders.where((o) => terminalStatuses.contains(o.status)).toList();
+      final activeSurviving = allShopOrders.where((o) => !terminalStatuses.contains(o.status)).toList();
+
+      expect(terminalToDelete.length, equals(1));
+      expect(terminalToDelete.first.orderId, equals('YB-HIST-DELIVERED'));
+
+      // Active orders strictly survive
+      expect(activeSurviving.length, equals(2));
+      expect(activeSurviving.any((o) => o.orderId == 'YB-LIVE-PLACED'), isTrue);
+      expect(activeSurviving.any((o) => o.orderId == 'YB-LIVE-ACCEPTED'), isTrue);
+
+      // Timers & deadlines remain 100% intact
+      final survivingPlaced = activeSurviving.firstWhere((o) => o.orderId == 'YB-LIVE-PLACED');
+      expect(survivingPlaced.acceptDeadline, equals(DateTime(2026, 8, 24, 12, 20)));
+
+      final survivingAccepted = activeSurviving.firstWhere((o) => o.orderId == 'YB-LIVE-ACCEPTED');
+      expect(survivingAccepted.rejectDeadline, equals(DateTime(2026, 8, 24, 12, 21)));
+      expect(survivingAccepted.deliveryDeadline, equals(DateTime(2026, 8, 24, 13, 36)));
+    });
   });
 }

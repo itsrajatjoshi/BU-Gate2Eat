@@ -195,46 +195,71 @@ class ShopStatsService {
     }
   }
 
-  /// Deletes all order documents belonging to a specific shop.
-  /// Used during admin monthly reset to free Firestore storage.
+  /// Deletes ONLY TERMINAL (historical) order documents belonging to a specific shop.
+  /// Terminal statuses: 'delivered', 'rejected', 'delivery_expired', 'cancelled'.
   ///
-  /// Deletes in batches of 100 for Firestore batch write limits.
-  Future<int> deleteShopOrders(String shopId) async {
+  /// CRITICAL SAFETY RULE:
+  /// ACTIVE orders ('placed', 'accepted') MUST NEVER BE DELETED or touched during reset!
+  /// Live customer & shopkeeper orders, active timers, and pending food preparation
+  /// must continue completely unharmed.
+  Future<int> deleteTerminalShopOrders(String shopId) async {
     if (!isAvailable) return 0;
     int totalDeleted = 0;
     try {
+      const terminalStatuses = [
+        'delivered',
+        'rejected',
+        'delivery_expired',
+        'cancelled',
+      ];
+
       const batchSize = 100;
       while (true) {
         final snapshot = await _firestore
             .collection('orders')
             .where('shopId', isEqualTo: shopId)
+            .where('status', whereIn: terminalStatuses)
             .limit(batchSize)
             .get();
 
         if (snapshot.docs.isEmpty) break;
 
         final batch = _firestore.batch();
+        int batchDeleteCount = 0;
         for (final doc in snapshot.docs) {
-          batch.delete(doc.reference);
+          final status = (doc.data()['status'] as String?) ?? '';
+          // Hard backend guard: NEVER delete placed or accepted orders
+          if (status != 'placed' && status != 'accepted') {
+            batch.delete(doc.reference);
+            batchDeleteCount++;
+          }
         }
-        await batch.commit();
-        totalDeleted += snapshot.docs.length;
+
+        if (batchDeleteCount > 0) {
+          await batch.commit();
+          totalDeleted += batchDeleteCount;
+        }
 
         if (snapshot.docs.length < batchSize) break;
       }
       debugPrint(
-          '✅ ShopStatsService: Deleted $totalDeleted orders for $shopId',);
+        '✅ ShopStatsService: Deleted $totalDeleted terminal orders for $shopId (Active orders preserved)',
+      );
       return totalDeleted;
     } catch (e) {
-      debugPrint('❌ ShopStatsService deleteShopOrders error: $e');
+      debugPrint('❌ ShopStatsService deleteTerminalShopOrders error: $e');
       rethrow;
     }
   }
 
-  /// Full monthly reset: zeroes stats AND deletes all orders for a shop.
-  /// Returns the number of deleted order documents.
+  /// Deprecated alias kept for backwards compatibility; delegates to [deleteTerminalShopOrders].
+  Future<int> deleteShopOrders(String shopId) => deleteTerminalShopOrders(shopId);
+
+  /// Full monthly reset: zeroes stats AND deletes ONLY terminal historical orders for a shop.
+  /// ACTIVE orders ('placed', 'accepted') are strictly preserved.
+  /// Returns the number of deleted terminal order documents.
   Future<int> fullShopReset(String shopId) async {
-    final deletedCount = await deleteShopOrders(shopId);
+    final deletedCount = await deleteTerminalShopOrders(shopId);
     await resetShopStats(shopId);
     return deletedCount;
   }

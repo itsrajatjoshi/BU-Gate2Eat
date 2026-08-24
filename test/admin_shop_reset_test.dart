@@ -46,13 +46,15 @@ class FakeShopStatsService extends ShopStatsService {
   }
 
   @override
-  Future<int> deleteShopOrders(String shopId) async {
+  Future<int> deleteTerminalShopOrders(String shopId) async {
     if (shouldFail) {
       throw Exception('Firestore network timeout simulation');
     }
-    final count = ordersMap[shopId]?.length ?? 0;
-    ordersMap[shopId] = [];
-    return count;
+    final currentList = ordersMap[shopId] ?? [];
+    // CRITICAL SAFETY RULE: Only delete terminal orders. Placed and accepted orders MUST survive!
+    final toDelete = currentList.where((o) => o.status != 'placed' && o.status != 'accepted').toList();
+    ordersMap[shopId] = currentList.where((o) => o.status == 'placed' || o.status == 'accepted').toList();
+    return toDelete.length;
   }
 
   @override
@@ -61,7 +63,7 @@ class FakeShopStatsService extends ShopStatsService {
     if (shouldFail) {
       throw Exception('Firestore network timeout simulation');
     }
-    final deletedCount = await deleteShopOrders(shopId);
+    final deletedCount = await deleteTerminalShopOrders(shopId);
     await resetShopStats(shopId);
     return deletedCount;
   }
@@ -161,21 +163,57 @@ void main() {
   );
 
   group('Phase E: Admin Shop Reset Service & UI Tests', () {
-    test('1 & 2. fullShopReset(Shop A) zeroes all Shop A counters and deletes Shop A orders', () async {
+    test('1 & 2. fullShopReset(Shop A) zeroes stats, deletes TERMINAL orders, and STRICTLY PRESERVES active placed/accepted orders', () async {
       final fakeService = FakeShopStatsService();
       fakeService.statsMap['rajat_shop'] = stats1;
-      fakeService.ordersMap['rajat_shop'] = [rajatOrder];
+
+      final activePlacedOrder = AppOrder(
+        orderId: 'YB-ACTIVE-01',
+        customerId: 'cust_active_1',
+        customerName: 'Live User 1',
+        customerPhone: '9876543219',
+        shopId: 'rajat_shop',
+        shopName: 'Rajat Hotel',
+        status: 'placed',
+        totalAmount: 100,
+        items: const [OrderItem(menuItemId: 'm1', name: 'Roti', price: 100, quantity: 1)],
+        createdAt: DateTime(2026, 8, 24),
+      );
+
+      final activeAcceptedOrder = AppOrder(
+        orderId: 'YB-ACTIVE-02',
+        customerId: 'cust_active_2',
+        customerName: 'Live User 2',
+        customerPhone: '9876543218',
+        shopId: 'rajat_shop',
+        shopName: 'Rajat Hotel',
+        status: 'accepted',
+        totalAmount: 200,
+        items: const [OrderItem(menuItemId: 'm2', name: 'Paneer', price: 200, quantity: 1)],
+        createdAt: DateTime(2026, 8, 24),
+      );
+
+      fakeService.ordersMap['rajat_shop'] = [
+        activePlacedOrder,
+        activeAcceptedOrder,
+        rajatOrder, // status: 'delivered' (terminal)
+      ];
 
       fakeService.statsMap['nayan_shop'] = stats2;
       fakeService.ordersMap['nayan_shop'] = [nayanOrder];
 
       final deleted = await fakeService.fullShopReset('rajat_shop');
 
-      // 1. Shop A orders deleted
+      // 1. Only the 1 terminal delivered order was deleted
       expect(deleted, equals(1));
-      expect(fakeService.ordersMap['rajat_shop'], isEmpty);
 
-      // 2. Shop A stats zeroed
+      // 2. Both ACTIVE orders strictly survive unharmed!
+      final remainingOrders = fakeService.ordersMap['rajat_shop']!;
+      expect(remainingOrders.length, equals(2));
+      expect(remainingOrders.any((o) => o.orderId == 'YB-ACTIVE-01' && o.status == 'placed'), isTrue);
+      expect(remainingOrders.any((o) => o.orderId == 'YB-ACTIVE-02' && o.status == 'accepted'), isTrue);
+
+      // 3. Shop A stats zeroed
       final resetStats = fakeService.statsMap['rajat_shop']!;
       expect(resetStats.appOrders, equals(0));
       expect(resetStats.accepted, equals(0));
