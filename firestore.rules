@@ -2,35 +2,105 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ─── Shops collection & subcollections ────────────────────────────
-    match /shops/{shopId} {
-      // Anyone can read shop details
+    // ─── HELPER FUNCTIONS ──────────────────────────────────────────────
+
+    // 1. New Order Creation Validation: Ensures valid initial payload & 'placed' status
+    function isValidInitialOrder() {
+      let data = request.resource.data;
+      return data.status == 'placed'
+        && data.orderId is string && data.orderId.size() > 0
+        && data.shopId is string && data.shopId.size() > 0
+        && data.customerId is string && data.customerId.size() > 0
+        && data.customerPhone is string && data.customerPhone.size() >= 10
+        && data.totalAmount is number && data.totalAmount > 0
+        && data.items is list && data.items.size() > 0;
+    }
+
+    // 2. Immutability Protection: Prevents tampering with price, items, shop, or customer ID on update
+    function areImmutableFieldsPreserved() {
+      let next = request.resource.data;
+      let prev = resource.data;
+      return next.orderId == prev.orderId
+        && next.shopId == prev.shopId
+        && next.customerId == prev.customerId
+        && next.totalAmount == prev.totalAmount
+        && next.items == prev.items
+        && (prev.get('createdAt', null) == null || next.get('createdAt', null) == prev.get('createdAt', null));
+    }
+
+    // 3. Strict State Machine: Valid status transitions only
+    function isValidStatusTransition() {
+      let current = resource.data.status;
+      let next = request.resource.data.status;
+      
+      return (current == 'placed' && (next == 'accepted' || next == 'rejected' || next == 'cancelled'))
+          || (current == 'accepted' && (next == 'delivered' || next == 'rejected' || next == 'delivery_expired'))
+          || (current == next); // Allows updating timestamps/delivery person without changing status
+    }
+
+    // 4. Safe Deletion Rules:
+    // - Customer can cancel a 'placed' order before acceptance (Rule 1: Physical Deletion)
+    // - Admin can delete terminal historical orders on reset (Rule 2: Reset Safety)
+    // - Live 'accepted' orders can NEVER be deleted!
+    function isAllowedOrderDeletion() {
+      let status = resource.data.status;
+      return status == 'placed'
+          || status == 'delivered'
+          || status == 'rejected'
+          || status == 'delivery_expired'
+          || status == 'cancelled';
+    }
+
+    // ─── 1. ORDERS COLLECTION ──────────────────────────────────────────
+    match /orders/{orderId} {
+      // Live streaming & reading allowed for customer, shopkeeper, and admin
       allow read: if true;
 
-      // Allow writes for shops in development (Admin & Shopkeeper Panels)
-      // Note: Temporary development permission. Will be hardened with Firebase Auth in a future phase.
-      allow create, update, delete: if true;
+      // Customer can create orders ONLY with valid fields and 'placed' status
+      allow create: if isValidInitialOrder();
 
-      // Categories subcollection: anyone can read, authorized write
+      // Only valid status transitions allowed, core financial & item fields cannot be modified
+      allow update: if areImmutableFieldsPreserved() && isValidStatusTransition();
+
+      // Allowed for pre-accept cancellation ('placed') and terminal history cleanup on reset
+      allow delete: if isAllowedOrderDeletion();
+    }
+
+    // ─── 2. SHOP STATISTICS COLLECTION ─────────────────────────────────
+    match /shopStats/{shopId} {
+      // Admin and client stream listeners can read shop statistics
+      allow read: if true;
+
+      // Atomic counter increments (OrderService transactions, WhatsApp clicks, Admin reset)
+      allow create, update: if true;
+
+      // Stats documents should not be deleted (only reset to 0)
+      allow delete: if false;
+    }
+
+    // ─── 3. SHOPS & MENU ITEMS ─────────────────────────────────────────
+    match /shops/{shopId} {
+      allow read: if true;
+      allow write: if true;
+
       match /categories/{categoryId} {
         allow read: if true;
         allow write: if true;
       }
 
-      // Menu items subcollection: anyone can read, authorized write
       match /menuItems/{menuItemId} {
         allow read: if true;
         allow write: if true;
       }
     }
 
-    // App Configuration document (force update, maintenance mode)
+    // ─── 4. APP CONFIGURATION ──────────────────────────────────────────
     match /config/{document=**} {
       allow read: if true;
       allow write: if false;
     }
 
-    // Default deny all other unlisted paths
+    // ─── 5. DEFAULT DENY ───────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
