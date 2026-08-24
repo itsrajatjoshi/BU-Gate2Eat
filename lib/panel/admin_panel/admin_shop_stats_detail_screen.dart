@@ -1,6 +1,7 @@
 // BU Gate2Eat — Admin Panel
-// Shop Statistics Detail Screen (Phase C: Shop-wise Breakdown & Metric Inspector)
-// Shows isolated in-app order stats breakdown and WhatsApp count for a single shop.
+// Shop Statistics Detail Screen (Phase C, D & E)
+// Shows isolated in-app order stats breakdown, WhatsApp count, navigation to App Orders list,
+// and safe monthly reset for the selected shop.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +12,7 @@ import '../../core/providers.dart';
 import '../../models/shop_model.dart';
 import '../../models/shop_stats_model.dart';
 
-class AdminShopStatsDetailScreen extends ConsumerWidget {
+class AdminShopStatsDetailScreen extends ConsumerStatefulWidget {
   const AdminShopStatsDetailScreen({
     required this.shopId,
     super.key,
@@ -20,17 +21,99 @@ class AdminShopStatsDetailScreen extends ConsumerWidget {
   final String shopId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminShopStatsDetailScreen> createState() =>
+      _AdminShopStatsDetailScreenState();
+}
+
+class _AdminShopStatsDetailScreenState
+    extends ConsumerState<AdminShopStatsDetailScreen> {
+  bool _isResetting = false;
+
+  Future<void> _handleReset(String shopName) async {
+    if (_isResetting) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Reset $shopName?'),
+        content: const Text(
+          "This will permanently delete this shop's current app order records and reset all order statistics. This action cannot be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isResetting = true);
+
+    try {
+      await ref.read(shopStatsServiceProvider).fullShopReset(widget.shopId);
+
+      // Invalidate stream caches to trigger fresh load immediately
+      ref.invalidate(shopStatsStreamProvider(widget.shopId));
+      ref.invalidate(shopOrdersStreamProvider(widget.shopId));
+      ref.invalidate(allShopStatsStreamProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('$shopName data reset successfully.'),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('Failed to reset $shopName data: $e'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isResetting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final shopsAsync = ref.watch(shopsProvider);
-    final statsAsync = ref.watch(shopStatsStreamProvider(shopId));
+    final statsAsync = ref.watch(shopStatsStreamProvider(widget.shopId));
 
     // Resolve shop info
     final shop = shopsAsync.valueOrNull
-        ?.where((s) => s.id == shopId)
+        ?.where((s) => s.id == widget.shopId)
         .firstOrNull;
 
-    final shopName = shop?.name ?? (statsAsync.valueOrNull?.shopName.isNotEmpty == true ? statsAsync.valueOrNull!.shopName : 'Shop Statistics');
+    final shopName = shop?.name ??
+        (statsAsync.valueOrNull?.shopName.isNotEmpty == true
+            ? statsAsync.valueOrNull!.shopName
+            : 'Shop Statistics');
 
     return Scaffold(
       appBar: AppBar(
@@ -48,7 +131,7 @@ class AdminShopStatsDetailScreen extends ConsumerWidget {
         data: (rawStats) {
           final stats = rawStats ??
               ShopStats.zero(
-                shopId: shopId,
+                shopId: widget.shopId,
                 shopName: shopName,
               );
 
@@ -74,8 +157,8 @@ class AdminShopStatsDetailScreen extends ConsumerWidget {
                 _buildPeriodMetadataCard(context, stats, isDark),
                 const SizedBox(height: 24),
 
-                // ── 5. Action Buttons (UI Placeholders for Part D & E) ──
-                _buildActionButtons(context, isDark),
+                // ── 5. Action Buttons (View App Orders & Reset Data) ──
+                _buildActionButtons(context, shopName, isDark),
               ],
             ),
           );
@@ -175,7 +258,7 @@ class AdminShopStatsDetailScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Shop ID: $shopId',
+                      'Shop ID: ${widget.shopId}',
                       style: TextStyle(
                         fontSize: 12,
                         fontFamily: 'monospace',
@@ -547,7 +630,11 @@ class AdminShopStatsDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context, bool isDark) {
+  Widget _buildActionButtons(
+    BuildContext context,
+    String shopName,
+    bool isDark,
+  ) {
     return Column(
       children: [
         // ── View App Orders (Phase D) ──
@@ -555,7 +642,9 @@ class AdminShopStatsDetailScreen extends ConsumerWidget {
           width: double.infinity,
           height: 48,
           child: ElevatedButton.icon(
-            onPressed: () => context.push('/admin/stats/$shopId/orders'),
+            onPressed: _isResetting
+                ? null
+                : () => context.push('/admin/stats/${widget.shopId}/orders'),
             icon: const Icon(Icons.list_alt_rounded, size: 18),
             label: const Text(
               'VIEW APP ORDERS',
@@ -576,25 +665,25 @@ class AdminShopStatsDetailScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
 
-        // ── Reset Shop Data (Part E Placeholder) ──
+        // ── Reset Shop Data (Phase E) ──
         SizedBox(
           width: double.infinity,
           height: 48,
           child: OutlinedButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context)
-                ..hideCurrentSnackBar()
-                ..showSnackBar(
-                  const SnackBar(
-                    content: Text('Shop Data Reset will be enabled in Phase E.'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-            },
-            icon: const Icon(Icons.restart_alt_rounded, size: 18),
-            label: const Text(
-              'RESET DATA',
-              style: TextStyle(
+            onPressed: _isResetting ? null : () => _handleReset(shopName),
+            icon: _isResetting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.error,
+                    ),
+                  )
+                : const Icon(Icons.restart_alt_rounded, size: 18),
+            label: Text(
+              _isResetting ? 'RESETTING DATA...' : 'RESET DATA',
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.5,
               ),

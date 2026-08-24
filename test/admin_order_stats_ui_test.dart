@@ -184,7 +184,7 @@ void main() {
       expect(find.text('RESET DATA'), findsOneWidget);
     });
 
-    testWidgets('4. Tapping RESET DATA placeholder button shows informative snackbar', (tester) async {
+    testWidgets('4. Tapping RESET DATA button opens confirmation dialog', (tester) async {
       tester.view.physicalSize = const Size(800, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -213,12 +213,12 @@ void main() {
 
       // Tap RESET DATA
       await tester.tap(find.text('RESET DATA'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(
-        find.text('Shop Data Reset will be enabled in Phase E.'),
-        findsOneWidget,
-      );
+      await tester.pumpAndSettle();
+
+      // Verify confirmation dialog
+      expect(find.text('Reset Rajat Hotel?'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Reset'), findsOneWidget);
     });
   });
 }

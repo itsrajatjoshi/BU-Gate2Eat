@@ -176,7 +176,8 @@ class ShopStatsService {
   Future<void> resetShopStats(String shopId) async {
     if (!isAvailable) return;
     try {
-      await _statsRef.doc(shopId).update({
+      await _statsRef.doc(shopId).set({
+        'shopId': shopId,
         'appOrders': 0,
         'accepted': 0,
         'delivered': 0,
@@ -186,7 +187,7 @@ class ShopStatsService {
         'whatsappOrders': 0,
         'lastResetAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
       debugPrint('✅ ShopStatsService: Reset stats for $shopId');
     } catch (e) {
       debugPrint('❌ ShopStatsService resetShopStats error: $e');
