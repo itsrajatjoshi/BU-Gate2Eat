@@ -202,48 +202,46 @@ class ShopStatsService {
   /// ACTIVE orders ('placed', 'accepted') MUST NEVER BE DELETED or touched during reset!
   /// Live customer & shopkeeper orders, active timers, and pending food preparation
   /// must continue completely unharmed.
+  ///
+  /// Uses single-field shopId query to guarantee immediate execution without requiring
+  /// composite Firestore indexes.
   Future<int> deleteTerminalShopOrders(String shopId) async {
     if (!isAvailable) return 0;
     int totalDeleted = 0;
     try {
-      const terminalStatuses = [
-        'delivered',
-        'rejected',
-        'delivery_expired',
-        'cancelled',
-      ];
+      final snapshot = await _firestore
+          .collection('orders')
+          .where('shopId', isEqualTo: shopId)
+          .get();
 
-      const batchSize = 100;
-      while (true) {
-        final snapshot = await _firestore
-            .collection('orders')
-            .where('shopId', isEqualTo: shopId)
-            .where('status', whereIn: terminalStatuses)
-            .limit(batchSize)
-            .get();
+      if (snapshot.docs.isEmpty) return 0;
 
-        if (snapshot.docs.isEmpty) break;
+      // Filter only terminal orders (never placed or accepted)
+      final terminalDocs = snapshot.docs.where((doc) {
+        final status = (doc.data()['status'] as String?) ?? '';
+        return status != 'placed' && status != 'accepted';
+      }).toList();
+
+      if (terminalDocs.isEmpty) return 0;
+
+      // Commit in chunks of 400 (Firestore maximum batch size is 500)
+      const chunkSize = 400;
+      for (int i = 0; i < terminalDocs.length; i += chunkSize) {
+        final end = (i + chunkSize < terminalDocs.length)
+            ? i + chunkSize
+            : terminalDocs.length;
+        final chunk = terminalDocs.sublist(i, end);
 
         final batch = _firestore.batch();
-        int batchDeleteCount = 0;
-        for (final doc in snapshot.docs) {
-          final status = (doc.data()['status'] as String?) ?? '';
-          // Hard backend guard: NEVER delete placed or accepted orders
-          if (status != 'placed' && status != 'accepted') {
-            batch.delete(doc.reference);
-            batchDeleteCount++;
-          }
+        for (final doc in chunk) {
+          batch.delete(doc.reference);
         }
-
-        if (batchDeleteCount > 0) {
-          await batch.commit();
-          totalDeleted += batchDeleteCount;
-        }
-
-        if (snapshot.docs.length < batchSize) break;
+        await batch.commit();
+        totalDeleted += chunk.length;
       }
+
       debugPrint(
-        '✅ ShopStatsService: Deleted $totalDeleted terminal orders for $shopId (Active orders preserved)',
+        '✅ ShopStatsService: Deleted $totalDeleted terminal orders for $shopId from Firestore (Active placed/accepted orders preserved)',
       );
       return totalDeleted;
     } catch (e) {

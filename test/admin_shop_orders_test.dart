@@ -116,14 +116,14 @@ void main() {
     rejectedAt: DateTime(2026, 8, 24, 13, 8),
   );
 
-  final nayanOrderPlaced = AppOrder(
+  final nayanOrderDelivered = AppOrder(
     orderId: 'YB-NAYAN-001',
     customerId: 'cust_3',
     customerName: 'Karan Patel',
     customerPhone: '9876543212',
     shopId: 'nayan_shop',
     shopName: 'Nayan Cafe',
-    status: 'placed',
+    status: 'delivered',
     totalAmount: 90,
     items: [
       const OrderItem(
@@ -134,6 +134,7 @@ void main() {
       ),
     ],
     createdAt: DateTime(2026, 8, 24, 14, 0),
+    deliveredAt: DateTime(2026, 8, 24, 14, 25),
   );
 
   group('Phase D: Admin Selected Shop In-App Orders List Tests', () {
@@ -162,7 +163,7 @@ void main() {
 
       // Screen title and shop header
       expect(find.text('Rajat Hotel App Orders'), findsOneWidget);
-      expect(find.text('Total App Orders: 2'), findsOneWidget);
+      expect(find.text('Completed Orders: 2'), findsOneWidget);
 
       // Verify Raja Hotel orders are listed
       expect(find.text('#YB-RAJAT-002'), findsOneWidget);
@@ -188,7 +189,7 @@ void main() {
           overrides: [
             shopsProvider.overrideWith((ref) => Future.value([shop1, shop2])),
             shopOrdersStreamProvider('nayan_shop').overrideWith(
-              (ref) => Stream.value([nayanOrderPlaced]),
+              (ref) => Stream.value([nayanOrderDelivered]),
             ),
           ],
           child: const MaterialApp(
@@ -200,7 +201,7 @@ void main() {
 
       // Screen title and shop header
       expect(find.text('Nayan Cafe App Orders'), findsOneWidget);
-      expect(find.text('Total App Orders: 1'), findsOneWidget);
+      expect(find.text('Completed Orders: 1'), findsOneWidget);
 
       // Verify Nayan orders are present
       expect(find.text('#YB-NAYAN-001'), findsOneWidget);
@@ -209,6 +210,61 @@ void main() {
       // Verify Raja orders NEVER appear
       expect(find.text('#YB-RAJAT-001'), findsNothing);
       expect(find.text('#YB-RAJAT-002'), findsNothing);
+    });
+
+    testWidgets('2b. Active placed and accepted orders NEVER appear in Admin Shop Orders view', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final activePlaced = AppOrder(
+        orderId: 'YB-ACTIVE-PLACED',
+        customerId: 'cust_act_1',
+        customerName: 'Active User 1',
+        customerPhone: '9876543210',
+        shopId: 'rajat_shop',
+        shopName: 'Rajat Hotel',
+        status: 'placed',
+        totalAmount: 100,
+        items: const [OrderItem(menuItemId: 'm1', name: 'Tea', price: 100, quantity: 1)],
+        createdAt: DateTime(2026, 8, 24, 15, 0),
+      );
+
+      final activeAccepted = AppOrder(
+        orderId: 'YB-ACTIVE-ACCEPTED',
+        customerId: 'cust_act_2',
+        customerName: 'Active User 2',
+        customerPhone: '9876543211',
+        shopId: 'rajat_shop',
+        shopName: 'Rajat Hotel',
+        status: 'accepted',
+        totalAmount: 150,
+        items: const [OrderItem(menuItemId: 'm2', name: 'Coffee', price: 150, quantity: 1)],
+        createdAt: DateTime(2026, 8, 24, 15, 5),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            shopsProvider.overrideWith((ref) => Future.value([shop1])),
+            shopOrdersStreamProvider('rajat_shop').overrideWith(
+              (ref) => Stream.value([activePlaced, activeAccepted]),
+            ),
+          ],
+          child: const MaterialApp(
+            home: AdminShopOrdersScreen(shopId: 'rajat_shop'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Screen shows empty state since active orders are filtered out for Admin
+      expect(find.text('No app orders yet'), findsOneWidget);
+      expect(find.text('#YB-ACTIVE-PLACED'), findsNothing);
+      expect(find.text('#YB-ACTIVE-ACCEPTED'), findsNothing);
     });
 
     testWidgets('3. Empty shop renders clean empty state without dummy data', (tester) async {

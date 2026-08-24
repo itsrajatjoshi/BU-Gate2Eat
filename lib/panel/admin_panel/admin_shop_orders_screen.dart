@@ -53,33 +53,35 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
       ),
       body: ordersAsync.when(
         data: (allOrders) {
-          // Strict shop isolation: orders are already isolated by stream provider
-          if (allOrders.isEmpty) {
+          // Strict rule: Admin monitors ONLY processed/terminal business orders.
+          // Active live orders (placed, accepted) are handled strictly in Customer & Shopkeeper operational panels.
+          final terminalOrders = allOrders
+              .where((o) => o.status != 'placed' && o.status != 'accepted')
+              .toList();
+
+          if (terminalOrders.isEmpty) {
             return _buildEmptyState(isDark);
           }
 
           // Compute filter counts
-          final deliveredOrders = allOrders.where((o) => o.status == 'delivered').toList();
-          final acceptedOrders = allOrders.where((o) => o.status == 'accepted').toList();
-          final rejectedOrders = allOrders.where((o) => o.status == 'rejected').toList();
-          final expiredOrders = allOrders.where((o) => o.status == 'delivery_expired').toList();
+          final deliveredOrders = terminalOrders.where((o) => o.status == 'delivered').toList();
+          final rejectedOrders = terminalOrders.where((o) => o.status == 'rejected').toList();
+          final expiredOrders = terminalOrders.where((o) => o.status == 'delivery_expired').toList();
 
           // Apply selected filter
           final filteredOrders = switch (_selectedFilter) {
             'Delivered' => deliveredOrders,
-            'Accepted' => acceptedOrders,
             'Rejected' => rejectedOrders,
             'Expired' => expiredOrders,
-            _ => allOrders,
+            _ => terminalOrders,
           };
 
           return Column(
             children: [
               // ── Summary & Filter Header ──
               _buildHeaderAndFilters(
-                totalCount: allOrders.length,
+                totalCount: terminalOrders.length,
                 deliveredCount: deliveredOrders.length,
-                acceptedCount: acceptedOrders.length,
                 rejectedCount: rejectedOrders.length,
                 expiredCount: expiredOrders.length,
                 isDark: isDark,
@@ -216,7 +218,6 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
   Widget _buildHeaderAndFilters({
     required int totalCount,
     required int deliveredCount,
-    required int acceptedCount,
     required int rejectedCount,
     required int expiredCount,
     required bool isDark,
@@ -240,7 +241,7 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Total App Orders: $totalCount',
+                'Completed Orders: $totalCount',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
@@ -269,8 +270,6 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
                 _buildFilterChip('All', totalCount, isDark),
                 const SizedBox(width: 8),
                 _buildFilterChip('Delivered', deliveredCount, isDark),
-                const SizedBox(width: 8),
-                _buildFilterChip('Accepted', acceptedCount, isDark),
                 const SizedBox(width: 8),
                 _buildFilterChip('Rejected', rejectedCount, isDark),
                 const SizedBox(width: 8),
