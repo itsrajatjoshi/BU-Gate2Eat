@@ -11,7 +11,6 @@ import 'core/router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'services/local_storage_service.dart';
-import 'services/seed_data_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,11 +47,6 @@ void main() async {
   } catch (e, stack) {
     debugPrint('❌ Firebase Initialization Note: $e\n$stack');
   }
-
-  // Seed sample shop and menu data if database is empty (non-blocking)
-  SeedDataService.seedInitialData().catchError((Object e) {
-    debugPrint('Seed data note: $e');
-  });
 
   // Initialize local storage
   final localStorageService = await LocalStorageService.create();

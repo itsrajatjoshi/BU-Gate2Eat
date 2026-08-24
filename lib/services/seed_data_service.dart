@@ -25,37 +25,22 @@ class SeedDataService {
   static Future<void> seedInitialData() async {
     final firestore = FirebaseFirestore.instance;
 
-    // ─── Ensure UP 16 Junction Fast Food Shop & Complete Menu (Always Sync) ──
-    try {
-      await _seedUP16Shop(firestore);
-    } catch (e) {
-      debugPrint('Error seeding UP16: $e');
-    }
-
+    final up16Doc = await firestore.collection('shops').doc('up16_junction_fast_food').get();
     final rajatDoc = await firestore.collection('shops').doc('rajat_shop').get();
     final nayanDoc = await firestore.collection('shops').doc('nayan_shop').get();
     final kivishaDoc = await firestore.collection('shops').doc('kivisha_shop').get();
 
-    // Backfill orderMethod & minimumOrderAmount to existing shops if missing
-    for (final shopDoc in [rajatDoc, nayanDoc, kivishaDoc]) {
-      if (shopDoc.exists) {
-        final data = shopDoc.data() ?? {};
-        final Map<String, dynamic> patch = {};
-        if (!data.containsKey('orderMethod')) {
-          patch['orderMethod'] = 'whatsapp';
-        }
-        if (!data.containsKey('minimumOrderAmount')) {
-          patch['minimumOrderAmount'] = 0;
-        }
-        if (patch.isNotEmpty) {
-          await shopDoc.reference.set(patch, SetOptions(merge: true));
-        }
-      }
+    // If all shops already exist in Firestore, skip creating new shops to preserve shopkeeper/admin edits
+    if (rajatDoc.exists && nayanDoc.exists && kivishaDoc.exists && up16Doc.exists) {
+      debugPrint('ℹ️ All shops already exist in Firestore. Skipping seed.');
+      return;
     }
 
-    // If all standard shops already exist in Firestore, skip creating new shops
-    if (rajatDoc.exists && nayanDoc.exists && kivishaDoc.exists) {
-      return;
+    // ─── Ensure UP 16 Junction Fast Food Shop & Complete Menu (Only If Missing) ──
+    try {
+      await _seedUP16Shop(firestore);
+    } catch (e) {
+      debugPrint('Error seeding UP16: $e');
     }
 
     // Ensure categories subcollections exist with full metadata
@@ -286,6 +271,13 @@ class SeedDataService {
       if (patch.isNotEmpty) {
         await up16Ref.set(patch, SetOptions(merge: true));
       }
+    }
+
+    // If UP 16 menu items already exist in Firestore, skip categories & items to preserve live shopkeeper edits
+    final existingItems = await up16Ref.collection('menuItems').limit(1).get();
+    if (existingItems.docs.isNotEmpty) {
+      debugPrint('ℹ️ UP16 menu items already exist in Firestore. Skipping seeding to preserve edits.');
+      return;
     }
 
     // 8 Exact Categories for UP 16 Junction Fast Food
