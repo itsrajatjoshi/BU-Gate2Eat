@@ -15,6 +15,18 @@ enum OptionPricingType {
   selectionOnly,
 }
 
+/// Defines the behavior, selection rules, and pricing structure for an entire option group.
+enum OptionGroupType {
+  /// Exactly one option is required. Options specify full fixed prices for the variant (e.g. Size: Large ₹70, XL ₹90).
+  fixed,
+
+  /// Exactly one option must be selected. Choices have zero price impact (e.g. Sauce: With Sauce, Without Sauce).
+  choice,
+
+  /// Optional choices (0 or 1 selection). Each option adds a price surcharge (e.g. Extras: Cheese +₹10, Extra Patty +₹30).
+  extra,
+}
+
 /// Represents an individual selectable choice within an option group.
 /// (e.g., "Half" ₹80, "Full" ₹140, "XL" ₹130, "Fried" +₹20, "Dry" selectionOnly).
 class MenuItemOption {
@@ -83,6 +95,7 @@ class MenuItemOptionGroup {
     required this.name,
     required this.options,
     this.required = true,
+    this.groupType = OptionGroupType.fixed,
   });
 
   /// Unique identifier for this group (e.g., 'grp_portion', 'grp_size').
@@ -95,7 +108,11 @@ class MenuItemOptionGroup {
   final List<MenuItemOption> options;
 
   /// Whether the customer is required to make a selection from this group before adding to cart.
+  /// (Fixed & Choice are required by default; Extra is optional by default).
   final bool required;
+
+  /// Group-level pricing & selection type: [OptionGroupType.fixed], [OptionGroupType.choice], or [OptionGroupType.extra].
+  final OptionGroupType groupType;
 
   /// Converts this option group to a Firestore/JSON compatible map.
   Map<String, dynamic> toMap() {
@@ -103,11 +120,12 @@ class MenuItemOptionGroup {
       'id': id,
       'name': name,
       'required': required,
+      'groupType': groupType.name,
       'options': options.map((o) => o.toMap()).toList(),
     };
   }
 
-  /// Deserializes an option group safely from a map.
+  /// Deserializes an option group safely from a map with backward-compatible legacy inference.
   factory MenuItemOptionGroup.fromMap(Map<String, dynamic> map) {
     final rawOptions = map['options'];
     final optionsList = <MenuItemOption>[];
@@ -121,10 +139,35 @@ class MenuItemOptionGroup {
       }
     }
 
+    // 1. If explicit 'groupType' exists in map, use it
+    OptionGroupType groupType;
+    final groupTypeStr = map['groupType'] as String?;
+    if (groupTypeStr != null && groupTypeStr.isNotEmpty) {
+      groupType = OptionGroupType.values.firstWhere(
+        (e) => e.name == groupTypeStr,
+        orElse: () => OptionGroupType.fixed,
+      );
+    } else {
+      // 2. Safe backward-compatible legacy inference:
+      // - If any fixedPrice option exists -> fixed
+      // - Else if any priceAdjustment option exists -> extra
+      // - Else -> choice
+      if (optionsList.any((o) => o.pricingType == OptionPricingType.fixedPrice)) {
+        groupType = OptionGroupType.fixed;
+      } else if (optionsList.any((o) => o.pricingType == OptionPricingType.priceAdjustment)) {
+        groupType = OptionGroupType.extra;
+      } else {
+        groupType = OptionGroupType.choice;
+      }
+    }
+
+    final bool isRequired = (map['required'] as bool?) ?? (groupType != OptionGroupType.extra);
+
     return MenuItemOptionGroup(
       id: (map['id'] as String?) ?? '',
       name: (map['name'] as String?) ?? '',
-      required: (map['required'] as bool?) ?? true,
+      required: isRequired,
+      groupType: groupType,
       options: optionsList,
     );
   }

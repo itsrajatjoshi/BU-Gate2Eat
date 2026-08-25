@@ -41,12 +41,29 @@ class _EditableOptionGroup {
     String name = '',
     List<_EditableOption>? options,
     this.required = true,
+    this.groupType = OptionGroupType.fixed,
   })  : nameController = TextEditingController(text: name),
         options = options ?? [];
 
   final TextEditingController nameController;
   final List<_EditableOption> options;
   bool required;
+  OptionGroupType groupType;
+
+  void setGroupType(OptionGroupType newType) {
+    groupType = newType;
+    required = (newType != OptionGroupType.extra);
+    for (final opt in options) {
+      if (newType == OptionGroupType.fixed) {
+        opt.pricingType = OptionPricingType.fixedPrice;
+      } else if (newType == OptionGroupType.choice) {
+        opt.pricingType = OptionPricingType.selectionOnly;
+        opt.priceController.text = '';
+      } else if (newType == OptionGroupType.extra) {
+        opt.pricingType = OptionPricingType.priceAdjustment;
+      }
+    }
+  }
 
   void dispose() {
     nameController.dispose();
@@ -151,6 +168,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
       _optionGroups.add(
         _EditableOptionGroup(
           name: '',
+          groupType: OptionGroupType.fixed,
           options: [
             _EditableOption(name: '', price: '', pricingType: OptionPricingType.fixedPrice, isDefault: true),
             _EditableOption(name: '', price: '', pricingType: OptionPricingType.fixedPrice),
@@ -205,9 +223,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
 
   bool get _hasFixedPriceOption {
     if (!_hasOptions) return false;
-    return _optionGroups.any(
-      (g) => g.options.any((o) => o.pricingType == OptionPricingType.fixedPrice),
-    );
+    return _optionGroups.any((g) => g.groupType == OptionGroupType.fixed);
   }
 
   Future<void> _onAdd() async {
@@ -276,22 +292,25 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           }
 
           int optPrice = 0;
-          if (opt.pricingType == OptionPricingType.selectionOnly) {
+          OptionPricingType pricingType;
+
+          if (group.groupType == OptionGroupType.choice) {
             optPrice = 0;
-          } else {
+            pricingType = OptionPricingType.selectionOnly;
+          } else if (group.groupType == OptionGroupType.fixed) {
+            pricingType = OptionPricingType.fixedPrice;
             final parsed = int.tryParse(optPriceText);
-            if (parsed == null) {
-              _showErrorSnackBar('Please enter a valid numeric price for "$optName".');
+            if (parsed == null || parsed <= 0) {
+              _showErrorSnackBar('Fixed price for "$optName" in "$groupName" must be greater than 0.');
               return;
             }
-
-            if (opt.pricingType == OptionPricingType.fixedPrice && parsed <= 0) {
-              _showErrorSnackBar('Fixed price for "$optName" must be greater than 0.');
-              return;
-            }
-
-            if (opt.pricingType == OptionPricingType.priceAdjustment && parsed < 0) {
-              _showErrorSnackBar('Price adjustment for "$optName" cannot be negative.');
+            optPrice = parsed;
+          } else {
+            // OptionGroupType.extra
+            pricingType = OptionPricingType.priceAdjustment;
+            final parsed = int.tryParse(optPriceText);
+            if (parsed == null || parsed < 0) {
+              _showErrorSnackBar('Extra price for "$optName" in "$groupName" cannot be negative.');
               return;
             }
             optPrice = parsed;
@@ -302,7 +321,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
               id: 'opt_${gIdx + 1}_${oIdx + 1}',
               name: optName,
               price: optPrice,
-              pricingType: opt.pricingType,
+              pricingType: pricingType,
               isDefault: opt.isDefault,
             ),
           );
@@ -312,7 +331,8 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           MenuItemOptionGroup(
             id: 'grp_${gIdx + 1}',
             name: groupName,
-            required: group.required,
+            required: group.groupType != OptionGroupType.extra,
+            groupType: group.groupType,
             options: constructedOptions,
           ),
         );
@@ -1254,9 +1274,40 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           ),
           const SizedBox(height: 10),
 
+          // Group Type Selector: [ Fixed ] [ Choice ] [ Extra ]
+          Row(
+            children: [
+              Text(
+                'Group Type:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.grey[300] : Colors.grey[700],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Row(
+                  children: [
+                    _buildGroupTypePill(group, OptionGroupType.fixed, 'Fixed', Icons.payments_outlined, isDark),
+                    const SizedBox(width: 6),
+                    _buildGroupTypePill(group, OptionGroupType.choice, 'Choice', Icons.check_circle_outline_rounded, isDark),
+                    const SizedBox(width: 6),
+                    _buildGroupTypePill(group, OptionGroupType.extra, 'Extra', Icons.add_circle_outline_rounded, isDark),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
           // Options Header
           Text(
-            'Options / Choices:',
+            group.groupType == OptionGroupType.fixed
+                ? 'Fixed Price Options (e.g. Small ₹40, Large ₹70):'
+                : group.groupType == OptionGroupType.choice
+                    ? 'Choices (e.g. With Sauce, Without Sauce — ₹0):'
+                    : 'Extras (e.g. Cheese +₹10, Extra Patty +₹30 — Optional):',
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
@@ -1275,11 +1326,15 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                 children: [
                   // Option Name
                   Expanded(
-                    flex: 4,
+                    flex: 5,
                     child: TextField(
                       controller: option.nameController,
                       decoration: InputDecoration(
-                        hintText: 'e.g. Half, Full',
+                        hintText: group.groupType == OptionGroupType.fixed
+                            ? 'e.g. Half, Full'
+                            : group.groupType == OptionGroupType.choice
+                                ? 'e.g. With Sauce'
+                                : 'e.g. Extra Cheese',
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -1293,66 +1348,10 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                   ),
                   const SizedBox(width: 6),
 
-                  // Pricing Type Toggle (Cycles: Fixed ➔ Choice ➔ Extra ➔ Fixed)
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (option.pricingType == OptionPricingType.fixedPrice) {
-                          option.pricingType = OptionPricingType.selectionOnly;
-                          option.priceController.text = '';
-                        } else if (option.pricingType == OptionPricingType.selectionOnly) {
-                          option.pricingType = OptionPricingType.priceAdjustment;
-                        } else {
-                          option.pricingType = OptionPricingType.fixedPrice;
-                        }
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: option.pricingType == OptionPricingType.fixedPrice
-                            ? AppColors.primary.withValues(alpha: 0.15)
-                            : option.pricingType == OptionPricingType.selectionOnly
-                                ? Colors.teal.withValues(alpha: 0.15)
-                                : Colors.orange.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: option.pricingType == OptionPricingType.fixedPrice
-                              ? AppColors.primary
-                              : option.pricingType == OptionPricingType.selectionOnly
-                                  ? Colors.teal
-                                  : Colors.orange,
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Text(
-                        option.pricingType == OptionPricingType.fixedPrice
-                            ? '₹ Fixed'
-                            : option.pricingType == OptionPricingType.selectionOnly
-                                ? 'Choice'
-                                : '+₹ Extra',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          color: option.pricingType == OptionPricingType.fixedPrice
-                              ? AppColors.primary
-                              : option.pricingType == OptionPricingType.selectionOnly
-                                  ? (isDark ? Colors.tealAccent : Colors.teal[800])
-                                  : Colors.orange[800],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-
-                  // Option Price Input (or No Price badge for selectionOnly)
-                  if (option.pricingType == OptionPricingType.selectionOnly) ...[
+                  // Option Price Input (or No Price badge for Choice)
+                  if (group.groupType == OptionGroupType.choice) ...[
                     Expanded(
-                      flex: 3,
+                      flex: 4,
                       child: Container(
                         height: 38,
                         alignment: Alignment.center,
@@ -1368,7 +1367,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                           ),
                         ),
                         child: Text(
-                          'No price',
+                          'No price (₹0)',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -1381,16 +1380,14 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                     ),
                   ] else ...[
                     Expanded(
-                      flex: 3,
+                      flex: 4,
                       child: TextField(
                         controller: option.priceController,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: InputDecoration(
-                          hintText: 'Price',
-                          prefixText: option.pricingType == OptionPricingType.priceAdjustment
-                              ? '+₹'
-                              : '₹',
+                          hintText: group.groupType == OptionGroupType.extra ? 'Extra' : 'Price',
+                          prefixText: group.groupType == OptionGroupType.extra ? '+₹' : '₹',
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -1436,9 +1433,11 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                     _EditableOption(
                       name: '',
                       price: '',
-                      pricingType: group.options.isNotEmpty
-                          ? group.options.last.pricingType
-                          : OptionPricingType.fixedPrice,
+                      pricingType: group.groupType == OptionGroupType.fixed
+                          ? OptionPricingType.fixedPrice
+                          : group.groupType == OptionGroupType.choice
+                              ? OptionPricingType.selectionOnly
+                              : OptionPricingType.priceAdjustment,
                     ),
                   );
                 });
@@ -1456,6 +1455,73 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGroupTypePill(
+    _EditableOptionGroup group,
+    OptionGroupType type,
+    String label,
+    IconData icon,
+    bool isDark,
+  ) {
+    final isSelected = group.groupType == type;
+    final primaryColor = type == OptionGroupType.fixed
+        ? AppColors.primary
+        : type == OptionGroupType.choice
+            ? Colors.teal
+            : Colors.orange;
+
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              group.setGroupType(type);
+            });
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? primaryColor.withValues(alpha: 0.15)
+                  : (isDark ? AppColors.darkSurface : Colors.white),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isSelected
+                    ? primaryColor
+                    : (isDark ? AppColors.darkDivider : Colors.grey.shade300),
+                width: isSelected ? 1.5 : 1.0,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 13,
+                  color: isSelected
+                      ? primaryColor
+                      : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                    color: isSelected
+                        ? primaryColor
+                        : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

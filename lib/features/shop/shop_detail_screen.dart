@@ -1640,16 +1640,43 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     if (widget.item.hasOptions) {
       for (final group in widget.item.optionGroups) {
         if (group.options.isEmpty) continue;
-        final defaultOption = group.options
-            .where((o) => o.isDefault)
-            .firstOrNull ?? group.options.first;
-        _selectedOptions[group.id] = defaultOption;
+        if (group.groupType == OptionGroupType.fixed) {
+          // Fixed groups render independent rows; no shared default in _selectedOptions.
+          continue;
+        } else if (group.groupType == OptionGroupType.choice) {
+          // Choice group: exactly one required selection, default is isDefault or first option.
+          final defaultOption = group.options
+              .where((o) => o.isDefault)
+              .firstOrNull ?? group.options.first;
+          _selectedOptions[group.id] = defaultOption;
+        } else if (group.groupType == OptionGroupType.extra) {
+          // Extra group: optional. Only select if an option is explicitly marked isDefault.
+          final defaultOption = group.options
+              .where((o) => o.isDefault)
+              .firstOrNull;
+          if (defaultOption != null) {
+            _selectedOptions[group.id] = defaultOption;
+          }
+        } else {
+          // Fallback legacy inference
+          if (group.options.any((o) => o.pricingType == OptionPricingType.fixedPrice)) {
+            continue;
+          }
+          final defaultOption = group.options
+              .where((o) => o.isDefault)
+              .firstOrNull ?? (group.required ? group.options.first : null);
+          if (defaultOption != null) {
+            _selectedOptions[group.id] = defaultOption;
+          }
+        }
       }
     }
   }
 
   bool get _hasFixedPriceGroups => widget.item.optionGroups.any(
-        (g) => g.options.any((o) => o.pricingType == OptionPricingType.fixedPrice),
+        (g) =>
+            g.groupType == OptionGroupType.fixed ||
+            g.options.any((o) => o.pricingType == OptionPricingType.fixedPrice),
       );
 
   List<SelectedMenuItemOption> _buildSelectedOptionsForFixedOption(
@@ -1665,12 +1692,12 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
         groupName: fixedGroup.name,
         optionId: fixedOption.id,
         optionName: fixedOption.name,
-        pricingType: fixedOption.pricingType,
+        pricingType: OptionPricingType.fixedPrice,
         price: fixedOption.price,
       ),
     );
 
-    // 2. Add selections from all other groups (selectionOnly & priceAdjustment)
+    // 2. Add selections from other groups (Choice and Extra)
     for (final group in widget.item.optionGroups) {
       if (group.id == fixedGroup.id) continue;
       final selectedOpt = _selectedOptions[group.id];
@@ -1681,7 +1708,9 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
             groupName: group.name,
             optionId: selectedOpt.id,
             optionName: selectedOpt.name,
-            pricingType: selectedOpt.pricingType,
+            pricingType: group.groupType == OptionGroupType.extra
+                ? OptionPricingType.priceAdjustment
+                : selectedOpt.pricingType,
             price: selectedOpt.price,
           ),
         );
@@ -1699,7 +1728,9 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     for (final group in widget.item.optionGroups) {
       if (group.id == fixedGroup.id) continue;
       final selectedOpt = _selectedOptions[group.id];
-      if (selectedOpt != null && selectedOpt.pricingType == OptionPricingType.priceAdjustment) {
+      if (selectedOpt != null &&
+          (group.groupType == OptionGroupType.extra ||
+              selectedOpt.pricingType == OptionPricingType.priceAdjustment)) {
         price += selectedOpt.price;
       }
     }
@@ -1715,10 +1746,12 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     for (final group in widget.item.optionGroups) {
       final selectedOpt = _selectedOptions[group.id];
       if (selectedOpt != null) {
-        if (selectedOpt.pricingType == OptionPricingType.fixedPrice) {
+        if (group.groupType == OptionGroupType.fixed ||
+            selectedOpt.pricingType == OptionPricingType.fixedPrice) {
           hasAnyFixed = true;
           calculatedPrice += selectedOpt.price;
-        } else if (selectedOpt.pricingType == OptionPricingType.priceAdjustment) {
+        } else if (group.groupType == OptionGroupType.extra ||
+            selectedOpt.pricingType == OptionPricingType.priceAdjustment) {
           calculatedPrice += selectedOpt.price;
         }
       }
@@ -1738,10 +1771,9 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
   }
 
   Widget _buildOptionGroup(MenuItemOptionGroup group, bool isDark, CartState liveCart) {
-    final hasFixedOptions = group.options.any((o) => o.pricingType == OptionPricingType.fixedPrice);
-
-    if (hasFixedOptions) {
-      // Row-based layout for fixedPrice variants (e.g. Portion: Half / Full, Size: Large / XL / XXL)
+    if (group.groupType == OptionGroupType.fixed ||
+        group.options.any((o) => o.pricingType == OptionPricingType.fixedPrice)) {
+      // Row-based layout for fixedPrice variants (e.g. Size: Small / Large, Portion: Half / Full)
       return Container(
         margin: const EdgeInsets.only(bottom: 16),
         child: Column(
@@ -1778,9 +1810,12 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
           ],
         ),
       );
+    } else if (group.groupType == OptionGroupType.choice) {
+      // Mutually-exclusive single-selection for Choice (e.g. Sauce: With Sauce / Without Sauce — ₹0)
+      return _buildChoiceGroup(group, isDark);
     } else {
-      // Mutually-exclusive single-selection for selectionOnly & priceAdjustment
-      return _buildSelectionModifierGroup(group, isDark);
+      // Optional toggle selection for Extra (e.g. Extras: Cheese +₹10)
+      return _buildExtraGroup(group, isDark);
     }
   }
 
@@ -1817,7 +1852,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Left: Option Name & Computed Unit Price
+          // Left: Option Name & Computed Unit Price (reflecting active Extras)
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1884,9 +1919,11 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          // Validate required non-fixed groups
+          // Validate required non-fixed groups (Choice groups must have a selection)
           for (final g in widget.item.optionGroups) {
-            if (g.required && !g.options.any((o) => o.pricingType == OptionPricingType.fixedPrice)) {
+            final isFixed = g.groupType == OptionGroupType.fixed ||
+                g.options.any((o) => o.pricingType == OptionPricingType.fixedPrice);
+            if (!isFixed && g.required) {
               if (_selectedOptions[g.id] == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -2008,7 +2045,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     );
   }
 
-  Widget _buildSelectionModifierGroup(MenuItemOptionGroup group, bool isDark) {
+  Widget _buildChoiceGroup(MenuItemOptionGroup group, bool isDark) {
     final selected = _selectedOptions[group.id];
 
     return Container(
@@ -2047,13 +2084,13 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
             children: group.options.map((option) {
               final isSelected = selected != null
                   ? (selected.id == option.id || selected.name == option.name)
-                  : option.isDefault;
+                  : false;
 
               return Material(
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () {
-                    debugPrint('👉 Selected Option: ${group.name} -> ${option.name} (pricing: ${option.pricingType.name}, +₹${option.price})');
+                    debugPrint('👉 Choice selected: ${group.name} -> ${option.name}');
                     setState(() {
                       _selectedOptions[group.id] = option;
                     });
@@ -2097,7 +2134,114 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                 : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
                           ),
                         ),
-                        if (option.pricingType == OptionPricingType.priceAdjustment && option.price > 0) ...[
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExtraGroup(MenuItemOptionGroup group, bool isDark) {
+    final selected = _selectedOptions[group.id];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                group.name.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: isDark ? Colors.grey[400] : Colors.grey[500],
+                ),
+              ),
+              if (group.required) ...[
+                const SizedBox(width: 4),
+                const Text(
+                  '*',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: group.options.map((option) {
+              final isSelected = selected != null &&
+                  (selected.id == option.id || selected.name == option.name);
+
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) {
+                        // Toggle OFF: unselect this extra
+                        debugPrint('👉 Extra unselected (toggled off): ${group.name} -> ${option.name}');
+                        _selectedOptions.remove(group.id);
+                      } else {
+                        // Select this extra
+                        debugPrint('👉 Extra selected: ${group.name} -> ${option.name} (+₹${option.price})');
+                        _selectedOptions[group.id] = option;
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary.withValues(alpha: 0.12)
+                          : (isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade100),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary
+                            : (isDark ? AppColors.darkDivider : Colors.grey.shade300),
+                        width: isSelected ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isSelected
+                              ? Icons.check_box_rounded
+                              : Icons.check_box_outline_blank_rounded,
+                          size: 16,
+                          color: isSelected
+                              ? AppColors.primary
+                              : (isDark ? Colors.grey[400] : Colors.grey[500]),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          option.name,
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                            fontSize: 13,
+                            color: isSelected
+                                ? AppColors.primary
+                                : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                          ),
+                        ),
+                        if (option.price > 0) ...[
                           const SizedBox(width: 5),
                           Text(
                             '+₹${option.price}',

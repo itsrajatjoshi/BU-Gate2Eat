@@ -10,7 +10,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
-import '../../services/seed_data_service.dart';
 
 class AdminProfileScreen extends ConsumerStatefulWidget {
   const AdminProfileScreen({super.key});
@@ -23,7 +22,6 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _ageController;
-  bool _isSeeding = false;
 
   @override
   void initState() {
@@ -57,102 +55,6 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Admin Profile updated successfully')),
       );
-    }
-  }
-
-  Future<void> _showSeedUP16Dialog() async {
-    if (_isSeeding) return;
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.coffee_rounded, color: AppColors.primary, size: 24),
-            SizedBox(width: 8),
-            Text(
-              'Seed UP16 Coffee Queen?',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-            ),
-          ],
-        ),
-        content: const Text(
-          'This creates the initial UP16 Coffee Queen shop and menu (21 items, 3 categories). Existing shop data will never be overwritten.',
-          style: TextStyle(fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'CANCEL',
-              style: TextStyle(
-                color: isDark
-                    ? AppColors.darkTextSecondary
-                    : AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-            ),
-            child: const Text(
-              'SEED',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isSeeding = true);
-
-    try {
-      final wasCreated = await SeedDataService.seedUP16CoffeeQueen(force: true);
-      if (!mounted) return;
-
-      if (wasCreated) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('UP16 Coffee Queen seeded successfully.'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppColors.success,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('UP16 Coffee Queen already exists. Seed skipped.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e, stack) {
-      debugPrint('❌ Error seeding UP16 Coffee Queen: $e\n$stack');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to seed UP16 Coffee Queen: $e'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.error,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSeeding = false);
-      }
     }
   }
 
@@ -480,35 +382,6 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                   subtitle: const Text('Theme, notifications, preferences'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.push(AppRoutes.settings),
-                ),
-                Divider(
-                  height: 1,
-                  color: isDark ? AppColors.darkDivider : AppColors.divider,
-                ),
-                ListTile(
-                  leading: _isSeeding
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: AppColors.primary,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.coffee_rounded,
-                          color: AppColors.primary,
-                        ),
-                  title: const Text('Seed UP16 Coffee Queen'),
-                  subtitle: Text(
-                    _isSeeding
-                        ? 'Seeding in progress...'
-                        : 'One-time initial menu populate (3 categories, 21 items)',
-                  ),
-                  trailing: _isSeeding
-                      ? null
-                      : const Icon(Icons.chevron_right_rounded),
-                  onTap: _isSeeding ? null : _showSeedUP16Dialog,
                 ),
                 Divider(
                   height: 1,
