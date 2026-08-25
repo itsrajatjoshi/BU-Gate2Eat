@@ -25,8 +25,10 @@ class SelectedMenuItemOption {
   String get displayText => optionName;
 
   /// Formatted price or adjustment string.
-  String get formattedPriceString =>
-      pricingType == OptionPricingType.fixedPrice ? '₹$price' : '+₹$price';
+  String get formattedPriceString {
+    if (pricingType == OptionPricingType.selectionOnly) return '';
+    return pricingType == OptionPricingType.fixedPrice ? '₹$price' : '+₹$price';
+  }
 
   /// Serializes to a standard Map for order persistence.
   Map<String, dynamic> toMap() {

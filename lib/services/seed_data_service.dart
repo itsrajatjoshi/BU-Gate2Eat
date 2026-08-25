@@ -463,4 +463,313 @@ class SeedDataService {
       await shopRef.set(missingFieldsPatch, SetOptions(merge: true));
     }
   }
+
+  /// Shop 5: UP16 Coffee Queen (Manual Seed)
+  /// If shop or menuItems are missing (or force == true), creates shop doc, 3 categories, and 21 menu items.
+  /// If shop already exists with menu items and force == false, skips to protect data.
+  static Future<bool> seedUP16CoffeeQueen({
+    FirebaseFirestore? firestoreInstance,
+    bool force = false,
+  }) async {
+    final firestore = firestoreInstance ?? FirebaseFirestore.instance;
+    const shopId = 'up16_coffee_queen';
+    final shopRef = firestore.collection('shops').doc(shopId);
+    final doc = await shopRef.get();
+    final menuItemsSnap = await shopRef.collection('menuItems').limit(1).get();
+
+    final bool hasExistingMenuItems = menuItemsSnap.docs.isNotEmpty;
+
+    if (doc.exists && hasExistingMenuItems && !force) {
+      debugPrint('🌱 SeedDataService: UP16 Coffee Queen already has menu items. Seed skipped.');
+      return false;
+    }
+
+    debugPrint('🌱 SeedDataService: Creating/populating document and menu items for $shopId');
+    if (!doc.exists) {
+      await shopRef.set({
+      'name': 'UP16 Coffee Queen',
+      'description': 'Cold Coffee, Shakes, Mojitos & Refreshing Beverages',
+      'bannerUrl': '',
+      'contactNumber': '8295643910',
+      'orderNumber': '8295643910',
+      'openTime': '08:00 AM',
+      'closeTime': '11:30 PM',
+      'isClosedOverride': false,
+      'isActive': true,
+      'sortOrder': 5,
+      'searchKeywords': [
+        'up16',
+        'coffee queen',
+        'cold coffee',
+        'shakes',
+        'mojito',
+        'beverages',
+        'tea',
+      ],
+      'deliveryNote': 'Pickup from Gate 2',
+      'orderMethod': 'both',
+      'minimumOrderAmount': 0,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+    // 1. Categories (3 categories)
+    final categories = [
+      {
+        'id': 'up16_cold_coffee',
+        'name': 'Cold Coffee',
+        'imageUrl': '',
+        'sortOrder': 1,
+        'displayOrder': 1,
+        'isActive': true,
+        'shopId': shopId,
+      },
+      {
+        'id': 'up16_shakes',
+        'name': 'Shakes',
+        'imageUrl': '',
+        'sortOrder': 2,
+        'displayOrder': 2,
+        'isActive': true,
+        'shopId': shopId,
+      },
+      {
+        'id': 'up16_mojitos_others',
+        'name': 'Mojitos & Others',
+        'imageUrl': '',
+        'sortOrder': 3,
+        'displayOrder': 3,
+        'isActive': true,
+        'shopId': shopId,
+      },
+    ];
+
+    for (final cat in categories) {
+      await shopRef.collection('categories').doc(cat['id'] as String).set({
+        'name': cat['name'],
+        'imageUrl': cat['imageUrl'],
+        'sortOrder': cat['sortOrder'],
+        'displayOrder': cat['displayOrder'],
+        'isActive': cat['isActive'],
+        'shopId': cat['shopId'],
+      });
+    }
+
+    // Shared Ice Cream option group for Cold Coffee items
+    final iceCreamGroup = {
+      'id': 'grp_ice_cream',
+      'name': 'Ice Cream',
+      'required': true,
+      'options': [
+        {
+          'id': 'opt_no_ice_cream',
+          'name': 'No Ice Cream',
+          'price': 0,
+          'pricingType': 'priceAdjustment',
+          'isDefault': true,
+        },
+        {
+          'id': 'opt_with_ice_cream',
+          'name': 'With Ice Cream',
+          'price': 10,
+          'pricingType': 'priceAdjustment',
+          'isDefault': false,
+        },
+      ],
+    };
+
+    // 2. Cold Coffee Items (6 items)
+    final coldCoffees = [
+      {
+        'id': 'up16_normal_cold_coffee',
+        'name': 'Normal Cold Coffee',
+        'large': 60,
+        'xl': 80,
+        'xxl': 100,
+        'sort': 1,
+      },
+      {
+        'id': 'up16_hazelnut_cold_coffee',
+        'name': 'Hazelnut Cold Coffee',
+        'large': 70,
+        'xl': 80,
+        'xxl': 100,
+        'sort': 2,
+      },
+      {
+        'id': 'up16_irish_cold_coffee',
+        'name': 'Irish Cold Coffee',
+        'large': 70,
+        'xl': 80,
+        'xxl': 100,
+        'sort': 3,
+      },
+      {
+        'id': 'up16_caramel_cold_coffee',
+        'name': 'Caramel Cold Coffee',
+        'large': 70,
+        'xl': 80,
+        'xxl': 100,
+        'sort': 4,
+      },
+      {
+        'id': 'up16_vanilla_cold_coffee',
+        'name': 'Vanilla Cold Coffee',
+        'large': 70,
+        'xl': 80,
+        'xxl': 100,
+        'sort': 5,
+      },
+      {
+        'id': 'up16_mocha_cold_coffee',
+        'name': 'Mocha Cold Coffee',
+        'large': 70,
+        'xl': 80,
+        'xxl': 100,
+        'sort': 6,
+      },
+    ];
+
+    for (final cc in coldCoffees) {
+      final docId = cc['id'] as String;
+      final largePrice = cc['large'] as int;
+      final xlPrice = cc['xl'] as int;
+      final xxlPrice = cc['xxl'] as int;
+
+      await shopRef.collection('menuItems').doc(docId).set({
+        'name': cc['name'],
+        'details': 'Cold coffee',
+        'price': largePrice,
+        'imageUrl': '',
+        'categoryId': 'up16_cold_coffee',
+        'isVeg': true,
+        'isAvailable': true,
+        'isRecommended': false,
+        'sortOrder': cc['sort'],
+        'optionGroups': [
+          {
+            'id': 'grp_size',
+            'name': 'Size',
+            'required': true,
+            'options': [
+              {
+                'id': 'opt_large',
+                'name': 'Large',
+                'price': largePrice,
+                'pricingType': 'fixedPrice',
+                'isDefault': true,
+              },
+              {
+                'id': 'opt_xl',
+                'name': 'XL',
+                'price': xlPrice,
+                'pricingType': 'fixedPrice',
+                'isDefault': false,
+              },
+              {
+                'id': 'opt_double_xl',
+                'name': 'Double XL',
+                'price': xxlPrice,
+                'pricingType': 'fixedPrice',
+                'isDefault': false,
+              },
+            ],
+          },
+          iceCreamGroup,
+        ],
+      });
+    }
+
+    // 3. Shakes Items (9 items)
+    final shakes = [
+      {'id': 'up16_oreo_shake', 'name': 'Oreo Shake', 'large': 60, 'xl': 80, 'xxl': 100, 'sort': 1},
+      {'id': 'up16_chocolate_shake', 'name': 'Chocolate Shake', 'large': 60, 'xl': 80, 'xxl': 100, 'sort': 2},
+      {'id': 'up16_cookie_caramel_shake', 'name': 'Cookie Caramel Shake', 'large': 60, 'xl': 80, 'xxl': 100, 'sort': 3},
+      {'id': 'up16_black_currant_shake', 'name': 'Black Currant Shake', 'large': 60, 'xl': 80, 'xxl': 100, 'sort': 4},
+      {'id': 'up16_butterscotch_shake', 'name': 'Butterscotch Shake', 'large': 60, 'xl': 80, 'xxl': 100, 'sort': 5},
+      {'id': 'up16_strawberry_shake', 'name': 'Strawberry Shake', 'large': 60, 'xl': 80, 'xxl': 100, 'sort': 6},
+      {'id': 'up16_mango_shake', 'name': 'Mango Shake', 'large': 60, 'xl': 80, 'xxl': 100, 'sort': 7},
+      {'id': 'up16_banana_shake', 'name': 'Banana Shake', 'large': 60, 'xl': 80, 'xxl': 90, 'sort': 8},
+      {'id': 'up16_blue_berry_shake', 'name': 'Blue Berry Shake', 'large': 80, 'xl': 90, 'xxl': 110, 'sort': 9},
+    ];
+
+    for (final s in shakes) {
+      final docId = s['id'] as String;
+      final largePrice = s['large'] as int;
+      final xlPrice = s['xl'] as int;
+      final xxlPrice = s['xxl'] as int;
+
+      await shopRef.collection('menuItems').doc(docId).set({
+        'name': s['name'],
+        'details': 'Shake',
+        'price': largePrice,
+        'imageUrl': '',
+        'categoryId': 'up16_shakes',
+        'isVeg': true,
+        'isAvailable': true,
+        'isRecommended': false,
+        'sortOrder': s['sort'],
+        'optionGroups': [
+          {
+            'id': 'grp_size',
+            'name': 'Size',
+            'required': true,
+            'options': [
+              {
+                'id': 'opt_large',
+                'name': 'Large',
+                'price': largePrice,
+                'pricingType': 'fixedPrice',
+                'isDefault': true,
+              },
+              {
+                'id': 'opt_xl',
+                'name': 'XL',
+                'price': xlPrice,
+                'pricingType': 'fixedPrice',
+                'isDefault': false,
+              },
+              {
+                'id': 'opt_double_xl',
+                'name': 'Double XL',
+                'price': xxlPrice,
+                'pricingType': 'fixedPrice',
+                'isDefault': false,
+              },
+            ],
+          },
+        ],
+      });
+    }
+
+    // 4. Mojitos & Others Items (6 normal items)
+    final mojitosAndOthers = [
+      {'id': 'up16_mint_mojito', 'name': 'Mint Mojito', 'details': 'Mojito', 'price': 70, 'sort': 1},
+      {'id': 'up16_watermelon_mojito', 'name': 'Watermelon Mojito', 'details': 'Mojito', 'price': 70, 'sort': 2},
+      {'id': 'up16_green_apple_mojito', 'name': 'Green Apple Mojito', 'details': 'Mojito', 'price': 80, 'sort': 3},
+      {'id': 'up16_blue_curacao_mojito', 'name': 'Blue Curacao Mojito', 'details': 'Mojito', 'price': 80, 'sort': 4},
+      {'id': 'up16_sprite_mojito', 'name': 'Sprite Mojito', 'details': 'Mojito', 'price': 80, 'sort': 5},
+      {'id': 'up16_lemon_tea', 'name': 'Lemon Tea', 'details': 'Lemon tea', 'price': 80, 'sort': 6},
+    ];
+
+    for (final m in mojitosAndOthers) {
+      final docId = m['id'] as String;
+      await shopRef.collection('menuItems').doc(docId).set({
+        'name': m['name'],
+        'details': m['details'],
+        'price': m['price'],
+        'imageUrl': '',
+        'categoryId': 'up16_mojitos_others',
+        'isVeg': true,
+        'isAvailable': true,
+        'isRecommended': false,
+        'sortOrder': m['sort'],
+        'optionGroups': <Map<String, dynamic>>[],
+      });
+    }
+
+    debugPrint('✅ SeedDataService: UP16 Coffee Queen successfully seeded (3 categories, 21 items).');
+    return true;
+  }
 }

@@ -8,17 +8,20 @@ enum OptionPricingType {
   /// Option specifies a full fixed price for the portion/size (e.g. Half = ₹80, Full = ₹140).
   fixedPrice,
 
-  /// Option specifies an additional surcharge or adjustment on top of the base price (e.g. Fried = +₹20).
+  /// Option specifies an additional surcharge or adjustment on top of the base price (e.g. Fried = +₹20, With Ice Cream = +₹10).
   priceAdjustment,
+
+  /// Option is purely a selection without any price impact (e.g. Dry, Gravy, Regular Crust).
+  selectionOnly,
 }
 
 /// Represents an individual selectable choice within an option group.
-/// (e.g., "Half" ₹80, "Full" ₹140, "XL" ₹130, "Fried" +₹20).
+/// (e.g., "Half" ₹80, "Full" ₹140, "XL" ₹130, "Fried" +₹20, "Dry" selectionOnly).
 class MenuItemOption {
   const MenuItemOption({
     required this.id,
     required this.name,
-    required this.price,
+    this.price = 0,
     this.pricingType = OptionPricingType.fixedPrice,
     this.isDefault = false,
   });
@@ -32,6 +35,7 @@ class MenuItemOption {
   /// Price value:
   /// - If [pricingType] is [OptionPricingType.fixedPrice]: The complete price for this option (e.g. 80).
   /// - If [pricingType] is [OptionPricingType.priceAdjustment]: Surcharge added to base price (e.g. 20).
+  /// - If [pricingType] is [OptionPricingType.selectionOnly]: Always 0.
   final int price;
 
   /// How this price is applied.
@@ -45,7 +49,7 @@ class MenuItemOption {
     return {
       'id': id,
       'name': name,
-      'price': price,
+      'price': pricingType == OptionPricingType.selectionOnly ? 0 : price,
       'pricingType': pricingType.name,
       'isDefault': isDefault,
     };
@@ -62,7 +66,9 @@ class MenuItemOption {
     return MenuItemOption(
       id: (map['id'] as String?) ?? '',
       name: (map['name'] as String?) ?? '',
-      price: ((map['price'] as num?) ?? 0).toInt(),
+      price: pricingType == OptionPricingType.selectionOnly
+          ? 0
+          : ((map['price'] as num?) ?? 0).toInt(),
       pricingType: pricingType,
       isDefault: (map['isDefault'] as bool?) ?? false,
     );
@@ -194,7 +200,7 @@ class MenuItem {
 
   /// Calculates the minimum valid starting price representing the lowest purchasable configuration.
   /// - If [hasOptions] is false: returns the base [price].
-  /// - If [hasOptions] is true: safely sums the minimum price from each required/fixed group + non-negative adjustments.
+  /// - If [hasOptions] is true: safely sums the minimum price from each fixed group + non-negative adjustments.
   int get startingPrice {
     if (!hasOptions) return price;
 

@@ -13,6 +13,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
 import '../../models/cart_item_model.dart';
+import '../../models/cart_state_model.dart';
 import '../../models/category_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../models/shop_model.dart';
@@ -1402,7 +1403,7 @@ class _MenuItemCard extends ConsumerWidget {
 
                           // Add Button / Stepper with responsive width
                           if (isAvailable)
-                            quantityInCart > 0
+                            (!item.hasOptions && quantityInCart > 0)
                                 ? _buildQuantityStepper(
                                     key: const ValueKey('stepper'),
                                     context: context,
@@ -1647,6 +1648,64 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     }
   }
 
+  bool get _hasFixedPriceGroups => widget.item.optionGroups.any(
+        (g) => g.options.any((o) => o.pricingType == OptionPricingType.fixedPrice),
+      );
+
+  List<SelectedMenuItemOption> _buildSelectedOptionsForFixedOption(
+    MenuItemOptionGroup fixedGroup,
+    MenuItemOption fixedOption,
+  ) {
+    final List<SelectedMenuItemOption> result = [];
+
+    // 1. Add this fixed price option
+    result.add(
+      SelectedMenuItemOption(
+        groupId: fixedGroup.id,
+        groupName: fixedGroup.name,
+        optionId: fixedOption.id,
+        optionName: fixedOption.name,
+        pricingType: fixedOption.pricingType,
+        price: fixedOption.price,
+      ),
+    );
+
+    // 2. Add selections from all other groups (selectionOnly & priceAdjustment)
+    for (final group in widget.item.optionGroups) {
+      if (group.id == fixedGroup.id) continue;
+      final selectedOpt = _selectedOptions[group.id];
+      if (selectedOpt != null) {
+        result.add(
+          SelectedMenuItemOption(
+            groupId: group.id,
+            groupName: group.name,
+            optionId: selectedOpt.id,
+            optionName: selectedOpt.name,
+            pricingType: selectedOpt.pricingType,
+            price: selectedOpt.price,
+          ),
+        );
+      }
+    }
+
+    return result;
+  }
+
+  int _calculateUnitPriceForFixedOption(
+    MenuItemOptionGroup fixedGroup,
+    MenuItemOption fixedOption,
+  ) {
+    int price = fixedOption.price;
+    for (final group in widget.item.optionGroups) {
+      if (group.id == fixedGroup.id) continue;
+      final selectedOpt = _selectedOptions[group.id];
+      if (selectedOpt != null && selectedOpt.pricingType == OptionPricingType.priceAdjustment) {
+        price += selectedOpt.price;
+      }
+    }
+    return price;
+  }
+
   int get _selectedTotalPrice {
     if (!widget.item.hasOptions) return widget.item.price;
 
@@ -1678,18 +1737,289 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     return calculatedPrice;
   }
 
-  Widget _buildOptionGroupSelector(MenuItemOptionGroup group, bool isDark) {
+  Widget _buildOptionGroup(MenuItemOptionGroup group, bool isDark, CartState liveCart) {
+    final hasFixedOptions = group.options.any((o) => o.pricingType == OptionPricingType.fixedPrice);
+
+    if (hasFixedOptions) {
+      // Row-based layout for fixedPrice variants (e.g. Portion: Half / Full, Size: Large / XL / XXL)
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  group.name.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: isDark ? Colors.grey[400] : Colors.grey[500],
+                  ),
+                ),
+                if (group.required) ...[
+                  const SizedBox(width: 4),
+                  const Text(
+                    '*',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...group.options.map((option) {
+              return _buildFixedPriceOptionRow(group, option, isDark, liveCart);
+            }),
+          ],
+        ),
+      );
+    } else {
+      // Mutually-exclusive single-selection for selectionOnly & priceAdjustment
+      return _buildSelectionModifierGroup(group, isDark);
+    }
+  }
+
+  Widget _buildFixedPriceOptionRow(
+    MenuItemOptionGroup group,
+    MenuItemOption option,
+    bool isDark,
+    CartState liveCart,
+  ) {
+    final candidateOptions = _buildSelectedOptionsForFixedOption(group, option);
+    final candidateKey = CartItem.buildCartKey(widget.item.id, candidateOptions);
+    final candidateUnitPrice = _calculateUnitPriceForFixedOption(group, option);
+
+    final cartItem = liveCart.items
+        .where((CartItem ci) => ci.cartKey == candidateKey)
+        .firstOrNull;
+    final quantity = cartItem?.quantity ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: quantity > 0
+            ? AppColors.primary.withValues(alpha: 0.08)
+            : (isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade50),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: quantity > 0
+              ? AppColors.primary.withValues(alpha: 0.5)
+              : (isDark ? AppColors.darkDivider : Colors.grey.shade200),
+          width: quantity > 0 ? 1.5 : 1.0,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Left: Option Name & Computed Unit Price
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  option.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '₹$candidateUnitPrice',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Right: [ ADD ] button or [ − 1 + ] stepper
+          if (widget.isAvailable)
+            quantity > 0
+                ? _buildVariantQuantityStepper(
+                    context,
+                    ref,
+                    quantity,
+                    candidateKey,
+                    candidateOptions,
+                    candidateUnitPrice,
+                  )
+                : _buildVariantAddButton(
+                    context,
+                    ref,
+                    candidateOptions,
+                    candidateUnitPrice,
+                  )
+          else
+            Text(
+              'Unavailable',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.grey[500] : Colors.grey[400],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVariantAddButton(
+    BuildContext context,
+    WidgetRef ref,
+    List<SelectedMenuItemOption> selectedOptions,
+    int unitPrice,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          // Validate required non-fixed groups
+          for (final g in widget.item.optionGroups) {
+            if (g.required && !g.options.any((o) => o.pricingType == OptionPricingType.fixedPrice)) {
+              if (_selectedOptions[g.id] == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Please select ${g.name} first'),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                );
+                return;
+              }
+            }
+          }
+
+          tryAddToCart(
+            context: context,
+            ref: ref,
+            item: widget.item,
+            shopId: widget.shop.id,
+            shopName: widget.shop.name,
+            selectedOptions: selectedOptions,
+            unitPrice: unitPrice,
+          );
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Text(
+            'ADD',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVariantQuantityStepper(
+    BuildContext context,
+    WidgetRef ref,
+    int quantity,
+    String cartKey,
+    List<SelectedMenuItemOption> selectedOptions,
+    int unitPrice,
+  ) {
+    return Container(
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => ref.read(cartProvider.notifier).removeItem(cartKey),
+              borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Icon(Icons.remove_rounded, size: 16, color: Colors.white),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              '$quantity',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => tryAddToCart(
+                context: context,
+                ref: ref,
+                item: widget.item,
+                shopId: widget.shop.id,
+                shopName: widget.shop.name,
+                selectedOptions: selectedOptions,
+                unitPrice: unitPrice,
+              ),
+              borderRadius: const BorderRadius.horizontal(right: Radius.circular(10)),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Icon(Icons.add_rounded, size: 16, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionModifierGroup(MenuItemOptionGroup group, bool isDark) {
     final selected = _selectedOptions[group.id];
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Text(
-                'CHOOSE ${group.name.toUpperCase()}',
+                group.name.toUpperCase(),
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w800,
@@ -1715,65 +2045,73 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
             spacing: 8,
             runSpacing: 8,
             children: group.options.map((option) {
-              final isSelected = selected?.id == option.id;
+              final isSelected = selected != null
+                  ? (selected.id == option.id || selected.name == option.name)
+                  : option.isDefault;
 
-              return InkWell(
-                onTap: () {
-                  setState(() {
-                    _selectedOptions[group.id] = option;
-                  });
-                },
-                borderRadius: BorderRadius.circular(10),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.primary.withValues(alpha: 0.12)
-                        : (isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade100),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    debugPrint('👉 Selected Option: ${group.name} -> ${option.name} (pricing: ${option.pricingType.name}, +₹${option.price})');
+                    setState(() {
+                      _selectedOptions[group.id] = option;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
                       color: isSelected
-                          ? AppColors.primary
-                          : (isDark ? AppColors.darkDivider : Colors.grey.shade300),
-                      width: isSelected ? 1.5 : 1.0,
+                          ? AppColors.primary.withValues(alpha: 0.12)
+                          : (isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade100),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary
+                            : (isDark ? AppColors.darkDivider : Colors.grey.shade300),
+                        width: isSelected ? 1.5 : 1.0,
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        option.name,
-                        style: TextStyle(
-                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                          fontSize: 13,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isSelected
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_off_rounded,
+                          size: 16,
                           color: isSelected
                               ? AppColors.primary
-                              : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                              : (isDark ? Colors.grey[400] : Colors.grey[500]),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        option.pricingType == OptionPricingType.fixedPrice
-                            ? '₹${option.price}'
-                            : '+₹${option.price}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          color: isSelected
-                              ? AppColors.primary
-                              : (isDark ? AppColors.darkTextSecondary : AppColors.textHint),
-                        ),
-                      ),
-                      if (isSelected) ...[
                         const SizedBox(width: 6),
-                        const Icon(
-                          Icons.check_circle_rounded,
-                          size: 15,
-                          color: AppColors.primary,
+                        Text(
+                          option.name,
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                            fontSize: 13,
+                            color: isSelected
+                                ? AppColors.primary
+                                : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                          ),
                         ),
+                        if (option.pricingType == OptionPricingType.priceAdjustment && option.price > 0) ...[
+                          const SizedBox(width: 5),
+                          Text(
+                            '+₹${option.price}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : (isDark ? AppColors.darkTextSecondary : AppColors.textHint),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               );
@@ -2133,7 +2471,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                               ),
                               const SizedBox(height: 14),
                               ...widget.item.optionGroups.map((group) {
-                                return _buildOptionGroupSelector(group, isDark);
+                                return _buildOptionGroup(group, isDark, liveCart);
                               }),
                               const SizedBox(height: 6),
                             ],
@@ -2172,37 +2510,72 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Price Section
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'TOTAL PRICE',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                            color: isDark ? Colors.grey[400] : Colors.grey[500],
+                    if (widget.item.hasOptions && _hasFixedPriceGroups) ...[
+                      // Item summary when individual options are added via rows
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            quantityInCart > 0 ? 'ITEM TOTAL IN CART' : 'STARTING FROM',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: isDark ? Colors.grey[400] : Colors.grey[500],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '₹$_selectedTotalPrice',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 22,
-                            letterSpacing: -0.4,
-                            color: Theme.of(context).textTheme.bodyLarge?.color,
+                          const SizedBox(height: 2),
+                          Text(
+                            quantityInCart > 0
+                                ? '₹${liveCart.items.where((CartItem ci) => ci.menuItem.id == widget.item.id).fold<double>(0, (sum, ci) => sum + ci.totalPrice).toStringAsFixed(0)}'
+                                : '₹${widget.item.startingPrice}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                              letterSpacing: -0.4,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ] else ...[
+                      // Standard price display for normal items & base adjustment items
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'TOTAL PRICE',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: isDark ? Colors.grey[400] : Colors.grey[500],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '₹$_selectedTotalPrice',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                              letterSpacing: -0.4,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
 
-                    // Primary Action Button (Add to Cart / Interactive Stepper)
+                    // Primary Action Button
                     if (isItemAvailable)
-                      (!widget.item.hasOptions && quantityInCart > 0)
-                          ? _buildQuantityStepper(context, ref, quantityInCart)
-                          : _buildAddButton(context, ref)
+                      if (widget.item.hasOptions && _hasFixedPriceGroups)
+                        _buildDoneButton(context, quantityInCart)
+                      else if (!widget.item.hasOptions && quantityInCart > 0)
+                        _buildQuantityStepper(context, ref, quantityInCart)
+                      else
+                        _buildAddButton(context, ref)
                     else
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -2229,6 +2602,59 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     );
   }
 
+  Widget _buildDoneButton(BuildContext context, int quantityInCart) {
+    const primaryColor = AppColors.primary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.pop(context),
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          decoration: BoxDecoration(
+            color: quantityInCart > 0
+                ? primaryColor
+                : (Theme.of(context).brightness == Brightness.dark
+                    ? AppColors.darkSurfaceVariant
+                    : Colors.grey.shade200),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: quantityInCart > 0
+                ? [
+                    BoxShadow(
+                      color: primaryColor.withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                quantityInCart > 0 ? Icons.check_circle_rounded : Icons.close_rounded,
+                size: 18,
+                color: quantityInCart > 0 ? Colors.white : AppColors.textPrimary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                quantityInCart > 0 ? 'Done ($quantityInCart in Cart)' : 'Close',
+                style: TextStyle(
+                  color: quantityInCart > 0 ? Colors.white : AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14.5,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildAddButton(BuildContext context, WidgetRef ref) {
     const primaryColor = AppColors.primary;
     return Material(
@@ -2236,7 +2662,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
       child: InkWell(
         onTap: () async {
           if (widget.item.hasOptions) {
-            // 1. Build SelectedMenuItemOption snapshots preserving full details
+            // Build SelectedMenuItemOption snapshots
             final List<SelectedMenuItemOption> selectedList = [];
             for (final group in widget.item.optionGroups) {
               final opt = _selectedOptions[group.id];
@@ -2254,7 +2680,6 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
               }
             }
 
-            // 2. Add variant to cart with single-shop conflict protection
             final added = await tryAddToCart(
               context: context,
               ref: ref,
@@ -2265,7 +2690,6 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
               unitPrice: _selectedTotalPrice,
             );
 
-            // 3. Close bottom sheet on successful add
             if (added && context.mounted) {
               Navigator.pop(context);
             }

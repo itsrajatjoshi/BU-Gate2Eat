@@ -148,7 +148,9 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         final editableOptions = group.options
             .map((opt) => _EditableOption(
                   name: opt.name,
-                  price: opt.price.toString(),
+                  price: opt.pricingType == OptionPricingType.selectionOnly
+                      ? ''
+                      : opt.price.toString(),
                   pricingType: opt.pricingType,
                   isDefault: opt.isDefault,
                 ))
@@ -289,6 +291,13 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     }
   }
 
+  bool get _hasFixedPriceOption {
+    if (!_hasOptions) return false;
+    return _optionGroups.any(
+      (g) => g.options.any((o) => o.pricingType == OptionPricingType.fixedPrice),
+    );
+  }
+
   Future<void> _onSave() async {
     final name = _nameController.text.trim();
     final priceText = _priceController.text.trim();
@@ -354,20 +363,26 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             return;
           }
 
-          final optPrice = int.tryParse(optPriceText);
-          if (optPrice == null) {
-            _showErrorSnackBar('Please enter a valid numeric price for "$optName".');
-            return;
-          }
+          int optPrice = 0;
+          if (opt.pricingType == OptionPricingType.selectionOnly) {
+            optPrice = 0;
+          } else {
+            final parsed = int.tryParse(optPriceText);
+            if (parsed == null) {
+              _showErrorSnackBar('Please enter a valid numeric price for "$optName".');
+              return;
+            }
 
-          if (opt.pricingType == OptionPricingType.fixedPrice && optPrice <= 0) {
-            _showErrorSnackBar('Fixed price for "$optName" must be greater than 0.');
-            return;
-          }
+            if (opt.pricingType == OptionPricingType.fixedPrice && parsed <= 0) {
+              _showErrorSnackBar('Fixed price for "$optName" must be greater than 0.');
+              return;
+            }
 
-          if (opt.pricingType == OptionPricingType.priceAdjustment && optPrice < 0) {
-            _showErrorSnackBar('Price adjustment for "$optName" cannot be negative.');
-            return;
+            if (opt.pricingType == OptionPricingType.priceAdjustment && parsed < 0) {
+              _showErrorSnackBar('Price adjustment for "$optName" cannot be negative.');
+              return;
+            }
+            optPrice = parsed;
           }
 
           constructedOptions.add(
@@ -391,11 +406,20 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         );
       }
 
-      // Safe base price for Firestore backward compatibility
-      final parsedLegacyPrice = int.tryParse(priceText);
-      if (parsedLegacyPrice != null && parsedLegacyPrice > 0) {
-        effectivePrice = parsedLegacyPrice;
+      // If no fixed-price group exists (only adjustment or selectionOnly), main price is required
+      if (!_hasFixedPriceOption) {
+        if (priceText.isEmpty) {
+          _showErrorSnackBar('Please enter a base price for this item.');
+          return;
+        }
+        final parsedPrice = int.tryParse(priceText);
+        if (parsedPrice == null || parsedPrice <= 0) {
+          _showErrorSnackBar('Please enter a valid base price greater than 0.');
+          return;
+        }
+        effectivePrice = parsedPrice;
       } else {
+        // Safe base price for Firestore backward compatibility
         final dummyItem = MenuItem(
           id: widget.item.id,
           name: name,
@@ -1074,33 +1098,88 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             // ─── 4. Price & Veg/Non-Veg (Compulsory) ──────────────────────
             Row(
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Price (₹) *',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? AppColors.darkTextSecondary
-                                  : AppColors.textSecondary,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _priceController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: const InputDecoration(
-                          hintText: 'e.g. 60',
-                          prefixIcon: Icon(Icons.currency_rupee_rounded),
-                          isDense: true,
+                if (_hasFixedPriceOption) ...[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Base Price (₹)',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.textSecondary,
+                              ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 6),
+                        Container(
+                          height: 48,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.darkSurfaceVariant.withValues(alpha: 0.6)
+                                : AppColors.surfaceVariant.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark ? AppColors.darkDivider : AppColors.divider,
+                            ),
+                          ),
+                          alignment: Alignment.centerLeft,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.tune_rounded,
+                                size: 16,
+                                color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Set by Option Sizes',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ] else ...[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Price (₹) *',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.textSecondary,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _priceController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          decoration: const InputDecoration(
+                            hintText: 'e.g. 60',
+                            prefixIcon: Icon(Icons.currency_rupee_rounded),
+                            isDense: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1512,14 +1591,18 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                   ),
                   const SizedBox(width: 6),
 
-                  // Pricing Type Toggle
+                  // Pricing Type Toggle (Cycles: Fixed ➔ Choice ➔ Extra ➔ Fixed)
                   InkWell(
                     onTap: () {
                       setState(() {
-                        option.pricingType =
-                            option.pricingType == OptionPricingType.fixedPrice
-                                ? OptionPricingType.priceAdjustment
-                                : OptionPricingType.fixedPrice;
+                        if (option.pricingType == OptionPricingType.fixedPrice) {
+                          option.pricingType = OptionPricingType.selectionOnly;
+                          option.priceController.text = '';
+                        } else if (option.pricingType == OptionPricingType.selectionOnly) {
+                          option.pricingType = OptionPricingType.priceAdjustment;
+                        } else {
+                          option.pricingType = OptionPricingType.fixedPrice;
+                        }
                       });
                     },
                     borderRadius: BorderRadius.circular(8),
@@ -1531,52 +1614,93 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                       decoration: BoxDecoration(
                         color: option.pricingType == OptionPricingType.fixedPrice
                             ? AppColors.primary.withValues(alpha: 0.15)
-                            : Colors.orange.withValues(alpha: 0.15),
+                            : option.pricingType == OptionPricingType.selectionOnly
+                                ? Colors.teal.withValues(alpha: 0.15)
+                                : Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: option.pricingType == OptionPricingType.fixedPrice
                               ? AppColors.primary
-                              : Colors.orange,
+                              : option.pricingType == OptionPricingType.selectionOnly
+                                  ? Colors.teal
+                                  : Colors.orange,
                           width: 0.8,
                         ),
                       ),
                       child: Text(
                         option.pricingType == OptionPricingType.fixedPrice
                             ? '₹ Fixed'
-                            : '+₹ Extra',
+                            : option.pricingType == OptionPricingType.selectionOnly
+                                ? 'Choice'
+                                : '+₹ Extra',
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w800,
                           color: option.pricingType == OptionPricingType.fixedPrice
                               ? AppColors.primary
-                              : Colors.orange[800],
+                              : option.pricingType == OptionPricingType.selectionOnly
+                                  ? (isDark ? Colors.tealAccent : Colors.teal[800])
+                                  : Colors.orange[800],
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
 
-                  // Option Price Input
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      controller: option.priceController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
-                        hintText: 'Price',
-                        prefixText: '₹',
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 9,
-                        ),
-                        border: OutlineInputBorder(
+                  // Option Price Input (or No Price badge for selectionOnly)
+                  if (option.pricingType == OptionPricingType.selectionOnly) ...[
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        height: 38,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.darkSurfaceVariant
+                              : AppColors.surfaceVariant,
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isDark
+                                ? AppColors.darkDivider
+                                : AppColors.divider,
+                          ),
+                        ),
+                        child: Text(
+                          'No price',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textHint,
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ] else ...[
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: option.priceController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: InputDecoration(
+                          hintText: 'Price',
+                          prefixText: option.pricingType == OptionPricingType.priceAdjustment
+                              ? '+₹'
+                              : '₹',
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 9,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
 
                   // Delete Option Button
                   IconButton(
