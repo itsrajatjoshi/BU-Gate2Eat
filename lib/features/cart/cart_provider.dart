@@ -100,9 +100,14 @@ class CartNotifier extends StateNotifier<CartState> {
   }
 
   /// Adds multiple items to the cart (for Reorder flow).
-  /// Merges quantities for existing items in the same shop, or replaces if clearExisting is true.
+  /// Merges quantities for existing items/variants in the same shop, or replaces if clearExisting is true.
   void addMultipleItems(
-    List<({MenuItem item, int quantity})> itemsToAdd,
+    List<({
+      MenuItem item,
+      int quantity,
+      List<SelectedMenuItemOption> selectedOptions,
+      int? unitPrice,
+    })> itemsToAdd,
     String shopId,
     String shopName, {
     bool clearExisting = false,
@@ -119,6 +124,8 @@ class CartNotifier extends StateNotifier<CartState> {
                   quantity: entry.quantity,
                   shopId: shopId,
                   shopName: shopName,
+                  selectedOptions: List.unmodifiable(entry.selectedOptions),
+                  unitPriceOverride: entry.unitPrice,
                 ))
             .toList(),
       );
@@ -126,7 +133,7 @@ class CartNotifier extends StateNotifier<CartState> {
       // Merge with existing items
       final currentList = [...state.items];
       for (final entry in itemsToAdd) {
-        final targetKey = entry.item.id;
+        final targetKey = CartItem.buildCartKey(entry.item.id, entry.selectedOptions);
         final idx = currentList.indexWhere(
           (ci) => ci.cartKey == targetKey && ci.shopId == shopId,
         );
@@ -141,6 +148,8 @@ class CartNotifier extends StateNotifier<CartState> {
               quantity: entry.quantity,
               shopId: shopId,
               shopName: shopName,
+              selectedOptions: List.unmodifiable(entry.selectedOptions),
+              unitPriceOverride: entry.unitPrice,
             ),
           );
         }

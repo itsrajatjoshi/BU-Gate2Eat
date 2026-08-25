@@ -6,6 +6,7 @@ import 'package:bugate2eat_app/features/cart/cart_provider.dart';
 import 'package:bugate2eat_app/features/orders/order_detail_screen.dart';
 import 'package:bugate2eat_app/features/orders/order_history_screen.dart';
 import 'package:bugate2eat_app/features/orders/reorder_helper.dart';
+import 'package:bugate2eat_app/models/cart_item_model.dart';
 import 'package:bugate2eat_app/models/category_model.dart';
 import 'package:bugate2eat_app/models/menu_item_model.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
@@ -400,6 +401,139 @@ void main() {
       // Total quantity is 1 + 2 = 3
       expect(cartState.items.length, equals(1));
       expect(cartState.items.first.quantity, equals(3));
+    });
+
+    testWidgets(
+        'Reorder preserves variant options and resolves with live option prices',
+        (tester) async {
+      const burgerItem = MenuItem(
+        id: 'item_burger',
+        name: 'Burger',
+        price: 50,
+        details: 'Tasty burger',
+        imageUrl: '',
+        isVeg: true,
+        isAvailable: true,
+        isRecommended: false,
+        categoryId: 'burgers',
+        sortOrder: 1,
+        optionGroups: [
+          MenuItemOptionGroup(
+            id: 'grp_size',
+            name: 'Size',
+            groupType: OptionGroupType.fixed,
+            options: [
+              MenuItemOption(id: 'opt_small', name: 'Small', price: 55, pricingType: OptionPricingType.fixedPrice),
+              MenuItemOption(id: 'opt_large', name: 'Large', price: 75, pricingType: OptionPricingType.fixedPrice),
+            ],
+          ),
+          MenuItemOptionGroup(
+            id: 'grp_cheese',
+            name: 'Cheese',
+            groupType: OptionGroupType.choice,
+            required: false,
+            options: [
+              MenuItemOption(id: 'opt_cheese', name: 'Cheese', price: 15, pricingType: OptionPricingType.priceAdjustment),
+            ],
+          ),
+        ],
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          firestoreServiceProvider.overrideWithValue(
+            MockFirestoreService(
+              menuItemsMap: {
+                shopId: [burgerItem],
+              },
+            ),
+          ),
+        ],
+      );
+
+      late BuildContext testContext;
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (context, state) {
+              testContext = context;
+              return const Scaffold(body: SizedBox());
+            },
+          ),
+          GoRoute(
+            path: '/cart',
+            builder: (context, state) => const Scaffold(body: Text('Cart Screen')),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      const oldLarge = SelectedMenuItemOption(
+        groupId: 'grp_size',
+        groupName: 'Size',
+        optionId: 'opt_large',
+        optionName: 'Large',
+        pricingType: OptionPricingType.fixedPrice,
+        price: 70, // Old price
+      );
+      const oldCheese = SelectedMenuItemOption(
+        groupId: 'grp_cheese',
+        groupName: 'Cheese',
+        optionId: 'opt_cheese',
+        optionName: 'Cheese',
+        pricingType: OptionPricingType.priceAdjustment,
+        price: 10, // Old price
+      );
+
+      await tester.runAsync(() async {
+        await ReorderHelper.handleReorder(
+          context: testContext,
+          ref: _MockWidgetRef(container),
+          order: AppOrder(
+            orderId: 'YB-20260822-9003',
+            shopId: shopId,
+            shopName: shopName,
+            customerName: 'Student',
+            customerPhone: '9999999999',
+            items: const [
+              OrderItem(
+                menuItemId: 'item_burger',
+                name: 'Burger',
+                price: 80, // Old total price (70 + 10)
+                quantity: 2,
+                optionsDescription: 'Large · Cheese',
+                selectedOptions: [oldLarge, oldCheese],
+                cartKey: 'item_burger|grp_cheese:opt_cheese|grp_size:opt_large',
+              ),
+            ],
+            totalAmount: 160,
+            status: 'delivered',
+            createdAt: DateTime.now(),
+          ),
+        );
+      });
+
+      final cartState = container.read(cartProvider);
+      expect(cartState.items.length, equals(1));
+      final cartItem = cartState.items.first;
+
+      // Current live price: Large (75) + Cheese (15) = 90
+      expect(cartItem.unitPrice, equals(90));
+      expect(cartItem.quantity, equals(2));
+      expect(cartItem.optionsDescription, equals('Large · Cheese'));
+      expect(cartItem.selectedOptions.length, equals(2));
+      expect(cartItem.cartKey, equals('item_burger|grp_cheese:opt_cheese|grp_size:opt_large'));
     });
   });
 

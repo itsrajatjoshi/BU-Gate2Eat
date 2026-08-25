@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
+import '../../models/cart_item_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../models/order_model.dart';
 import '../cart/cart_provider.dart';
@@ -27,8 +28,13 @@ class ReorderHelper {
     final firestoreService = ref.read(firestoreServiceProvider);
     final currentMenu = await firestoreService.getMenuItems(order.shopId);
 
-    // 2. Map previous order items to current live available items
-    final List<({MenuItem item, int quantity})> availableItems = [];
+    // 2. Map previous order items to current live available items (with exact options & updated prices)
+    final List<({
+      MenuItem item,
+      int quantity,
+      List<SelectedMenuItemOption> selectedOptions,
+      int? unitPrice,
+    })> availableItems = [];
     int unavailableCount = 0;
 
     for (final orderItem in order.items) {
@@ -48,11 +54,97 @@ class ReorderHelper {
         ),
       );
 
-      if (matchingItem.id.isNotEmpty && matchingItem.isAvailable) {
-        // Use current live menu item (with current price) and previous order's quantity
-        availableItems.add((item: matchingItem, quantity: orderItem.quantity));
-      } else {
+      if (matchingItem.id.isEmpty || !matchingItem.isAvailable) {
         unavailableCount++;
+        continue;
+      }
+
+      if (orderItem.selectedOptions.isEmpty) {
+        // Simple item without options
+        if (matchingItem.hasOptions && matchingItem.optionGroups.any((g) => g.required)) {
+          // Live item now requires options that were not in old order -> skip
+          unavailableCount++;
+          continue;
+        }
+        availableItems.add((
+          item: matchingItem,
+          quantity: orderItem.quantity,
+          selectedOptions: const [],
+          unitPrice: matchingItem.price,
+        ));
+      } else {
+        // Variant item with selected options: Validate each option against current live menu
+        bool isVariantValid = true;
+        final List<SelectedMenuItemOption> resolvedOptions = [];
+        int calculatedUnitPrice = 0;
+        bool hasFixed = false;
+
+        // Check each selected option exists in current menu item
+        for (final oldOpt in orderItem.selectedOptions) {
+          final group = matchingItem.optionGroups
+              .where((g) => g.id == oldOpt.groupId)
+              .firstOrNull;
+          if (group == null) {
+            isVariantValid = false;
+            break;
+          }
+
+          final liveOpt = group.options
+              .where((o) => o.id == oldOpt.optionId)
+              .firstOrNull;
+          if (liveOpt == null) {
+            isVariantValid = false;
+            break;
+          }
+
+          resolvedOptions.add(
+            SelectedMenuItemOption(
+              groupId: group.id,
+              groupName: group.name,
+              optionId: liveOpt.id,
+              optionName: liveOpt.name,
+              pricingType: liveOpt.pricingType,
+              price: liveOpt.price,
+            ),
+          );
+
+          if (group.groupType == OptionGroupType.fixed ||
+              liveOpt.pricingType == OptionPricingType.fixedPrice) {
+            hasFixed = true;
+            calculatedUnitPrice += liveOpt.price;
+          } else if (liveOpt.price > 0) {
+            calculatedUnitPrice += liveOpt.price;
+          }
+        }
+
+        // Verify that all REQUIRED groups in matchingItem are satisfied
+        if (isVariantValid) {
+          for (final group in matchingItem.optionGroups) {
+            if (group.required) {
+              final hasSelectionForGroup = resolvedOptions.any((o) => o.groupId == group.id);
+              if (!hasSelectionForGroup) {
+                isVariantValid = false;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!isVariantValid) {
+          unavailableCount++;
+          continue;
+        }
+
+        if (!hasFixed) {
+          calculatedUnitPrice += matchingItem.price;
+        }
+
+        availableItems.add((
+          item: matchingItem,
+          quantity: orderItem.quantity,
+          selectedOptions: resolvedOptions,
+          unitPrice: calculatedUnitPrice,
+        ));
       }
     }
 
