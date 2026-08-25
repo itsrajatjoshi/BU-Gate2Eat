@@ -28,14 +28,19 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
 
     // Dynamically resolve shop ownership by phone number
     String shopId = 'rajat_shop';
-    if (cleanPhone.endsWith('8745007244') ||
+    if (cleanPhone.endsWith('8079065843') ||
+        cleanPhone == '8079065843' ||
+        cleanPhone.endsWith('8745007244') ||
         cleanPhone.endsWith('8745950335')) {
       shopId = 'up16_junction_fast_food';
     } else if (cleanPhone.endsWith('8875344034') ||
         cleanPhone == '8875344034') {
-      shopId = 'nayan_shop';
+      shopId = 'kivisha_shop';
     } else if (cleanPhone.endsWith('8295643910') ||
         cleanPhone == '8295643910') {
+      shopId = 'nayan_shop';
+    } else if (cleanPhone.endsWith('8000383993') ||
+        cleanPhone == '8000383993') {
       shopId = 'rajat_shop';
     }
 
