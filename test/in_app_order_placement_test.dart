@@ -318,7 +318,14 @@ void main() {
       expect(whatsappBtn, findsOneWidget);
 
       await tester.tap(whatsappBtn);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Dismiss dialog if shown in test environment
+      if (find.text('OK').evaluate().isNotEmpty) {
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+      }
 
       // Verify no Firestore order creation occurred
       expect(fakeOrderService.createdOrders, isEmpty);

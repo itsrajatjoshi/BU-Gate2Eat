@@ -231,6 +231,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 
   Future<void> _placeWhatsAppOrder() async {
+    if (_isPlacingOrder) return;
     final cartState = ref.read(cartProvider);
     final cartItems = cartState.items;
     if (cartItems.isEmpty) return;
@@ -278,88 +279,98 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return;
     }
 
-    final localStorage = ref.read(localStorageServiceProvider);
+    setState(() => _isPlacingOrder = true);
 
-    // Find the shop's contact/order number from Firestore
-    final firestoreService = ref.read(firestoreServiceProvider);
-    final shop = await firestoreService.getShop(shopId);
+    try {
+      final localStorage = ref.read(localStorageServiceProvider);
 
-    final rawTargetNumber = (shop != null && shop.contactNumber.trim().isNotEmpty)
-        ? shop.contactNumber.trim()
-        : (shop != null && shop.orderNumber.trim().isNotEmpty)
-            ? shop.orderNumber.trim()
-            : '';
+      // Find the shop's contact/order number from Firestore
+      final firestoreService = ref.read(firestoreServiceProvider);
+      final shop = await firestoreService.getShop(shopId);
 
-    final normalizedNumber =
-        WhatsAppService.normalizePhoneNumber(rawTargetNumber);
+      final rawTargetNumber = (shop != null && shop.contactNumber.trim().isNotEmpty)
+          ? shop.contactNumber.trim()
+          : (shop != null && shop.orderNumber.trim().isNotEmpty)
+              ? shop.orderNumber.trim()
+              : '';
 
-    if (normalizedNumber.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'This shop has no valid WhatsApp contact number.',
-                    style: TextStyle(fontWeight: FontWeight.w500),
+      final normalizedNumber =
+          WhatsAppService.normalizePhoneNumber(rawTargetNumber);
+
+      if (normalizedNumber.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.white,
+                    size: 20,
                   ),
-                ),
-              ],
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'This shop has no valid WhatsApp contact number.',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+          );
+        }
+        return;
+      }
+
+      // Generate the message
+      final message = WhatsAppService.generateOrderMessage(
+        shopName: shopName,
+        userName: localStorage.userName,
+        userPhone: localStorage.userPhone,
+        cartItems: cartItems,
+        specialInstructions: _specialInstructionsController.text,
+      );
+
+      // Launch WhatsApp
+      final success = await WhatsAppService.launchWhatsApp(
+        whatsappNumber: normalizedNumber,
+        message: message,
+      );
+
+      if (success) {
+        // Atomic shop-wise WhatsApp counter increment (Rule 9: No order doc, only counter)
+        await ref.read(shopStatsServiceProvider).incrementWhatsappOrders(shopId);
+        ref.read(cartProvider.notifier).clearCart();
+      } else if (mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('WhatsApp Not Found'),
+            content: const Text(
+              'Please install WhatsApp to place orders.',
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         );
       }
-      return;
-    }
-
-    // Generate the message
-    final message = WhatsAppService.generateOrderMessage(
-      shopName: shopName,
-      userName: localStorage.userName,
-      userPhone: localStorage.userPhone,
-      cartItems: cartItems,
-      specialInstructions: _specialInstructionsController.text,
-    );
-
-    // Launch WhatsApp
-    final success = await WhatsAppService.launchWhatsApp(
-      whatsappNumber: normalizedNumber,
-      message: message,
-    );
-
-    if (success) {
-      // Atomic shop-wise WhatsApp counter increment (Rule 9: No order doc, only counter)
-      await ref.read(shopStatsServiceProvider).incrementWhatsappOrders(shopId);
-      ref.read(cartProvider.notifier).clearCart();
-    } else if (mounted) {
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('WhatsApp Not Found'),
-          content: const Text(
-            'Please install WhatsApp to place orders.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+    } catch (e) {
+      debugPrint('❌ WhatsApp order placement error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isPlacingOrder = false);
+      }
     }
   }
 

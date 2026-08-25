@@ -140,29 +140,21 @@ class ShopStatsService {
   }
 
   /// Internal helper: atomically increments a single numeric field.
+  /// Uses `.set(..., SetOptions(merge: true))` so that if the document does not
+  /// exist yet, it is created with the field set to 1, and if it exists, the field
+  /// is atomically incremented by 1 without overwriting any other counters.
   Future<void> _incrementField(String shopId, String field) async {
     if (!isAvailable) return;
     try {
-      await _statsRef.doc(shopId).update({
+      await _statsRef.doc(shopId).set({
+        'shopId': shopId,
         field: FieldValue.increment(1),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
+      debugPrint('✅ ShopStatsService: Atomically incremented $field (+1) for shop $shopId');
     } catch (e) {
-      // Document may not exist yet — create it with the field set to 1
-      if (e is FirebaseException && e.code == 'not-found') {
-        try {
-          await _statsRef.doc(shopId).set({
-            'shopId': shopId,
-            field: 1,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true),);
-        } catch (innerError) {
-          debugPrint(
-              '❌ ShopStatsService _incrementField create fallback error: $innerError',);
-        }
-      } else {
-        debugPrint('❌ ShopStatsService _incrementField error ($field): $e');
-      }
+      debugPrint('❌ ShopStatsService _incrementField error ($field) for $shopId: $e');
+      rethrow;
     }
   }
 
