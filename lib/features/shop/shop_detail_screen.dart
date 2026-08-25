@@ -1643,16 +1643,25 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
         if (group.groupType == OptionGroupType.fixed) {
           // Fixed groups render independent rows with row-level steppers; no shared selection.
           continue;
-        } else {
-          // Choice group:
-          // If required = true: exactly 1 must be selected. Default is isDefault or first option.
-          // If required = false (optional): default is isDefault (if set), otherwise null (unselected).
-          final defaultOption = group.options
+        } else if (group.required) {
+          // Required Choice group:
+          // Exactly 1 must be selected.
+          // Choose the cheapest valid option among choices (minimum price).
+          // If multiple options share the minimum price, prefer isDefault if it is one of them, otherwise first.
+          final minPrice = group.options
+              .map((o) => o.price)
+              .reduce((a, b) => a < b ? a : b);
+          final cheapestOptions = group.options
+              .where((o) => o.price == minPrice)
+              .toList();
+          final defaultOption = cheapestOptions
               .where((o) => o.isDefault)
-              .firstOrNull ?? (group.required ? group.options.first : null);
-          if (defaultOption != null) {
-            _selectedOptions[group.id] = defaultOption;
-          }
+              .firstOrNull ?? cheapestOptions.first;
+          _selectedOptions[group.id] = defaultOption;
+        } else {
+          // Optional Choice group (required == false):
+          // MUST start UNSELECTED (null). Do NOT auto-select paid or unpaid options.
+          // The customer chooses to opt-in explicitly.
         }
       }
     }

@@ -241,53 +241,60 @@ class MenuItem {
 
   /// Calculates the minimum valid starting price representing the lowest purchasable configuration.
   /// - If [hasOptions] is false: returns the base [price].
-  /// - If [hasOptions] is true: safely sums the minimum price from each fixed group + non-negative adjustments.
+  /// - If [hasOptions] is true: safely sums the minimum price from each fixed group + minimum price of required Choice groups.
+  /// - Optional Choice groups (required == false) NEVER contribute to starting price (contribution = 0).
   int get startingPrice {
     if (!hasOptions) return price;
 
     int baseConfigurationPrice = 0;
     bool hasAnyFixedGroup = false;
 
-    // 1. Accumulate minimum prices from fixed-price option groups and required adjustment groups
+    // 1. Accumulate minimum prices from fixed-price option groups and required Choice groups
     for (final group in optionGroups) {
-      final fixedOptions = group.options
-          .where((o) => o.pricingType == OptionPricingType.fixedPrice && o.price > 0)
-          .toList();
+      final isChoice = group.groupType == OptionGroupType.choice ||
+          (group.options.isNotEmpty &&
+              group.options.every((o) => o.pricingType != OptionPricingType.fixedPrice));
 
-      if (fixedOptions.isNotEmpty) {
-        hasAnyFixedGroup = true;
-        final minFixedInGroup = fixedOptions
-            .map((o) => o.price)
-            .reduce((a, b) => a < b ? a : b);
-        baseConfigurationPrice += minFixedInGroup;
-      } else if (group.required) {
-        final adjustments = group.options
-            .where((o) => o.pricingType == OptionPricingType.priceAdjustment)
-            .map((o) => o.price)
+      if (!isChoice) {
+        // Fixed group
+        final fixedOptions = group.options
+            .where((o) => o.pricingType == OptionPricingType.fixedPrice || o.price > 0)
             .toList();
-        if (adjustments.isNotEmpty) {
-          final minAdj = adjustments.reduce((a, b) => a < b ? a : b);
-          if (minAdj > 0) {
-            baseConfigurationPrice += minAdj;
+        if (fixedOptions.isNotEmpty) {
+          hasAnyFixedGroup = true;
+          final minFixedInGroup = fixedOptions
+              .map((o) => o.price)
+              .reduce((a, b) => a < b ? a : b);
+          baseConfigurationPrice += minFixedInGroup;
+        }
+      } else if (group.required) {
+        // Required Choice group: find minimum price among all choices
+        if (group.options.isNotEmpty) {
+          final minChoicePrice = group.options
+              .map((o) => o.price)
+              .reduce((a, b) => a < b ? a : b);
+          if (minChoicePrice > 0) {
+            baseConfigurationPrice += minChoicePrice;
           }
         }
       }
+      // Optional Choice (required == false): contribution is ALWAYS 0 for starting price!
     }
 
-    // 2. If no fixed-price group exists, use base price + required adjustments
+    // 2. If no fixed-price group exists, use base price + required choice minimums
     if (!hasAnyFixedGroup) {
       baseConfigurationPrice = price;
       for (final group in optionGroups) {
-        if (group.required) {
-          final adjustments = group.options
-              .where((o) => o.pricingType == OptionPricingType.priceAdjustment)
+        final isChoice = group.groupType == OptionGroupType.choice ||
+            (group.options.isNotEmpty &&
+                group.options.every((o) => o.pricingType != OptionPricingType.fixedPrice));
+
+        if (isChoice && group.required && group.options.isNotEmpty) {
+          final minChoicePrice = group.options
               .map((o) => o.price)
-              .toList();
-          if (adjustments.isNotEmpty) {
-            final minAdj = adjustments.reduce((a, b) => a < b ? a : b);
-            if (minAdj > 0) {
-              baseConfigurationPrice += minAdj;
-            }
+              .reduce((a, b) => a < b ? a : b);
+          if (minChoicePrice > 0) {
+            baseConfigurationPrice += minChoicePrice;
           }
         }
       }
