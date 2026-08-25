@@ -55,11 +55,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         cleanPhone.endsWith('8875344034') ||
         cleanPhone == '8875344034' ||
         cleanPhone.endsWith('8079065843') ||
-        cleanPhone == '8079065843' ||
-        cleanPhone.endsWith('8745007244') ||
-        cleanPhone == '8745007244' ||
-        cleanPhone.endsWith('8745950335') ||
-        cleanPhone == '8745950335') {
+        cleanPhone == '8079065843') {
       context.go(AppRoutes.shopkeeper);
     } else {
       context.go(AppRoutes.home);

@@ -87,9 +87,7 @@ void main() {
       String resolveShopId(String phone) {
         final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
         if (cleanPhone.endsWith('8079065843') ||
-            cleanPhone == '8079065843' ||
-            cleanPhone.endsWith('8745007244') ||
-            cleanPhone.endsWith('8745950335')) {
+            cleanPhone == '8079065843') {
           return 'up16_junction_fast_food';
         } else if (cleanPhone.endsWith('8875344034') ||
             cleanPhone == '8875344034') {
@@ -119,7 +117,6 @@ void main() {
       // UP16 panel login
       expect(resolveShopId('8079065843'), equals('up16_junction_fast_food'));
       expect(resolveShopId('+91 8079065843'), equals('up16_junction_fast_food'));
-      expect(resolveShopId('8745007244'), equals('up16_junction_fast_food'));
     });
   });
 }
