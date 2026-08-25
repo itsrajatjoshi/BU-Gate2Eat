@@ -131,7 +131,9 @@ class _ActiveOrderCard extends StatelessWidget {
         isAccepted ? 'Order Accepted • Preparing' : 'Placed • Waiting for shopkeeper';
 
     final itemsSummary = order.items
-        .map((i) => '${i.name} (x${i.quantity})')
+        .map((i) => i.hasOptions
+            ? '${i.name} (${i.optionsDescription}) (x${i.quantity})'
+            : '${i.name} (x${i.quantity})')
         .join(', ');
 
     return Container(

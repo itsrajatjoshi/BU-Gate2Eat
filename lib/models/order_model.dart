@@ -2,6 +2,7 @@
 // Order model for In-App Orders & Firestore Documents
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'cart_item_model.dart';
 
 /// Represents an individual item snapshot within an order.
 class OrderItem {
@@ -11,6 +12,9 @@ class OrderItem {
     required this.price,
     required this.quantity,
     this.imageUrl = '',
+    this.optionsDescription = '',
+    this.selectedOptions = const [],
+    this.cartKey = '',
   });
 
   final String menuItemId;
@@ -18,6 +22,13 @@ class OrderItem {
   final int price;
   final int quantity;
   final String imageUrl;
+  final String optionsDescription;
+  final List<SelectedMenuItemOption> selectedOptions;
+  final String cartKey;
+
+  /// True if this order item represents a custom option / variant.
+  bool get hasOptions =>
+      optionsDescription.isNotEmpty || selectedOptions.isNotEmpty;
 
   double get totalPrice => (price * quantity).toDouble();
 
@@ -30,10 +41,21 @@ class OrderItem {
       'quantity': quantity,
       'subtotal': totalPrice,
       'imageUrl': imageUrl,
+      if (optionsDescription.isNotEmpty)
+        'optionsDescription': optionsDescription,
+      if (selectedOptions.isNotEmpty)
+        'selectedOptions': selectedOptions.map((o) => o.toMap()).toList(),
+      if (cartKey.isNotEmpty) 'cartKey': cartKey,
     };
   }
 
   factory OrderItem.fromMap(Map<String, dynamic> map) {
+    final rawOptions = map['selectedOptions'] as List<dynamic>? ?? [];
+    final selectedOptions = rawOptions
+        .map((o) =>
+            SelectedMenuItemOption.fromMap(Map<String, dynamic>.from(o as Map)))
+        .toList();
+
     return OrderItem(
       menuItemId: (map['itemId'] as String?) ??
           (map['menuItemId'] as String?) ??
@@ -42,6 +64,9 @@ class OrderItem {
       price: (map['price'] as num?)?.toInt() ?? 0,
       quantity: (map['quantity'] as num?)?.toInt() ?? 1,
       imageUrl: (map['imageUrl'] as String?) ?? '',
+      optionsDescription: (map['optionsDescription'] as String?) ?? '',
+      selectedOptions: selectedOptions,
+      cartKey: (map['cartKey'] as String?) ?? '',
     );
   }
 }

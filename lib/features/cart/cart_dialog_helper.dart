@@ -5,20 +5,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../models/cart_item_model.dart';
 import '../../models/menu_item_model.dart';
 import 'cart_provider.dart';
 
 /// Attempts to add [item] to cart.
 /// If the cart already contains items from another shop, presents a confirmation dialog.
-Future<void> tryAddToCart({
+/// Returns true if item was successfully added, false if cancelled by user.
+Future<bool> tryAddToCart({
   required BuildContext context,
   required WidgetRef ref,
   required MenuItem item,
   required String shopId,
   required String shopName,
+  List<SelectedMenuItemOption> selectedOptions = const [],
+  int? unitPrice,
 }) async {
   final cartNotifier = ref.read(cartProvider.notifier);
-  final success = cartNotifier.addItem(item, shopId, shopName);
+  final success = cartNotifier.addItem(
+    item,
+    shopId,
+    shopName,
+    selectedOptions: selectedOptions,
+    unitPrice: unitPrice,
+  );
 
   if (!success) {
     final currentShopName = ref.read(cartProvider).shopName ?? 'another shop';
@@ -79,7 +89,16 @@ Future<void> tryAddToCart({
     );
 
     if (shouldClearAndAdd == true) {
-      cartNotifier.clearAndAddItem(item, shopId, shopName);
+      cartNotifier.clearAndAddItem(
+        item,
+        shopId,
+        shopName,
+        selectedOptions: selectedOptions,
+        unitPrice: unitPrice,
+      );
+      return true;
     }
+    return false;
   }
+  return true;
 }

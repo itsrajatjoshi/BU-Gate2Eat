@@ -1,0 +1,343 @@
+[
+  {
+    "id": "TC001",
+    "title": "Place an order from the cart and reach the order detail view",
+    "description": "This verifies that a customer can confirm a cart purchase end-to-end, see the cart clear, and land on the new order detail screen.",
+    "category": "In-App Order Placement",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /home"
+      },
+      {
+        "type": "action",
+        "description": "Open a shop with available items"
+      },
+      {
+        "type": "action",
+        "description": "Add at least one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /cart"
+      },
+      {
+        "type": "action",
+        "description": "Place the order"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the purchase in the dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the cart is cleared and the new order detail view is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Accept an incoming order from the shopkeeper dashboard",
+    "description": "This verifies that a shopkeeper can open the dashboard, inspect an incoming order, and accept it so the status changes to accepted.",
+    "category": "Shopkeeper Order Processing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /shopkeeper"
+      },
+      {
+        "type": "action",
+        "description": "Open an incoming order card"
+      },
+      {
+        "type": "action",
+        "description": "Accept the order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the order status changes to accepted"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Mark an accepted order as delivered",
+    "description": "This verifies that a shopkeeper can complete an accepted order by marking it delivered from the dashboard.",
+    "category": "Shopkeeper Order Processing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /shopkeeper"
+      },
+      {
+        "type": "action",
+        "description": "Open an accepted order"
+      },
+      {
+        "type": "action",
+        "description": "Mark the order as delivered"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the order status changes to delivered"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Review the cart before placing an order",
+    "description": "This verifies that a customer can open the cart, review selected items and total, and proceed to the order confirmation flow.",
+    "category": "In-App Order Placement",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /home"
+      },
+      {
+        "type": "action",
+        "description": "Open a shop with available items"
+      },
+      {
+        "type": "action",
+        "description": "Add multiple items to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /cart"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected items and order total are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Cancel a placed order before it is accepted",
+    "description": "This verifies that a customer can cancel an order while it is still placed and that the order leaves the active flow afterward.",
+    "category": "Customer Live Status & Cancellation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /active-orders"
+      },
+      {
+        "type": "action",
+        "description": "Open a placed order"
+      },
+      {
+        "type": "action",
+        "description": "Cancel the order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the order is removed from the active flow"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "View the order confirmation dialog before submitting a purchase",
+    "description": "This verifies that placing an order first shows a confirmation dialog with the shop and order total before the purchase is finalized.",
+    "category": "In-App Order Placement",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /home"
+      },
+      {
+        "type": "action",
+        "description": "Open a shop with available items"
+      },
+      {
+        "type": "action",
+        "description": "Add at least one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /cart"
+      },
+      {
+        "type": "action",
+        "description": "Place the order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a purchase confirmation dialog is displayed with the shop and total"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Reject an incoming order with a reason",
+    "description": "This verifies that a shopkeeper can reject an order only after providing a reason and that the order status changes to rejected.",
+    "category": "Shopkeeper Order Processing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /shopkeeper"
+      },
+      {
+        "type": "action",
+        "description": "Open an incoming order card"
+      },
+      {
+        "type": "action",
+        "description": "Reject the order"
+      },
+      {
+        "type": "action",
+        "description": "Enter a rejection reason"
+      },
+      {
+        "type": "action",
+        "description": "Submit the rejection"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the order status changes to rejected"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "See live active orders and open an order for tracking",
+    "description": "This verifies that a customer can open the active orders screen, see current orders, and inspect a single order's live tracking view.",
+    "category": "Customer Live Status & Cancellation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /active-orders"
+      },
+      {
+        "type": "action",
+        "description": "Open an active order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the active orders list and the order tracking details are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Watch an active order update status in real time",
+    "description": "This verifies that a customer can keep the active order view open and see the order status change as the order progresses.",
+    "category": "Customer Live Status & Cancellation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /active-orders"
+      },
+      {
+        "type": "action",
+        "description": "Open an active order"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the order status to update"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated order status is displayed in the active flow"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "See a live incoming orders stream on the shopkeeper dashboard",
+    "description": "This verifies that the shopkeeper dashboard shows incoming orders in real time and allows opening an order for details.",
+    "category": "Shopkeeper Order Processing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /shopkeeper"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify incoming orders are displayed in the live stream"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Review delivered orders in order history",
+    "description": "This verifies that a customer can open order history and review past orders after live tracking has completed.",
+    "category": "Customer Live Status & Cancellation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /order-history"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify delivered orders are displayed in the order history view"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Keep customer and shopkeeper views in sync during order progression",
+    "description": "This verifies that a status change made by the shopkeeper is reflected in the customer's active order view without leaving the page.",
+    "category": "Shopkeeper Order Processing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /active-orders"
+      },
+      {
+        "type": "action",
+        "description": "Open an active order"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /shopkeeper"
+      },
+      {
+        "type": "action",
+        "description": "Open the same order from the incoming orders stream"
+      },
+      {
+        "type": "action",
+        "description": "Accept the order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the customer's active order view reflects the accepted status"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC013",
+    "title": "Prevent cancellation after an order has been accepted",
+    "description": "This verifies that a customer cannot cancel an order once it has moved beyond the placed state.",
+    "category": "Customer Live Status & Cancellation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /active-orders"
+      },
+      {
+        "type": "action",
+        "description": "Open an accepted order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the cancel action is unavailable or disabled"
+      }
+    ],
+    "priority": "Low"
+  }
+]

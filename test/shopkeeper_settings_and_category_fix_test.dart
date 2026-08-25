@@ -5,7 +5,6 @@ import 'package:bugate2eat_app/models/category_model.dart';
 import 'package:bugate2eat_app/models/menu_item_model.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
 import 'package:bugate2eat_app/models/shop_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

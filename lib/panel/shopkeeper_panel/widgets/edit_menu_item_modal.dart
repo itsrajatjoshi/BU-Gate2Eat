@@ -1,10 +1,11 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Edit Menu Item Modal (Client-Side Auto-Compression <= 300KB & Safe Storage Cleanup)
+// Edit Menu Item Modal (Client-Side Auto-Compression <= 300KB & Universal Options Support)
 
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -14,6 +15,48 @@ import '../../../../models/category_model.dart';
 import '../../../../models/menu_item_model.dart';
 import '../../../../services/image_optimization_service.dart';
 import 'delete_item_dialog.dart';
+
+/// Helper model for editing an option in the local modal state.
+class _EditableOption {
+  _EditableOption({
+    String name = '',
+    String price = '',
+    this.pricingType = OptionPricingType.fixedPrice,
+    this.isDefault = false,
+  })  : nameController = TextEditingController(text: name),
+        priceController = TextEditingController(text: price);
+
+  final TextEditingController nameController;
+  final TextEditingController priceController;
+  OptionPricingType pricingType;
+  bool isDefault;
+
+  void dispose() {
+    nameController.dispose();
+    priceController.dispose();
+  }
+}
+
+/// Helper model for editing an option group in the local modal state.
+class _EditableOptionGroup {
+  _EditableOptionGroup({
+    String name = '',
+    List<_EditableOption>? options,
+    this.required = true,
+  })  : nameController = TextEditingController(text: name),
+        options = options ?? [];
+
+  final TextEditingController nameController;
+  final List<_EditableOption> options;
+  bool required;
+
+  void dispose() {
+    nameController.dispose();
+    for (final opt in options) {
+      opt.dispose();
+    }
+  }
+}
 
 class EditMenuItemModal extends ConsumerStatefulWidget {
   const EditMenuItemModal({
@@ -60,6 +103,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
   late bool _isVeg;
   late bool _isAvailable;
 
+  // ── Universal Options State ──────────────────────────────────────────────
+  late bool _hasOptions;
+  final List<_EditableOptionGroup> _optionGroups = [];
+
   bool _isLoading = false;
   bool _isOptimizingImage = false;
 
@@ -94,6 +141,28 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     _isVeg = widget.item.isVeg;
     _isAvailable = widget.item.isAvailable;
 
+    // Load existing option groups into editable state
+    _hasOptions = widget.item.hasOptions;
+    if (_hasOptions) {
+      for (final group in widget.item.optionGroups) {
+        final editableOptions = group.options
+            .map((opt) => _EditableOption(
+                  name: opt.name,
+                  price: opt.price.toString(),
+                  pricingType: opt.pricingType,
+                  isDefault: opt.isDefault,
+                ))
+            .toList();
+        _optionGroups.add(
+          _EditableOptionGroup(
+            name: group.name,
+            required: group.required,
+            options: editableOptions,
+          ),
+        );
+      }
+    }
+
     final currentCat = widget.categories
         .where((c) => c.id == widget.item.categoryId)
         .firstOrNull;
@@ -124,7 +193,24 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     _priceController.dispose();
     _detailsController.dispose();
     _customCategoryController.dispose();
+    for (final group in _optionGroups) {
+      group.dispose();
+    }
     super.dispose();
+  }
+
+  void _addEmptyOptionGroup() {
+    setState(() {
+      _optionGroups.add(
+        _EditableOptionGroup(
+          name: '',
+          options: [
+            _EditableOption(name: '', price: '', pricingType: OptionPricingType.fixedPrice, isDefault: true),
+            _EditableOption(name: '', price: '', pricingType: OptionPricingType.fixedPrice),
+          ],
+        ),
+      );
+    });
   }
 
   String _getEffectiveImageUrl(MenuItem item) {
@@ -148,17 +234,16 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         nameLower.contains('wrap') ||
         nameLower.contains('frankie')) {
       return 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=500&auto=format&fit=crop&q=80';
-    } else if (nameLower.contains('pizza')) {
-      return 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('coffee') || nameLower.contains('shake')) {
+      return 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('tea') || nameLower.contains('chai')) {
+      return 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('dosa') || nameLower.contains('idli')) {
+      return 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('thali') || nameLower.contains('meal')) {
+      return 'https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?w=500&auto=format&fit=crop&q=80';
     }
-
-    final fallbacks = [
-      'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=500&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=500&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=500&auto=format&fit=crop&q=80',
-    ];
-    return fallbacks[item.id.hashCode.abs() % fallbacks.length];
+    return '';
   }
 
   Future<void> _pickImage() async {
@@ -170,7 +255,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
           _imageError = null;
         });
 
-        debugPrint('🔄 IMAGE OPTIMIZATION START (Menu Item)');
+        debugPrint('🔄 IMAGE OPTIMIZATION START (Menu Item Edit)');
         final rawBytes = await picked.readAsBytes();
 
         // Automatically resize & compress to <= 300 KB on background isolate
@@ -212,44 +297,120 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         ? _customCategoryController.text.trim()
         : _selectedCategory;
 
-    if (name.isEmpty || priceText.isEmpty || details.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please fill in all compulsory fields (*).'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-      return;
-    }
-
-    final price = int.tryParse(priceText);
-    if (price == null || price <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please enter a valid price.'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+    // 1. Basic compulsory fields validation
+    if (name.isEmpty || details.isEmpty) {
+      _showErrorSnackBar('Please fill in all compulsory fields (*).');
       return;
     }
 
     if (_isOtherCategory && effectiveCategory.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please type the custom category name.'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _showErrorSnackBar('Please type the custom category name.');
       return;
+    }
+
+    int effectivePrice = 0;
+    final constructedOptionGroups = <MenuItemOptionGroup>[];
+
+    // 2. Options validation vs Normal price validation
+    if (!_hasOptions) {
+      if (priceText.isEmpty) {
+        _showErrorSnackBar('Please enter a valid price.');
+        return;
+      }
+      final parsedPrice = int.tryParse(priceText);
+      if (parsedPrice == null || parsedPrice <= 0) {
+        _showErrorSnackBar('Please enter a valid price greater than 0.');
+        return;
+      }
+      effectivePrice = parsedPrice;
+    } else {
+      // Options are ON: validate groups and options
+      if (_optionGroups.isEmpty) {
+        _showErrorSnackBar('Please add at least one option group or turn options OFF.');
+        return;
+      }
+
+      for (var gIdx = 0; gIdx < _optionGroups.length; gIdx++) {
+        final group = _optionGroups[gIdx];
+        final groupName = group.nameController.text.trim();
+        if (groupName.isEmpty) {
+          _showErrorSnackBar('Group #${gIdx + 1} name cannot be empty.');
+          return;
+        }
+
+        if (group.options.isEmpty) {
+          _showErrorSnackBar('Group "$groupName" must have at least one option.');
+          return;
+        }
+
+        final constructedOptions = <MenuItemOption>[];
+        for (var oIdx = 0; oIdx < group.options.length; oIdx++) {
+          final opt = group.options[oIdx];
+          final optName = opt.nameController.text.trim();
+          final optPriceText = opt.priceController.text.trim();
+
+          if (optName.isEmpty) {
+            _showErrorSnackBar('Option #${oIdx + 1} in "$groupName" needs a name.');
+            return;
+          }
+
+          final optPrice = int.tryParse(optPriceText);
+          if (optPrice == null) {
+            _showErrorSnackBar('Please enter a valid numeric price for "$optName".');
+            return;
+          }
+
+          if (opt.pricingType == OptionPricingType.fixedPrice && optPrice <= 0) {
+            _showErrorSnackBar('Fixed price for "$optName" must be greater than 0.');
+            return;
+          }
+
+          if (opt.pricingType == OptionPricingType.priceAdjustment && optPrice < 0) {
+            _showErrorSnackBar('Price adjustment for "$optName" cannot be negative.');
+            return;
+          }
+
+          constructedOptions.add(
+            MenuItemOption(
+              id: 'opt_${gIdx + 1}_${oIdx + 1}',
+              name: optName,
+              price: optPrice,
+              pricingType: opt.pricingType,
+              isDefault: opt.isDefault,
+            ),
+          );
+        }
+
+        constructedOptionGroups.add(
+          MenuItemOptionGroup(
+            id: 'grp_${gIdx + 1}',
+            name: groupName,
+            required: group.required,
+            options: constructedOptions,
+          ),
+        );
+      }
+
+      // Safe base price for Firestore backward compatibility
+      final parsedLegacyPrice = int.tryParse(priceText);
+      if (parsedLegacyPrice != null && parsedLegacyPrice > 0) {
+        effectivePrice = parsedLegacyPrice;
+      } else {
+        final dummyItem = MenuItem(
+          id: widget.item.id,
+          name: name,
+          details: details,
+          price: 0,
+          imageUrl: '',
+          categoryId: '',
+          isVeg: _isVeg,
+          isAvailable: _isAvailable,
+          isRecommended: widget.item.isRecommended,
+          sortOrder: widget.item.sortOrder,
+          optionGroups: constructedOptionGroups,
+        );
+        effectivePrice = dummyItem.startingPrice;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -298,16 +459,21 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         }
       }
 
-      debugPrint('📝 FIRESTORE UPDATE START -> shops/${widget.shopId}/menuItems/${widget.item.id}');
-      await firestoreService.updateMenuItem(widget.shopId, widget.item.id, {
+      final updateMap = <String, dynamic>{
         'name': name,
-        'price': price,
+        'price': effectivePrice,
         'details': details,
         'isVeg': _isVeg,
         'isAvailable': _isAvailable,
         'categoryId': categoryId,
         'imageUrl': imageUrl,
-      });
+        'optionGroups': _hasOptions
+            ? constructedOptionGroups.map((g) => g.toMap()).toList()
+            : <Map<String, dynamic>>[], // Explicitly clear optionGroups when converting back to normal item
+      };
+
+      debugPrint('📝 FIRESTORE UPDATE START -> shops/${widget.shopId}/menuItems/${widget.item.id}');
+      await firestoreService.updateMenuItem(widget.shopId, widget.item.id, updateMap);
       debugPrint('✅ FIRESTORE UPDATE COMPLETE');
 
       // Invalidate Riverpod providers to refresh menu & categories instantly
@@ -347,16 +513,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     } catch (e, stack) {
       debugPrint('❌ SAVE ERROR: $e\n$stack');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update item: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
+        _showErrorSnackBar('Failed to update item: $e');
       }
     } finally {
       if (mounted) {
@@ -366,56 +523,58 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     }
   }
 
-  void _onDelete() {
-    DeleteItemDialog.show(context, widget.item).then((confirmed) async {
-      if (confirmed == true && mounted) {
-        setState(() => _isLoading = true);
-        try {
-          final firestoreService = ref.read(firestoreServiceProvider);
-          await firestoreService.deleteMenuItem(
-            widget.shopId,
-            widget.item.id,
-            imageUrl: widget.item.imageUrl,
-          );
-          ref.invalidate(shopMenuItemsProvider(widget.shopId));
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
 
-          if (mounted) {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '"${widget.item.name}" deleted from menu.',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                backgroundColor: AppColors.textPrimary,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                duration: const Duration(seconds: 2),
-              ),
+  Future<void> _onDelete() async {
+    final confirmed = await DeleteItemDialog.show(
+      context,
+      widget.item,
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() => _isLoading = true);
+      try {
+        await ref.read(firestoreServiceProvider).deleteMenuItem(
+              widget.shopId,
+              widget.item.id,
+              imageUrl: widget.item.imageUrl,
             );
-          }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to delete item: $e'),
-                backgroundColor: AppColors.error,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+
+        ref.invalidate(shopMenuItemsProvider(widget.shopId));
+        ref.invalidate(shopCategoriesProvider(widget.shopId));
+
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('"${widget.item.name}" deleted from menu.'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
               ),
-            );
-          }
-        } finally {
-          if (mounted) {
-            setState(() => _isLoading = false);
-          }
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          _showErrorSnackBar('Failed to delete item: $e');
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
         }
       }
-    });
+    }
   }
 
   List<String> _getAllCategoryOptions() {
@@ -428,9 +587,6 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     for (final def in _defaultCategories) {
       set.add(def);
     }
-    if (_selectedCategory.isNotEmpty && !_isOtherCategory) {
-      set.add(_selectedCategory);
-    }
     return set.toList();
   }
 
@@ -439,7 +595,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final keyboardBottom = MediaQuery.of(context).viewInsets.bottom;
     final allCategories = _getAllCategoryOptions();
-    final currentExistingImageUrl = _getEffectiveImageUrl(widget.item);
+    final currentImageUrl = _getEffectiveImageUrl(widget.item);
 
     return Container(
       decoration: BoxDecoration(
@@ -466,7 +622,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
               ),
             ),
 
-            // Header Row with Delete Action
+            // Header Row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -497,7 +653,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                                   ),
                         ),
                         Text(
-                          'Update price, details, photo or availability',
+                          'Changes will be updated immediately',
                           style: TextStyle(
                             fontSize: 11,
                             color: isDark
@@ -517,11 +673,11 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             ),
             const SizedBox(height: 16),
 
-            // ─── 1. Image Section ─────────────────────────────────────────
+            // ─── 1. Image Upload Section ──────────────────────────────────
             Row(
               children: [
                 Text(
-                  'Item Photo',
+                  'Item Image',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: isDark
@@ -569,14 +725,13 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Optimizing photo for fast delivery...',
+                      'Optimizing photo for fast loading...',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
               )
             else if (_selectedImageBytes != null) ...[
-              // New selected photo preview
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -605,7 +760,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _selectedImageName ?? 'New Photo Selected',
+                            _selectedImageName ?? 'New Uploaded Image',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -615,7 +770,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Optimized: ${((_selectedImageSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB (≤ 300 KB)',
+                            'Optimized: ${((_selectedImageSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB (≤ 300 KB limit)',
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.success,
@@ -645,8 +800,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                   ],
                 ),
               ),
-            ] else ...[
-              // Existing photo preview with change button
+            ] else if (currentImageUrl.isNotEmpty) ...[
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -655,9 +809,9 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                       : AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _imageError != null
-                        ? AppColors.error
-                        : (isDark ? AppColors.darkDivider : AppColors.divider),
+                    color: isDark
+                        ? AppColors.darkDivider
+                        : AppColors.divider,
                   ),
                 ),
                 child: Row(
@@ -665,13 +819,17 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: CachedNetworkImage(
-                        imageUrl: currentExistingImageUrl,
+                        imageUrl: currentImageUrl,
                         width: 54,
                         height: 54,
                         fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => const Icon(
-                          Icons.fastfood_rounded,
-                          color: AppColors.textHint,
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey.shade300,
+                          child: const Icon(Icons.image, color: Colors.grey),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey.shade300,
+                          child: const Icon(Icons.broken_image, color: Colors.grey),
                         ),
                       ),
                     ),
@@ -681,15 +839,17 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Current Item Photo',
+                            'Current Image',
                             style: TextStyle(
+                              fontWeight: FontWeight.w600,
                               fontSize: 13,
-                              fontWeight: FontWeight.w700,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Tap Change to pick a new photo from gallery',
+                            widget.item.imageUrl.isEmpty
+                                ? 'Auto-assigned fallback'
+                                : 'Uploaded',
                             style: TextStyle(
                               fontSize: 11,
                               color: isDark
@@ -701,34 +861,75 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: (_isLoading || _isOptimizingImage)
-                          ? null
-                          : _pickImage,
+                      onPressed: _isLoading ? null : _pickImage,
+                      icon: const Icon(Icons.change_circle_outlined, size: 16),
+                      label: const Text('Change', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primary,
-                        side: const BorderSide(
-                          color: AppColors.primary,
-                          width: 1.2,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(Icons.camera_alt_outlined, size: 14),
-                      label: const Text(
-                        'Change',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        side: const BorderSide(color: AppColors.primary),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
                   ],
+                ),
+              ),
+            ] else ...[
+              InkWell(
+                onTap: _isLoading ? null : _pickImage,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.darkSurfaceVariant
+                        : AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _imageError != null
+                          ? AppColors.error
+                          : (isDark
+                              ? AppColors.darkDivider
+                              : AppColors.divider),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: 32,
+                        color: _imageError != null
+                            ? AppColors.error
+                            : AppColors.primary,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Upload Image from Gallery',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _imageError != null
+                              ? AppColors.error
+                              : AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Auto-compresses to ≤ 300 KB for fast delivery',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.textHint,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -761,7 +962,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(
-                hintText: 'e.g. Veg Steam Momos',
+                hintText: 'e.g. Paneer Steam Momos',
                 prefixIcon: Icon(Icons.fastfood_outlined),
                 isDense: true,
               ),
@@ -780,13 +981,14 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             ),
             const SizedBox(height: 6),
 
+            // Category Chips
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: [
                 ...allCategories.map((cat) {
-                  final isSelected = !_isOtherCategory &&
-                      _selectedCategory.toLowerCase() == cat.toLowerCase();
+                  final isSelected =
+                      !_isOtherCategory && _selectedCategory == cat;
                   return ChoiceChip(
                     label: Text(cat),
                     selected: isSelected,
@@ -889,6 +1091,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                       TextField(
                         controller: _priceController,
                         keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: const InputDecoration(
                           hintText: 'e.g. 60',
                           prefixIcon: Icon(Icons.currency_rupee_rounded),
@@ -967,7 +1170,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             ),
             const SizedBox(height: 14),
 
-            // ─── 5. Availability Status Toggle (Available / Out of Stock) ─
+            // ─── 5. Availability Status Toggle ────────────────────────────
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
@@ -1060,9 +1263,100 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                 isDense: true,
               ),
             ),
+            const SizedBox(height: 14),
+
+            // ─── 7. Universal Options Toggle ──────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.darkSurfaceVariant
+                    : AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _hasOptions
+                      ? AppColors.primary.withValues(alpha: 0.4)
+                      : (isDark ? AppColors.darkDivider : AppColors.divider),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Does this item have options / sizes?',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: isDark
+                                ? AppColors.darkTextPrimary
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'e.g. Half / Full, Sizes, Dry / Gravy',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textHint,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _hasOptions,
+                    activeColor: AppColors.primary,
+                    onChanged: _isLoading
+                        ? null
+                        : (val) {
+                            setState(() {
+                              _hasOptions = val;
+                              if (_hasOptions && _optionGroups.isEmpty) {
+                                _addEmptyOptionGroup();
+                              }
+                            });
+                          },
+                  ),
+                ],
+              ),
+            ),
+
+            // ─── 8. Option Groups Configuration Section (When ON) ─────────
+            if (_hasOptions) ...[
+              const SizedBox(height: 14),
+              ..._optionGroups.asMap().entries.map((entry) {
+                final gIdx = entry.key;
+                final group = entry.value;
+                return _buildOptionGroupCard(group, gIdx, isDark);
+              }),
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: _addEmptyOptionGroup,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Another Option Group'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(
+                    color: AppColors.primary.withValues(alpha: 0.5),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  minimumSize: const Size(double.infinity, 44),
+                ),
+              ),
+            ],
+
             const SizedBox(height: 20),
 
-            // ─── 7. Delete Item Button ────────────────────────────────────
+            // ─── 9. Delete Item Button ────────────────────────────────────
             Center(
               child: TextButton.icon(
                 onPressed: (_isLoading || _isOptimizingImage) ? null : _onDelete,
@@ -1081,7 +1375,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             ),
             const SizedBox(height: 8),
 
-            // ─── 8. Save Button ───────────────────────────────────────────
+            // ─── 10. Save Button ──────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 48,
@@ -1116,6 +1410,226 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildOptionGroupCard(
+    _EditableOptionGroup group,
+    int gIdx,
+    bool isDark,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.darkSurfaceVariant
+            : AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? AppColors.darkDivider : AppColors.divider,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Group Header Row
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: group.nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Option Group Name *',
+                    hintText: 'e.g. Portion, Size, Preparation',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.error,
+                  size: 20,
+                ),
+                tooltip: 'Delete Group',
+                onPressed: () {
+                  setState(() {
+                    final removed = _optionGroups.removeAt(gIdx);
+                    removed.dispose();
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Options Header
+          Text(
+            'Options / Choices:',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.grey[300] : Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Options List
+          ...group.options.asMap().entries.map((optEntry) {
+            final oIdx = optEntry.key;
+            final option = optEntry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  // Option Name
+                  Expanded(
+                    flex: 4,
+                    child: TextField(
+                      controller: option.nameController,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Half, Full',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 9,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Pricing Type Toggle
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        option.pricingType =
+                            option.pricingType == OptionPricingType.fixedPrice
+                                ? OptionPricingType.priceAdjustment
+                                : OptionPricingType.fixedPrice;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: option.pricingType == OptionPricingType.fixedPrice
+                            ? AppColors.primary.withValues(alpha: 0.15)
+                            : Colors.orange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: option.pricingType == OptionPricingType.fixedPrice
+                              ? AppColors.primary
+                              : Colors.orange,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        option.pricingType == OptionPricingType.fixedPrice
+                            ? '₹ Fixed'
+                            : '+₹ Extra',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: option.pricingType == OptionPricingType.fixedPrice
+                              ? AppColors.primary
+                              : Colors.orange[800],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Option Price Input
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: option.priceController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        hintText: 'Price',
+                        prefixText: '₹',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 9,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Delete Option Button
+                  IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: Colors.grey,
+                    ),
+                    tooltip: 'Delete Choice',
+                    onPressed: group.options.length <= 1
+                        ? null
+                        : () {
+                            setState(() {
+                              final removed = group.options.removeAt(oIdx);
+                              removed.dispose();
+                            });
+                          },
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          // Add Option Button within Group
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  group.options.add(
+                    _EditableOption(
+                      name: '',
+                      price: '',
+                      pricingType: group.options.isNotEmpty
+                          ? group.options.last.pricingType
+                          : OptionPricingType.fixedPrice,
+                    ),
+                  );
+                });
+              },
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 14),
+              label: const Text(
+                'Add Choice',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1046,6 +1046,7 @@ class _MenuItemCard extends ConsumerWidget {
     required Key key,
     required BuildContext context,
     required WidgetRef ref,
+    required VoidCallback onAdd,
     double width = 64,
     double height = 30,
   }) {
@@ -1053,7 +1054,7 @@ class _MenuItemCard extends ConsumerWidget {
     return InkWell(
       key: key,
       borderRadius: BorderRadius.circular(8),
-      onTap: () => _handleCartChange(ref, context, 1),
+      onTap: onAdd,
       child: Container(
         width: width,
         height: height,
@@ -1382,10 +1383,12 @@ class _MenuItemCard extends ConsumerWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              item.formattedPrice,
+                              item.formattedStartingPrice,
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
-                                fontSize: isSmallScreen ? 14.5 : 15.5,
+                                fontSize: isSmallScreen
+                                    ? (item.hasOptions ? 12.0 : 14.5)
+                                    : (item.hasOptions ? 13.0 : 15.5),
                                 color: Theme.of(context)
                                     .textTheme
                                     .bodyLarge
@@ -1412,6 +1415,9 @@ class _MenuItemCard extends ConsumerWidget {
                                     key: const ValueKey('add_btn'),
                                     context: context,
                                     ref: ref,
+                                    onAdd: item.hasOptions
+                                        ? showItemDetail
+                                        : () => _handleCartChange(ref, context, 1),
                                     width: isSmallScreen ? 58.0 : 64.0,
                                     height: isSmallScreen ? 28.0 : 30.0,
                                   ),
@@ -1623,9 +1629,160 @@ class _ItemDetailBottomSheet extends ConsumerStatefulWidget {
   @override
   ConsumerState<_ItemDetailBottomSheet> createState() => _ItemDetailBottomSheetState();
 }
-
 class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> {
   double _favoriteScale = 1.0;
+  final Map<String, MenuItemOption> _selectedOptions = {};
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.item.hasOptions) {
+      for (final group in widget.item.optionGroups) {
+        if (group.options.isEmpty) continue;
+        final defaultOption = group.options
+            .where((o) => o.isDefault)
+            .firstOrNull ?? group.options.first;
+        _selectedOptions[group.id] = defaultOption;
+      }
+    }
+  }
+
+  int get _selectedTotalPrice {
+    if (!widget.item.hasOptions) return widget.item.price;
+
+    int calculatedPrice = 0;
+    bool hasAnyFixed = false;
+
+    for (final group in widget.item.optionGroups) {
+      final selectedOpt = _selectedOptions[group.id];
+      if (selectedOpt != null) {
+        if (selectedOpt.pricingType == OptionPricingType.fixedPrice) {
+          hasAnyFixed = true;
+          calculatedPrice += selectedOpt.price;
+        } else if (selectedOpt.pricingType == OptionPricingType.priceAdjustment) {
+          calculatedPrice += selectedOpt.price;
+        }
+      }
+    }
+
+    if (!hasAnyFixed) {
+      calculatedPrice += widget.item.price;
+    }
+
+    if (calculatedPrice <= 0) {
+      return widget.item.startingPrice > 0
+          ? widget.item.startingPrice
+          : widget.item.price;
+    }
+
+    return calculatedPrice;
+  }
+
+  Widget _buildOptionGroupSelector(MenuItemOptionGroup group, bool isDark) {
+    final selected = _selectedOptions[group.id];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'CHOOSE ${group.name.toUpperCase()}',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: isDark ? Colors.grey[400] : Colors.grey[500],
+                ),
+              ),
+              if (group.required) ...[
+                const SizedBox(width: 4),
+                const Text(
+                  '*',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: group.options.map((option) {
+              final isSelected = selected?.id == option.id;
+
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedOptions[group.id] = option;
+                  });
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : (isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade100),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppColors.primary
+                          : (isDark ? AppColors.darkDivider : Colors.grey.shade300),
+                      width: isSelected ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        option.name,
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                          fontSize: 13,
+                          color: isSelected
+                              ? AppColors.primary
+                              : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        option.pricingType == OptionPricingType.fixedPrice
+                            ? '₹${option.price}'
+                            : '+₹${option.price}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: isSelected
+                              ? AppColors.primary
+                              : (isDark ? AppColors.darkTextSecondary : AppColors.textHint),
+                        ),
+                      ),
+                      if (isSelected) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          size: 15,
+                          color: AppColors.primary,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildVegIcon() {
     return Container(
@@ -1957,10 +2114,32 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                 color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                               ),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
                           ],
                         ),
                       ),
+
+                      // ── Universal Option Groups Section (When hasOptions == true) ──
+                      if (widget.item.hasOptions) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
+                              ),
+                              const SizedBox(height: 14),
+                              ...widget.item.optionGroups.map((group) {
+                                return _buildOptionGroupSelector(group, isDark);
+                              }),
+                              const SizedBox(height: 6),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -2008,7 +2187,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          widget.item.formattedPrice,
+                          '₹$_selectedTotalPrice',
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 22,
@@ -2021,7 +2200,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
 
                     // Primary Action Button (Add to Cart / Interactive Stepper)
                     if (isItemAvailable)
-                      quantityInCart > 0
+                      (!widget.item.hasOptions && quantityInCart > 0)
                           ? _buildQuantityStepper(context, ref, quantityInCart)
                           : _buildAddButton(context, ref)
                     else
@@ -2055,14 +2234,50 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          tryAddToCart(
-            context: context,
-            ref: ref,
-            item: widget.item,
-            shopId: widget.shop.id,
-            shopName: widget.shop.name,
-          );
+        onTap: () async {
+          if (widget.item.hasOptions) {
+            // 1. Build SelectedMenuItemOption snapshots preserving full details
+            final List<SelectedMenuItemOption> selectedList = [];
+            for (final group in widget.item.optionGroups) {
+              final opt = _selectedOptions[group.id];
+              if (opt != null) {
+                selectedList.add(
+                  SelectedMenuItemOption(
+                    groupId: group.id,
+                    groupName: group.name,
+                    optionId: opt.id,
+                    optionName: opt.name,
+                    pricingType: opt.pricingType,
+                    price: opt.price,
+                  ),
+                );
+              }
+            }
+
+            // 2. Add variant to cart with single-shop conflict protection
+            final added = await tryAddToCart(
+              context: context,
+              ref: ref,
+              item: widget.item,
+              shopId: widget.shop.id,
+              shopName: widget.shop.name,
+              selectedOptions: selectedList,
+              unitPrice: _selectedTotalPrice,
+            );
+
+            // 3. Close bottom sheet on successful add
+            if (added && context.mounted) {
+              Navigator.pop(context);
+            }
+          } else {
+            tryAddToCart(
+              context: context,
+              ref: ref,
+              item: widget.item,
+              shopId: widget.shop.id,
+              shopName: widget.shop.name,
+            );
+          }
         },
         borderRadius: BorderRadius.circular(14),
         child: Ink(

@@ -1,9 +1,10 @@
 // BU Gate2Eat — Shopkeeper Panel
-// Add Content Modal (Client-Side Auto-Compression <= 300KB & Safe Upload Flow)
+// Add Content Modal (Client-Side Auto-Compression <= 300KB & Universal Options Support)
 
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -12,6 +13,48 @@ import '../../../../core/providers.dart';
 import '../../../../models/category_model.dart';
 import '../../../../models/menu_item_model.dart';
 import '../../../../services/image_optimization_service.dart';
+
+/// Helper model for editing an option in the local modal state.
+class _EditableOption {
+  _EditableOption({
+    String name = '',
+    String price = '',
+    this.pricingType = OptionPricingType.fixedPrice,
+    this.isDefault = false,
+  })  : nameController = TextEditingController(text: name),
+        priceController = TextEditingController(text: price);
+
+  final TextEditingController nameController;
+  final TextEditingController priceController;
+  OptionPricingType pricingType;
+  bool isDefault;
+
+  void dispose() {
+    nameController.dispose();
+    priceController.dispose();
+  }
+}
+
+/// Helper model for editing an option group in the local modal state.
+class _EditableOptionGroup {
+  _EditableOptionGroup({
+    String name = '',
+    List<_EditableOption>? options,
+    this.required = true,
+  })  : nameController = TextEditingController(text: name),
+        options = options ?? [];
+
+  final TextEditingController nameController;
+  final List<_EditableOption> options;
+  bool required;
+
+  void dispose() {
+    nameController.dispose();
+    for (final opt in options) {
+      opt.dispose();
+    }
+  }
+}
 
 class AddContentModal extends ConsumerStatefulWidget {
   const AddContentModal({
@@ -54,6 +97,10 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
   bool _isLoading = false;
   bool _isOptimizingImage = false;
 
+  // ── Universal Options State ──────────────────────────────────────────────
+  bool _hasOptions = false;
+  final List<_EditableOptionGroup> _optionGroups = [];
+
   final ImagePicker _picker = ImagePicker();
   Uint8List? _selectedImageBytes;
   String? _selectedImageName;
@@ -93,7 +140,24 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
     _priceController.dispose();
     _detailsController.dispose();
     _customCategoryController.dispose();
+    for (final group in _optionGroups) {
+      group.dispose();
+    }
     super.dispose();
+  }
+
+  void _addEmptyOptionGroup() {
+    setState(() {
+      _optionGroups.add(
+        _EditableOptionGroup(
+          name: '',
+          options: [
+            _EditableOption(name: '', price: '', pricingType: OptionPricingType.fixedPrice, isDefault: true),
+            _EditableOption(name: '', price: '', pricingType: OptionPricingType.fixedPrice),
+          ],
+        ),
+      );
+    });
   }
 
   Future<void> _pickImage() async {
@@ -147,44 +211,121 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
         ? _customCategoryController.text.trim()
         : _selectedCategory;
 
-    if (name.isEmpty || priceText.isEmpty || details.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please fill in all compulsory fields (*).'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-      return;
-    }
-
-    final price = int.tryParse(priceText);
-    if (price == null || price <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please enter a valid price.'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+    // 1. Basic compulsory fields validation
+    if (name.isEmpty || details.isEmpty) {
+      _showErrorSnackBar('Please fill in all compulsory fields (*).');
       return;
     }
 
     if (_isOtherCategory && effectiveCategory.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please type the custom category name.'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _showErrorSnackBar('Please type the custom category name.');
       return;
+    }
+
+    int effectivePrice = 0;
+    final constructedOptionGroups = <MenuItemOptionGroup>[];
+
+    // 2. Options validation vs Normal price validation
+    if (!_hasOptions) {
+      if (priceText.isEmpty) {
+        _showErrorSnackBar('Please enter a valid price.');
+        return;
+      }
+      final parsedPrice = int.tryParse(priceText);
+      if (parsedPrice == null || parsedPrice <= 0) {
+        _showErrorSnackBar('Please enter a valid price greater than 0.');
+        return;
+      }
+      effectivePrice = parsedPrice;
+    } else {
+      // Options are ON: validate groups and options
+      if (_optionGroups.isEmpty) {
+        _showErrorSnackBar('Please add at least one option group or turn options OFF.');
+        return;
+      }
+
+      for (var gIdx = 0; gIdx < _optionGroups.length; gIdx++) {
+        final group = _optionGroups[gIdx];
+        final groupName = group.nameController.text.trim();
+        if (groupName.isEmpty) {
+          _showErrorSnackBar('Group #${gIdx + 1} name cannot be empty.');
+          return;
+        }
+
+        if (group.options.isEmpty) {
+          _showErrorSnackBar('Group "$groupName" must have at least one option.');
+          return;
+        }
+
+        final constructedOptions = <MenuItemOption>[];
+        for (var oIdx = 0; oIdx < group.options.length; oIdx++) {
+          final opt = group.options[oIdx];
+          final optName = opt.nameController.text.trim();
+          final optPriceText = opt.priceController.text.trim();
+
+          if (optName.isEmpty) {
+            _showErrorSnackBar('Option #${oIdx + 1} in "$groupName" needs a name.');
+            return;
+          }
+
+          final optPrice = int.tryParse(optPriceText);
+          if (optPrice == null) {
+            _showErrorSnackBar('Please enter a valid numeric price for "$optName".');
+            return;
+          }
+
+          if (opt.pricingType == OptionPricingType.fixedPrice && optPrice <= 0) {
+            _showErrorSnackBar('Fixed price for "$optName" must be greater than 0.');
+            return;
+          }
+
+          if (opt.pricingType == OptionPricingType.priceAdjustment && optPrice < 0) {
+            _showErrorSnackBar('Price adjustment for "$optName" cannot be negative.');
+            return;
+          }
+
+          constructedOptions.add(
+            MenuItemOption(
+              id: 'opt_${gIdx + 1}_${oIdx + 1}',
+              name: optName,
+              price: optPrice,
+              pricingType: opt.pricingType,
+              isDefault: opt.isDefault,
+            ),
+          );
+        }
+
+        constructedOptionGroups.add(
+          MenuItemOptionGroup(
+            id: 'grp_${gIdx + 1}',
+            name: groupName,
+            required: group.required,
+            options: constructedOptions,
+          ),
+        );
+      }
+
+      // Safe base price for Firestore backward compatibility
+      final parsedLegacyPrice = int.tryParse(priceText);
+      if (parsedLegacyPrice != null && parsedLegacyPrice > 0) {
+        effectivePrice = parsedLegacyPrice;
+      } else {
+        // Derive starting price from option groups
+        final dummyItem = MenuItem(
+          id: '',
+          name: name,
+          details: details,
+          price: 0,
+          imageUrl: '',
+          categoryId: '',
+          isVeg: _isVeg,
+          isAvailable: true,
+          isRecommended: false,
+          sortOrder: 0,
+          optionGroups: constructedOptionGroups,
+        );
+        effectivePrice = dummyItem.startingPrice;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -241,13 +382,14 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
         id: itemId,
         name: name,
         details: details,
-        price: price,
+        price: effectivePrice,
         imageUrl: imageUrl,
         categoryId: categoryId,
         isVeg: _isVeg,
         isAvailable: true,
         isRecommended: false,
         sortOrder: 99,
+        optionGroups: constructedOptionGroups,
       );
 
       debugPrint('📝 FIRESTORE UPDATE START -> shops/${widget.shopId}/menuItems/$itemId');
@@ -291,16 +433,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
     } catch (e, stack) {
       debugPrint('❌ SAVE ERROR: $e\n$stack');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add item: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
+        _showErrorSnackBar('Failed to add item: $e');
       }
     } finally {
       if (mounted) {
@@ -308,6 +441,17 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
         debugPrint('🔄 LOADING RESET: _isLoading = false');
       }
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   List<String> _getAllCategoryOptions() {
@@ -687,8 +831,8 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                   selected: _isOtherCategory,
                   selectedColor: AppColors.primary.withValues(alpha: 0.15),
                   backgroundColor: isDark
-                      ? AppColors.darkSurfaceVariant
-                      : AppColors.surfaceVariant,
+                        ? AppColors.darkSurfaceVariant
+                        : AppColors.surfaceVariant,
                   labelStyle: TextStyle(
                     fontSize: 12,
                     fontWeight:
@@ -745,6 +889,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                       TextField(
                         controller: _priceController,
                         keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: const InputDecoration(
                           hintText: 'e.g. 70',
                           prefixIcon: Icon(Icons.currency_rupee_rounded),
@@ -842,9 +987,100 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                 isDense: true,
               ),
             ),
+            const SizedBox(height: 14),
+
+            // ─── 6. Universal Options Toggle ──────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.darkSurfaceVariant
+                    : AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _hasOptions
+                      ? AppColors.primary.withValues(alpha: 0.4)
+                      : (isDark ? AppColors.darkDivider : AppColors.divider),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Does this item have options / sizes?',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: isDark
+                                ? AppColors.darkTextPrimary
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'e.g. Half / Full, Sizes, Dry / Gravy',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textHint,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _hasOptions,
+                    activeColor: AppColors.primary,
+                    onChanged: _isLoading
+                        ? null
+                        : (val) {
+                            setState(() {
+                              _hasOptions = val;
+                              if (_hasOptions && _optionGroups.isEmpty) {
+                                _addEmptyOptionGroup();
+                              }
+                            });
+                          },
+                  ),
+                ],
+              ),
+            ),
+
+            // ─── 7. Option Groups Configuration Section (When ON) ─────────
+            if (_hasOptions) ...[
+              const SizedBox(height: 14),
+              ..._optionGroups.asMap().entries.map((entry) {
+                final gIdx = entry.key;
+                final group = entry.value;
+                return _buildOptionGroupCard(group, gIdx, isDark);
+              }),
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: _addEmptyOptionGroup,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Another Option Group'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(
+                    color: AppColors.primary.withValues(alpha: 0.5),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  minimumSize: const Size(double.infinity, 44),
+                ),
+              ),
+            ],
+
             const SizedBox(height: 22),
 
-            // ─── 6. Action Button ─────────────────────────────────────────
+            // ─── 8. Action Button ─────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 48,
@@ -879,6 +1115,226 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildOptionGroupCard(
+    _EditableOptionGroup group,
+    int gIdx,
+    bool isDark,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.darkSurfaceVariant
+            : AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? AppColors.darkDivider : AppColors.divider,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Group Header Row
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: group.nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Option Group Name *',
+                    hintText: 'e.g. Portion, Size, Preparation',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.error,
+                  size: 20,
+                ),
+                tooltip: 'Delete Group',
+                onPressed: () {
+                  setState(() {
+                    final removed = _optionGroups.removeAt(gIdx);
+                    removed.dispose();
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Options Header
+          Text(
+            'Options / Choices:',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.grey[300] : Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Options List
+          ...group.options.asMap().entries.map((optEntry) {
+            final oIdx = optEntry.key;
+            final option = optEntry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  // Option Name
+                  Expanded(
+                    flex: 4,
+                    child: TextField(
+                      controller: option.nameController,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Half, Full',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 9,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Pricing Type Toggle
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        option.pricingType =
+                            option.pricingType == OptionPricingType.fixedPrice
+                                ? OptionPricingType.priceAdjustment
+                                : OptionPricingType.fixedPrice;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: option.pricingType == OptionPricingType.fixedPrice
+                            ? AppColors.primary.withValues(alpha: 0.15)
+                            : Colors.orange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: option.pricingType == OptionPricingType.fixedPrice
+                              ? AppColors.primary
+                              : Colors.orange,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        option.pricingType == OptionPricingType.fixedPrice
+                            ? '₹ Fixed'
+                            : '+₹ Extra',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: option.pricingType == OptionPricingType.fixedPrice
+                              ? AppColors.primary
+                              : Colors.orange[800],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Option Price Input
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: option.priceController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        hintText: 'Price',
+                        prefixText: '₹',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 9,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Delete Option Button
+                  IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: Colors.grey,
+                    ),
+                    tooltip: 'Delete Choice',
+                    onPressed: group.options.length <= 1
+                        ? null
+                        : () {
+                            setState(() {
+                              final removed = group.options.removeAt(oIdx);
+                              removed.dispose();
+                            });
+                          },
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          // Add Option Button within Group
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  group.options.add(
+                    _EditableOption(
+                      name: '',
+                      price: '',
+                      pricingType: group.options.isNotEmpty
+                          ? group.options.last.pricingType
+                          : OptionPricingType.fixedPrice,
+                    ),
+                  );
+                });
+              },
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 14),
+              label: const Text(
+                'Add Choice',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -649,6 +649,17 @@ class _ShopkeeperOrderDetailsModalState
                                             : AppColors.textPrimary,
                                       ),
                                     ),
+                                    if (item.hasOptions) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        item.optionsDescription,
+                                        style: const TextStyle(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(height: 3),
                                     Text(
                                       '₹${item.price} × ${item.quantity}',

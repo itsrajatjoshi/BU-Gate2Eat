@@ -165,9 +165,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             .map((ci) => OrderItem(
                   menuItemId: ci.menuItem.id,
                   name: ci.menuItem.name,
-                  price: ci.menuItem.price,
+                  price: ci.unitPrice,
                   quantity: ci.quantity,
                   imageUrl: ci.menuItem.imageUrl,
+                  optionsDescription: ci.optionsDescription,
+                  selectedOptions: ci.selectedOptions,
+                  cartKey: ci.cartKey,
                 ))
             .toList(),
         totalAmount: grandTotal,
@@ -551,13 +554,15 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           effectiveMenuItem,
                           cartItem.shopId,
                           cartItem.shopName,
+                          selectedOptions: cartItem.selectedOptions,
+                          unitPrice: cartItem.unitPrice,
                         ),
                         onDecrement: () => cartNotifier.removeItem(
-                          cartItem.menuItem.id,
+                          cartItem.cartKey,
                           cartItem.shopId,
                         ),
                         onDelete: () => cartNotifier.deleteItem(
-                          cartItem.menuItem.id,
+                          cartItem.cartKey,
                           cartItem.shopId,
                         ),
                       );
@@ -971,7 +976,19 @@ class _CartItemRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (menuItem.details.isNotEmpty) ...[
+              if (cartItem.hasSelectedOptions) ...[
+                const SizedBox(height: 2),
+                Text(
+                  cartItem.optionsDescription,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ] else if (menuItem.details.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Text(
                   menuItem.details,
@@ -983,7 +1000,16 @@ class _CartItemRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: 3),
+              Text(
+                cartItem.formattedUnitPrice,
+                style: TextStyle(
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
 
               // Stepper Controls
               Row(

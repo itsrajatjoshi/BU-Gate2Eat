@@ -26,32 +26,42 @@ class CartNotifier extends StateNotifier<CartState> {
     return state.isEmpty || state.shopId == newShopId;
   }
 
-  /// Adds an item to the cart or increments quantity if from the same shop.
+  /// Adds an item or variant to the cart or increments quantity if from the same shop.
   /// If from a different shop, returns false (signaling shop conflict requiring dialog).
-  bool addItem(MenuItem menuItem, String shopId, String shopName) {
+  bool addItem(
+    MenuItem menuItem,
+    String shopId,
+    String shopName, {
+    List<SelectedMenuItemOption> selectedOptions = const [],
+    int? unitPrice,
+  }) {
     // Single-Shop Invariant Check
     if (state.isNotEmpty && state.shopId != null && state.shopId != shopId) {
       return false; // Conflict! UI must prompt for clear & add.
     }
 
+    final targetKey = CartItem.buildCartKey(menuItem.id, selectedOptions);
+
     final existingIndex = state.items.indexWhere(
-      (item) => item.shopId == shopId && item.menuItem.id == menuItem.id,
+      (item) => item.shopId == shopId && item.cartKey == targetKey,
     );
 
     if (existingIndex >= 0) {
-      // Increment quantity
+      // Increment quantity for the exact matching variant/item
       final updated = [...state.items];
       updated[existingIndex] = updated[existingIndex].copyWith(
         quantity: updated[existingIndex].quantity + 1,
       );
       state = state.copyWith(items: updated);
     } else {
-      // Add new item
+      // Add new variant/item line
       final newItem = CartItem(
         menuItem: menuItem,
         quantity: 1,
         shopId: shopId,
         shopName: shopName,
+        selectedOptions: List.unmodifiable(selectedOptions),
+        unitPriceOverride: unitPrice,
       );
       state = CartState(
         shopId: shopId,
@@ -64,8 +74,14 @@ class CartNotifier extends StateNotifier<CartState> {
     return true;
   }
 
-  /// Atomically clears existing cart items and adds a new item from new shop.
-  void clearAndAddItem(MenuItem menuItem, String shopId, String shopName) {
+  /// Atomically clears existing cart items and adds a new item/variant from new shop.
+  void clearAndAddItem(
+    MenuItem menuItem,
+    String shopId,
+    String shopName, {
+    List<SelectedMenuItemOption> selectedOptions = const [],
+    int? unitPrice,
+  }) {
     state = CartState(
       shopId: shopId,
       shopName: shopName,
@@ -75,6 +91,8 @@ class CartNotifier extends StateNotifier<CartState> {
           quantity: 1,
           shopId: shopId,
           shopName: shopName,
+          selectedOptions: List.unmodifiable(selectedOptions),
+          unitPriceOverride: unitPrice,
         ),
       ],
     );
@@ -108,8 +126,9 @@ class CartNotifier extends StateNotifier<CartState> {
       // Merge with existing items
       final currentList = [...state.items];
       for (final entry in itemsToAdd) {
+        final targetKey = entry.item.id;
         final idx = currentList.indexWhere(
-          (ci) => ci.menuItem.id == entry.item.id && ci.shopId == shopId,
+          (ci) => ci.cartKey == targetKey && ci.shopId == shopId,
         );
         if (idx >= 0) {
           currentList[idx] = currentList[idx].copyWith(
@@ -132,9 +151,13 @@ class CartNotifier extends StateNotifier<CartState> {
   }
 
   /// Decrements quantity or removes item completely if quantity becomes 0.
-  void removeItem(String menuItemId, [String? shopId]) {
+  /// Matches by cartKey first, or by menuItem.id as fallback for backward compatibility.
+  void removeItem(String cartKeyOrMenuItemId, [String? shopId]) {
     final existingIndex = state.items.indexWhere(
-      (item) => (shopId == null || item.shopId == shopId) && item.menuItem.id == menuItemId,
+      (item) =>
+          (shopId == null || item.shopId == shopId) &&
+          (item.cartKey == cartKeyOrMenuItemId ||
+              item.menuItem.id == cartKeyOrMenuItemId),
     );
 
     if (existingIndex < 0) return;
@@ -158,11 +181,17 @@ class CartNotifier extends StateNotifier<CartState> {
     _enforceInvariant();
   }
 
-  /// Removes an item completely from the cart.
-  void deleteItem(String menuItemId, [String? shopId]) {
+  /// Removes an item or variant completely from the cart.
+  /// Matches by cartKey first, or by menuItem.id as fallback for backward compatibility.
+  void deleteItem(String cartKeyOrMenuItemId, [String? shopId]) {
     final updated = state.items
-        .where((item) =>
-            !((shopId == null || item.shopId == shopId) && item.menuItem.id == menuItemId),)
+        .where(
+          (item) => !(
+              (shopId == null || item.shopId == shopId) &&
+              (item.cartKey == cartKeyOrMenuItemId ||
+                  item.menuItem.id == cartKeyOrMenuItemId)
+          ),
+        )
         .toList();
     if (updated.isEmpty) {
       state = const CartState();
@@ -172,15 +201,18 @@ class CartNotifier extends StateNotifier<CartState> {
     _enforceInvariant();
   }
 
-  /// Updates the quantity of a specific item.
-  void updateQuantity(String menuItemId, int quantity, [String? shopId]) {
+  /// Updates the quantity of a specific item or variant.
+  void updateQuantity(String cartKeyOrMenuItemId, int quantity, [String? shopId]) {
     if (quantity <= 0) {
-      deleteItem(menuItemId, shopId);
+      deleteItem(cartKeyOrMenuItemId, shopId);
       return;
     }
 
     final existingIndex = state.items.indexWhere(
-      (item) => (shopId == null || item.shopId == shopId) && item.menuItem.id == menuItemId,
+      (item) =>
+          (shopId == null || item.shopId == shopId) &&
+          (item.cartKey == cartKeyOrMenuItemId ||
+              item.menuItem.id == cartKeyOrMenuItemId),
     );
     if (existingIndex < 0) return;
 
@@ -197,7 +229,7 @@ class CartNotifier extends StateNotifier<CartState> {
     state = const CartState();
   }
 
-  /// Internal invariant enforcer to ensure state state consistency.
+  /// Internal invariant enforcer to ensure state consistency.
   void _enforceInvariant() {
     if (state.items.isEmpty) {
       if (state.shopId != null || state.shopName != null) {

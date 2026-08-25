@@ -408,6 +408,19 @@ class OrderDetailScreen extends ConsumerWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                if (item.hasOptions) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    item.optionsDescription,
+                                    style: const TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                                 const SizedBox(height: 2),
                                 Text(
                                   'Qty: ${item.quantity} × ₹${item.price}',

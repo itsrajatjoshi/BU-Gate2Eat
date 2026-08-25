@@ -149,7 +149,9 @@ class _HistoryOrderCard extends ConsumerWidget {
         statusColor.withValues(alpha: isDark ? 0.45 : 0.30);
 
     final itemsSummary = order.items
-        .map((i) => '${i.name} (x${i.quantity})')
+        .map((i) => i.hasOptions
+            ? '${i.name} (${i.optionsDescription}) (x${i.quantity})'
+            : '${i.name} (x${i.quantity})')
         .join(', ');
 
     return Container(

@@ -29,9 +29,15 @@ class WhatsAppService {
     // Items
     buffer.writeln('Items:');
     for (final item in cartItems) {
-      buffer.writeln(
-        '• ${item.quantity} × ${item.menuItem.name} — ₹${item.totalPrice.toStringAsFixed(0)}',
-      );
+      if (item.hasSelectedOptions) {
+        buffer.writeln(
+          '• ${item.quantity} × ${item.menuItem.name} (${item.optionsDescription}) — ₹${item.totalPrice.toStringAsFixed(0)}',
+        );
+      } else {
+        buffer.writeln(
+          '• ${item.quantity} × ${item.menuItem.name} — ₹${item.totalPrice.toStringAsFixed(0)}',
+        );
+      }
     }
     buffer.writeln();
 

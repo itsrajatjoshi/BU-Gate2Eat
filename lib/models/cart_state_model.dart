@@ -45,7 +45,7 @@ class CartState {
     final match = items
         .where((i) => i.shopId == targetShopId && i.menuItem.id == menuItemId)
         .toList();
-    return match.isNotEmpty ? match.first.quantity : 0;
+    return match.fold<int>(0, (sum, i) => sum + i.quantity);
   }
 
   /// Convenience wrapper requiring currentShopId for safe shop-scoped quantity lookup.
