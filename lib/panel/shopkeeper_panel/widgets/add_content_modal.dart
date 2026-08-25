@@ -52,15 +52,16 @@ class _EditableOptionGroup {
 
   void setGroupType(OptionGroupType newType) {
     groupType = newType;
-    required = (newType != OptionGroupType.extra);
-    for (final opt in options) {
-      if (newType == OptionGroupType.fixed) {
+    if (newType == OptionGroupType.fixed) {
+      required = true;
+      for (final opt in options) {
         opt.pricingType = OptionPricingType.fixedPrice;
-      } else if (newType == OptionGroupType.choice) {
-        opt.pricingType = OptionPricingType.selectionOnly;
-        opt.priceController.text = '';
-      } else if (newType == OptionGroupType.extra) {
-        opt.pricingType = OptionPricingType.priceAdjustment;
+      }
+    } else {
+      // OptionGroupType.choice
+      for (final opt in options) {
+        final parsed = int.tryParse(opt.priceController.text.trim()) ?? 0;
+        opt.pricingType = parsed > 0 ? OptionPricingType.priceAdjustment : OptionPricingType.selectionOnly;
       }
     }
   }
@@ -295,22 +296,20 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           OptionPricingType pricingType;
 
           if (group.groupType == OptionGroupType.choice) {
-            optPrice = 0;
-            pricingType = OptionPricingType.selectionOnly;
-          } else if (group.groupType == OptionGroupType.fixed) {
+            final parsed = int.tryParse(optPriceText);
+            if (parsed != null && parsed > 0) {
+              pricingType = OptionPricingType.priceAdjustment;
+              optPrice = parsed;
+            } else {
+              pricingType = OptionPricingType.selectionOnly;
+              optPrice = 0;
+            }
+          } else {
+            // OptionGroupType.fixed
             pricingType = OptionPricingType.fixedPrice;
             final parsed = int.tryParse(optPriceText);
             if (parsed == null || parsed <= 0) {
               _showErrorSnackBar('Fixed price for "$optName" in "$groupName" must be greater than 0.');
-              return;
-            }
-            optPrice = parsed;
-          } else {
-            // OptionGroupType.extra
-            pricingType = OptionPricingType.priceAdjustment;
-            final parsed = int.tryParse(optPriceText);
-            if (parsed == null || parsed < 0) {
-              _showErrorSnackBar('Extra price for "$optName" in "$groupName" cannot be negative.');
               return;
             }
             optPrice = parsed;
@@ -331,7 +330,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           MenuItemOptionGroup(
             id: 'grp_${gIdx + 1}',
             name: groupName,
-            required: group.groupType != OptionGroupType.extra,
+            required: group.groupType == OptionGroupType.fixed ? true : group.required,
             groupType: group.groupType,
             options: constructedOptions,
           ),
@@ -1290,24 +1289,79 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                 child: Row(
                   children: [
                     _buildGroupTypePill(group, OptionGroupType.fixed, 'Fixed', Icons.payments_outlined, isDark),
-                    const SizedBox(width: 6),
-                    _buildGroupTypePill(group, OptionGroupType.choice, 'Choice', Icons.check_circle_outline_rounded, isDark),
-                    const SizedBox(width: 6),
-                    _buildGroupTypePill(group, OptionGroupType.extra, 'Extra', Icons.add_circle_outline_rounded, isDark),
+                    const SizedBox(width: 8),
+                    _buildGroupTypePill(group, OptionGroupType.choice, 'Choice', Icons.tune_rounded, isDark),
                   ],
                 ),
               ),
             ],
           ),
+          if (group.groupType == OptionGroupType.choice) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  'Required Selection?',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.grey[300] : Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => setState(() => group.required = true),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: group.required
+                          ? AppColors.primary
+                          : (isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'YES (Mandatory)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: group.required ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () => setState(() => group.required = false),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: !group.required
+                          ? AppColors.primary
+                          : (isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'NO (Optional)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: !group.required ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Options Header
           Text(
             group.groupType == OptionGroupType.fixed
                 ? 'Fixed Price Options (e.g. Small ₹40, Large ₹70):'
-                : group.groupType == OptionGroupType.choice
-                    ? 'Choices (e.g. With Sauce, Without Sauce — ₹0):'
-                    : 'Extras (e.g. Cheese +₹10, Extra Patty +₹30 — Optional):',
+                : 'Choice Options (0 = no surcharge, or enter +₹ adjustment):',
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
@@ -1332,9 +1386,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                       decoration: InputDecoration(
                         hintText: group.groupType == OptionGroupType.fixed
                             ? 'e.g. Half, Full'
-                            : group.groupType == OptionGroupType.choice
-                                ? 'e.g. With Sauce'
-                                : 'e.g. Extra Cheese',
+                            : 'e.g. With Sauce, Cheese',
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -1348,58 +1400,27 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                   ),
                   const SizedBox(width: 6),
 
-                  // Option Price Input (or No Price badge for Choice)
-                  if (group.groupType == OptionGroupType.choice) ...[
-                    Expanded(
-                      flex: 4,
-                      child: Container(
-                        height: 38,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.darkSurfaceVariant
-                              : AppColors.surfaceVariant,
+                  // Option Price Input
+                  Expanded(
+                    flex: 4,
+                    child: TextField(
+                      controller: option.priceController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        hintText: group.groupType == OptionGroupType.fixed ? 'Price' : '0 (optional)',
+                        prefixText: group.groupType == OptionGroupType.fixed ? '₹' : '+₹',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 9,
+                        ),
+                        border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.darkDivider
-                                : AppColors.divider,
-                          ),
-                        ),
-                        child: Text(
-                          'No price (₹0)',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.textHint,
-                          ),
                         ),
                       ),
                     ),
-                  ] else ...[
-                    Expanded(
-                      flex: 4,
-                      child: TextField(
-                        controller: option.priceController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: InputDecoration(
-                          hintText: group.groupType == OptionGroupType.extra ? 'Extra' : 'Price',
-                          prefixText: group.groupType == OptionGroupType.extra ? '+₹' : '₹',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 9,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
 
                   // Delete Option Button
                   IconButton(

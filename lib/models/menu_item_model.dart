@@ -20,11 +20,9 @@ enum OptionGroupType {
   /// Exactly one option is required. Options specify full fixed prices for the variant (e.g. Size: Large ₹70, XL ₹90).
   fixed,
 
-  /// Exactly one option must be selected. Choices have zero price impact (e.g. Sauce: With Sauce, Without Sauce).
+  /// Selection defines choice (e.g. Sauce: With Sauce, Without Sauce; Ice Cream: No Ice Cream, With Ice Cream +₹10).
+  /// Can be required (true = exactly 1 must be selected) or optional (false = 0 or 1 selected).
   choice,
-
-  /// Optional choices (0 or 1 selection). Each option adds a price surcharge (e.g. Extras: Cheese +₹10, Extra Patty +₹30).
-  extra,
 }
 
 /// Represents an individual selectable choice within an option group.
@@ -108,10 +106,10 @@ class MenuItemOptionGroup {
   final List<MenuItemOption> options;
 
   /// Whether the customer is required to make a selection from this group before adding to cart.
-  /// (Fixed & Choice are required by default; Extra is optional by default).
+  /// (Fixed is required by default; Choice can be required=true or optional=false).
   final bool required;
 
-  /// Group-level pricing & selection type: [OptionGroupType.fixed], [OptionGroupType.choice], or [OptionGroupType.extra].
+  /// Group-level pricing & selection type: [OptionGroupType.fixed] or [OptionGroupType.choice].
   final OptionGroupType groupType;
 
   /// Converts this option group to a Firestore/JSON compatible map.
@@ -139,29 +137,29 @@ class MenuItemOptionGroup {
       }
     }
 
-    // 1. If explicit 'groupType' exists in map, use it
+    // 1. If explicit 'groupType' exists in map, use it (mapping legacy 'extra' to 'choice')
     OptionGroupType groupType;
     final groupTypeStr = map['groupType'] as String?;
     if (groupTypeStr != null && groupTypeStr.isNotEmpty) {
-      groupType = OptionGroupType.values.firstWhere(
-        (e) => e.name == groupTypeStr,
-        orElse: () => OptionGroupType.fixed,
-      );
+      if (groupTypeStr == 'fixed') {
+        groupType = OptionGroupType.fixed;
+      } else {
+        // 'choice' or legacy 'extra' -> OptionGroupType.choice
+        groupType = OptionGroupType.choice;
+      }
     } else {
       // 2. Safe backward-compatible legacy inference:
       // - If any fixedPrice option exists -> fixed
-      // - Else if any priceAdjustment option exists -> extra
       // - Else -> choice
       if (optionsList.any((o) => o.pricingType == OptionPricingType.fixedPrice)) {
         groupType = OptionGroupType.fixed;
-      } else if (optionsList.any((o) => o.pricingType == OptionPricingType.priceAdjustment)) {
-        groupType = OptionGroupType.extra;
       } else {
         groupType = OptionGroupType.choice;
       }
     }
 
-    final bool isRequired = (map['required'] as bool?) ?? (groupType != OptionGroupType.extra);
+    final bool isRequired = (map['required'] as bool?) ??
+        (groupTypeStr == 'extra' ? false : (groupType == OptionGroupType.fixed ? true : true));
 
     return MenuItemOptionGroup(
       id: (map['id'] as String?) ?? '',

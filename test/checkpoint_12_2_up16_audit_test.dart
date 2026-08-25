@@ -281,7 +281,7 @@ void main() {
         // Group 2: Ice Cream
         final iceCreamGroup = item.optionGroups[1];
         expect(iceCreamGroup.name, 'Ice Cream');
-        expect(iceCreamGroup.groupType, OptionGroupType.extra);
+        expect(iceCreamGroup.groupType, OptionGroupType.choice);
         expect(iceCreamGroup.options.length, 2);
         expect(iceCreamGroup.options[0].name, 'No Ice Cream');
         expect(iceCreamGroup.options[0].price, 0);

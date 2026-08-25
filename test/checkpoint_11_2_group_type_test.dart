@@ -1,39 +1,42 @@
-// BU Gate2Eat — Checkpoint 11.2 Tests
-// Group-Level Option Type (Fixed, Choice, Extra), Legacy Inference, Optional Extra Semantics & Cart Coexistence
+// BU Gate2Eat — Checkpoint 11.2 & 12.3 Universal Option Architecture Unit Tests
+// Verifies Group-Level Option Types (Fixed, Choice), optional Choice, and backward-compatible deserialization.
 
 import 'package:bugate2eat_app/models/cart_item_model.dart';
 import 'package:bugate2eat_app/models/menu_item_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('Checkpoint 11.2: Group-Level Option Type & Optional Extra System', () {
+  group('Checkpoint 11.2 & 12.3: Universal Option Architecture', () {
     // ── 1. FIXED GROUP ─────────────────────────────────────────────────────────
-    test('1. Fixed group has groupType=fixed, required=true, and fixed price options', () {
-      const fixedGroup = MenuItemOptionGroup(
+    test('1. Fixed group has groupType=fixed, required=true by default, and fixedPrice options', () {
+      const sizeGroup = MenuItemOptionGroup(
         id: 'grp_size',
         name: 'Size',
         groupType: OptionGroupType.fixed,
+        required: true,
         options: [
-          MenuItemOption(id: 'opt_small', name: 'Small', price: 40, pricingType: OptionPricingType.fixedPrice),
+          MenuItemOption(id: 'opt_small', name: 'Small', price: 40, pricingType: OptionPricingType.fixedPrice, isDefault: true),
           MenuItemOption(id: 'opt_large', name: 'Large', price: 70, pricingType: OptionPricingType.fixedPrice),
         ],
       );
 
-      expect(fixedGroup.groupType, OptionGroupType.fixed);
-      expect(fixedGroup.required, isTrue);
-      expect(fixedGroup.options.length, 2);
-      expect(fixedGroup.options[0].price, 40);
-      expect(fixedGroup.options[1].price, 70);
+      expect(sizeGroup.groupType, OptionGroupType.fixed);
+      expect(sizeGroup.required, isTrue);
+      expect(sizeGroup.options.length, 2);
+      expect(sizeGroup.options[0].price, 40);
+      expect(sizeGroup.options[1].price, 70);
+      expect(sizeGroup.options.every((o) => o.pricingType == OptionPricingType.fixedPrice), isTrue);
     });
 
-    // ── 2. CHOICE GROUP ────────────────────────────────────────────────────────
-    test('2. Choice group has groupType=choice, required=true, and 0 price options', () {
+    // ── 2. CHOICE GROUP (REQUIRED) ─────────────────────────────────────────────
+    test('2. Choice group with required=true has zero or adjusted price options', () {
       const choiceGroup = MenuItemOptionGroup(
         id: 'grp_sauce',
         name: 'Sauce',
         groupType: OptionGroupType.choice,
+        required: true,
         options: [
-          MenuItemOption(id: 'opt_with', name: 'With Sauce', price: 0, pricingType: OptionPricingType.selectionOnly),
+          MenuItemOption(id: 'opt_with', name: 'With Sauce', price: 0, pricingType: OptionPricingType.selectionOnly, isDefault: true),
           MenuItemOption(id: 'opt_without', name: 'Without Sauce', price: 0, pricingType: OptionPricingType.selectionOnly),
         ],
       );
@@ -44,12 +47,12 @@ void main() {
       expect(choiceGroup.options.every((o) => o.pricingType == OptionPricingType.selectionOnly), isTrue);
     });
 
-    // ── 3. EXTRA GROUP ─────────────────────────────────────────────────────────
-    test('3. Extra group has groupType=extra, required=false by default, and surcharge options', () {
-      const extraGroup = MenuItemOptionGroup(
+    // ── 3. OPTIONAL CHOICE GROUP (REPLACING EXTRA) ─────────────────────────────
+    test('3. Optional Choice group has groupType=choice, required=false, and surcharge options', () {
+      const optionalGroup = MenuItemOptionGroup(
         id: 'grp_extras',
         name: 'Extras',
-        groupType: OptionGroupType.extra,
+        groupType: OptionGroupType.choice,
         required: false,
         options: [
           MenuItemOption(id: 'opt_cheese', name: 'Cheese', price: 10, pricingType: OptionPricingType.priceAdjustment),
@@ -57,11 +60,11 @@ void main() {
         ],
       );
 
-      expect(extraGroup.groupType, OptionGroupType.extra);
-      expect(extraGroup.required, isFalse);
-      expect(extraGroup.options[0].price, 10);
-      expect(extraGroup.options[1].price, 30);
-      expect(extraGroup.options.every((o) => o.pricingType == OptionPricingType.priceAdjustment), isTrue);
+      expect(optionalGroup.groupType, OptionGroupType.choice);
+      expect(optionalGroup.required, isFalse);
+      expect(optionalGroup.options[0].price, 10);
+      expect(optionalGroup.options[1].price, 30);
+      expect(optionalGroup.options.every((o) => o.pricingType == OptionPricingType.priceAdjustment), isTrue);
     });
 
     // ── 4. LEGACY INFERENCE ───────────────────────────────────────────────────
@@ -78,7 +81,7 @@ void main() {
       expect(legacyFixed.groupType, OptionGroupType.fixed);
       expect(legacyFixed.required, isTrue);
 
-      // Legacy extra
+      // Legacy extra parses as Choice
       final legacyExtra = MenuItemOptionGroup.fromMap({
         'id': 'grp_2',
         'name': 'Add-ons',
@@ -86,8 +89,7 @@ void main() {
           {'id': 'o1', 'name': 'Extra Cheese', 'price': 20, 'pricingType': 'priceAdjustment'},
         ],
       });
-      expect(legacyExtra.groupType, OptionGroupType.extra);
-      expect(legacyExtra.required, isFalse);
+      expect(legacyExtra.groupType, OptionGroupType.choice);
 
       // Legacy choice
       final legacyChoice = MenuItemOptionGroup.fromMap({
@@ -103,7 +105,7 @@ void main() {
     });
 
     // ── 5. EXPLICIT GROUP TYPE DESERIALIZATION ────────────────────────────────
-    test('5. Deserialization correctly parses explicit groupType field', () {
+    test('5. Deserialization correctly parses explicit groupType and legacy "extra"', () {
       final group = MenuItemOptionGroup.fromMap({
         'id': 'grp_test',
         'name': 'Burger Extras',
@@ -114,11 +116,11 @@ void main() {
         ],
       });
 
-      expect(group.groupType, OptionGroupType.extra);
+      expect(group.groupType, OptionGroupType.choice);
       expect(group.required, isFalse);
     });
 
-    // ── 6. CART KEY DISTINCTION: EXTRA SELECTED VS UNSELECTED ─────────────────
+    // ── 6. CART KEY DISTINCTION: OPTIONAL CHOICE SELECTED VS UNSELECTED ───────
     test('6. Burger with Cheese vs Burger without Cheese produce DISTINCT cart keys', () {
       const burgerId = 'burger_classic';
 
@@ -131,16 +133,7 @@ void main() {
         price: 70,
       );
 
-      final sauceWith = SelectedMenuItemOption(
-        groupId: 'grp_sauce',
-        groupName: 'Sauce',
-        optionId: 'opt_with',
-        optionName: 'With Sauce',
-        pricingType: OptionPricingType.selectionOnly,
-        price: 0,
-      );
-
-      final extraCheese = SelectedMenuItemOption(
+      final cheeseExtra = SelectedMenuItemOption(
         groupId: 'grp_extra',
         groupName: 'Extras',
         optionId: 'opt_cheese',
@@ -149,29 +142,20 @@ void main() {
         price: 10,
       );
 
-      // Configuration 1: Large + With Sauce + Cheese (₹80)
-      final optionsWithCheese = [sizeLarge, sauceWith, extraCheese];
-      final keyWithCheese = CartItem.buildCartKey(burgerId, optionsWithCheese);
+      final keyWithCheese = CartItem.buildCartKey(burgerId, [sizeLarge, cheeseExtra]);
+      final keyWithoutCheese = CartItem.buildCartKey(burgerId, [sizeLarge]);
 
-      // Configuration 2: Large + With Sauce + No Cheese (₹70)
-      final optionsNoCheese = [sizeLarge, sauceWith];
-      final keyNoCheese = CartItem.buildCartKey(burgerId, optionsNoCheese);
-
-      // Invariants:
-      expect(keyWithCheese, isNot(equals(keyNoCheese)));
-      expect(keyWithCheese, contains('grp_extra:opt_cheese'));
-      expect(keyNoCheese, isNot(contains('grp_extra:opt_cheese')));
-
-      expect(keyWithCheese, equals('burger_classic|grp_extra:opt_cheese|grp_sauce:opt_with|grp_size:opt_large'));
-      expect(keyNoCheese, equals('burger_classic|grp_sauce:opt_with|grp_size:opt_large'));
+      expect(keyWithCheese, 'burger_classic|grp_extra:opt_cheese|grp_size:opt_large');
+      expect(keyWithoutCheese, 'burger_classic|grp_size:opt_large');
+      expect(keyWithCheese, isNot(equals(keyWithoutCheese)));
     });
 
-    // ── 7. CART STATE COEXISTENCE OF BOTH VARIANTS ────────────────────────────
-    test('7. Burger with Cheese and Burger without Cheese coexist independently in cart', () {
+    // ── 7. BURGER COEXISTENCE IN CART ─────────────────────────────────────────
+    test('7. Burger Large + Cheese and Burger Large + No Cheese coexist as distinct lines', () {
       const burger = MenuItem(
         id: 'burger_classic',
-        name: 'Classic Burger',
-        details: 'Juicy grilled burger',
+        name: 'Burger',
+        details: 'Tasty burger',
         price: 70,
         imageUrl: '',
         categoryId: 'burgers',
@@ -201,7 +185,7 @@ void main() {
           MenuItemOptionGroup(
             id: 'grp_extra',
             name: 'Extras',
-            groupType: OptionGroupType.extra,
+            groupType: OptionGroupType.choice,
             required: false,
             options: [
               MenuItemOption(id: 'opt_cheese', name: 'Cheese', price: 10, pricingType: OptionPricingType.priceAdjustment),
@@ -269,7 +253,7 @@ void main() {
     });
 
     // ── 8. PRICING & STARTING PRICE CALCULATION ───────────────────────────────
-    test('8. Item starting price accurately calculates lowest configuration across fixed, choice, extra', () {
+    test('8. Item starting price accurately calculates lowest configuration across fixed and choice', () {
       const burger = MenuItem(
         id: 'burger_1',
         name: 'Burger',
@@ -302,7 +286,7 @@ void main() {
           MenuItemOptionGroup(
             id: 'grp_extras',
             name: 'Extras',
-            groupType: OptionGroupType.extra,
+            groupType: OptionGroupType.choice,
             required: false,
             options: [
               MenuItemOption(id: 'opt_c', name: 'Cheese', price: 10, pricingType: OptionPricingType.priceAdjustment),

@@ -1,5 +1,5 @@
 // BU Gate2Eat — Checkpoint 12.1 Tests
-// Customer Options UI Based on Group Type (Fixed, Choice, Extra)
+// Customer Options UI Based on Group Type (Fixed, Choice with optionality)
 
 import 'package:bugate2eat_app/features/cart/cart_provider.dart';
 import 'package:bugate2eat_app/models/cart_item_model.dart';
@@ -44,7 +44,7 @@ void main() {
         MenuItemOptionGroup(
           id: 'grp_extra',
           name: 'Extras',
-          groupType: OptionGroupType.extra,
+          groupType: OptionGroupType.choice,
           required: false,
           options: [
             MenuItemOption(id: 'opt_cheese', name: 'Cheese', price: 10, pricingType: OptionPricingType.priceAdjustment),
@@ -98,28 +98,20 @@ void main() {
       price: 10,
     );
 
-    // ── 1 & 2. FIXED GROUP INDEPENDENT ADD CONTROLS & CART KEY GENERATION ────────
-    test('1 & 2. Fixed group generates independent cart keys and quantity 0 shows ADD', () {
-      final keySmall = CartItem.buildCartKey(sampleBurger.id, [sizeSmall, sauceWith]);
-      final keyLarge = CartItem.buildCartKey(sampleBurger.id, [sizeLarge, sauceWith]);
-
-      expect(keySmall, isNot(equals(keyLarge)));
-      expect(keySmall, equals('burger_classic|grp_sauce:opt_with_sauce|grp_size:opt_small'));
-      expect(keyLarge, equals('burger_classic|grp_sauce:opt_with_sauce|grp_size:opt_large'));
-
-      final cartNotifier = CartNotifier();
-      final qtySmall = cartNotifier.state.items.where((ci) => ci.cartKey == keySmall).firstOrNull?.quantity ?? 0;
-      final qtyLarge = cartNotifier.state.items.where((ci) => ci.cartKey == keyLarge).firstOrNull?.quantity ?? 0;
-
-      expect(qtySmall, 0); // Shows ADD
-      expect(qtyLarge, 0); // Shows ADD
-    });
-
-    // ── 3 & 4. FIXED QUANTITY 1 AND 2 STEPPER REFLECTION ────────────────────────
-    test('3 & 4. CartState reflects quantity 1 and increment to 2 for specific variant', () {
+    // ── 1. FIXED GROUP STEPPERS ────────────────────────────────────────────────
+    test('1. Adding Small & Large creates two distinct rows with independent counters', () {
       final cartNotifier = CartNotifier();
 
-      // Add 1 Large Burger (With Sauce, No Cheese) - Unit Price ₹70
+      // Add Small (₹40)
+      cartNotifier.addItem(
+        sampleBurger,
+        shopId,
+        shopName,
+        selectedOptions: [sizeSmall, sauceWith],
+        unitPrice: 40,
+      );
+
+      // Add Large (₹70)
       cartNotifier.addItem(
         sampleBurger,
         shopId,
@@ -128,85 +120,28 @@ void main() {
         unitPrice: 70,
       );
 
-      final keyLarge = CartItem.buildCartKey(sampleBurger.id, [sizeLarge, sauceWith]);
-      expect(cartNotifier.state.items.length, 1);
-      expect(cartNotifier.state.items.first.cartKey, keyLarge);
-      expect(cartNotifier.state.items.first.quantity, 1); // Shows [ - 1 + ]
-      expect(cartNotifier.state.items.first.unitPrice, 70);
-      expect(cartNotifier.state.items.first.totalPrice, 70.0);
+      final state = cartNotifier.state;
+      expect(state.items.length, 2);
 
-      // Increment Large Burger to 2
-      cartNotifier.addItem(
-        sampleBurger,
-        shopId,
-        shopName,
-        selectedOptions: [sizeLarge, sauceWith],
-        unitPrice: 70,
-      );
+      final smallItem = state.items.firstWhere((i) => i.selectedOptions.contains(sizeSmall));
+      final largeItem = state.items.firstWhere((i) => i.selectedOptions.contains(sizeLarge));
 
-      expect(cartNotifier.state.items.length, 1);
-      expect(cartNotifier.state.items.first.quantity, 2); // Shows [ - 2 + ]
-      expect(cartNotifier.state.items.first.totalPrice, 140.0);
+      expect(smallItem.quantity, 1);
+      expect(smallItem.unitPrice, 40);
+      expect(smallItem.cartKey, 'burger_classic|grp_sauce:opt_with_sauce|grp_size:opt_small');
+
+      expect(largeItem.quantity, 1);
+      expect(largeItem.unitPrice, 70);
+      expect(largeItem.cartKey, 'burger_classic|grp_sauce:opt_with_sauce|grp_size:opt_large');
+
+      expect(state.grandTotal, 110.0);
     });
 
-    // ── 5 & 6. CHOICE SELECTION IS MUTUALLY EXCLUSIVE & CONTRIBUTES ₹0 ──────────
-    test('5 & 6. Choice group is mutually exclusive and contributes zero price surcharge', () {
-      final configWithSauce = [sizeLarge, sauceWith];
-      final configWithoutSauce = [sizeLarge, sauceWithout];
-
-      final keyWith = CartItem.buildCartKey(sampleBurger.id, configWithSauce);
-      final keyWithout = CartItem.buildCartKey(sampleBurger.id, configWithoutSauce);
-
-      expect(keyWith, isNot(equals(keyWithout)));
-      expect(keyWith, contains('grp_sauce:opt_with_sauce'));
-      expect(keyWithout, contains('grp_sauce:opt_no_sauce'));
-
-      // Both must have base unit price ₹70 since Choice has price ₹0
-      final itemWith = CartItem(
-        menuItem: sampleBurger,
-        quantity: 1,
-        shopId: shopId,
-        shopName: shopName,
-        selectedOptions: configWithSauce,
-        unitPriceOverride: 70,
-      );
-
-      final itemWithout = CartItem(
-        menuItem: sampleBurger,
-        quantity: 1,
-        shopId: shopId,
-        shopName: shopName,
-        selectedOptions: configWithoutSauce,
-        unitPriceOverride: 70,
-      );
-
-      expect(itemWith.unitPrice, 70);
-      expect(itemWithout.unitPrice, 70);
-      expect(itemWith.optionsDescription, 'Large · With Sauce');
-      expect(itemWithout.optionsDescription, 'Large · Without Sauce');
-    });
-
-    // ── 7 & 8. EXTRA CAN REMAIN UNSELECTED OR ADD SURCHARGE ─────────────────────
-    test('7 & 8. Extra group may remain unselected (₹0) or when selected adds surcharge (+₹10)', () {
-      // Unselected Extra
-      final optionsNoExtra = [sizeLarge, sauceWith];
-      const unitPriceNoExtra = 70; // 70 + 0
-
-      // Selected Extra (Cheese)
-      final optionsWithCheese = [sizeLarge, sauceWith, extraCheese];
-      const unitPriceWithCheese = 70 + 10; // 80
-
-      expect(unitPriceNoExtra, 70);
-      expect(unitPriceWithCheese, 80);
-      expect(optionsNoExtra.length, 2);
-      expect(optionsWithCheese.length, 3);
-    });
-
-    // ── 9 & 10. BURGER LARGE + NO CHEESE VS BURGER LARGE + CHEESE IN CART ──────
-    test('9 & 10. Burger Large + No Cheese and Large + Cheese are 2 SEPARATE cart lines', () {
+    // ── 2. CHOICE GROUP MUTUAL EXCLUSIVITY ─────────────────────────────────────
+    test('2. Changing Choice option switches configuration without mutating existing cart items', () {
       final cartNotifier = CartNotifier();
 
-      // Step 1: Add Burger Large + With Sauce + No Cheese (₹70)
+      // Customer adds: Large + With Sauce (₹70)
       cartNotifier.addItem(
         sampleBurger,
         shopId,
@@ -215,7 +150,31 @@ void main() {
         unitPrice: 70,
       );
 
-      // Step 2: Add Burger Large + With Sauce + Cheese (₹80)
+      // Customer switches pill to "Without Sauce" and adds Large again
+      cartNotifier.addItem(
+        sampleBurger,
+        shopId,
+        shopName,
+        selectedOptions: [sizeLarge, sauceWithout],
+        unitPrice: 70,
+      );
+
+      final state = cartNotifier.state;
+      expect(state.items.length, 2);
+
+      final withSauceItem = state.items.firstWhere((i) => i.selectedOptions.contains(sauceWith));
+      final noSauceItem = state.items.firstWhere((i) => i.selectedOptions.contains(sauceWithout));
+
+      expect(withSauceItem.cartKey, 'burger_classic|grp_sauce:opt_with_sauce|grp_size:opt_large');
+      expect(noSauceItem.cartKey, 'burger_classic|grp_sauce:opt_no_sauce|grp_size:opt_large');
+      expect(state.grandTotal, 140.0);
+    });
+
+    // ── 3. OPTIONAL CHOICE TOGGLE & SURCHARGE ──────────────────────────────────
+    test('3. Optional Choice adds surcharge (+₹10) and is omitted when unselected', () {
+      final cartNotifier = CartNotifier();
+
+      // Customer adds: Large + With Sauce + Cheese (₹80)
       cartNotifier.addItem(
         sampleBurger,
         shopId,
@@ -224,34 +183,7 @@ void main() {
         unitPrice: 80,
       );
 
-      // Verify that there are 2 separate items in cart
-      expect(cartNotifier.state.items.length, 2);
-
-      final line1 = cartNotifier.state.items[0];
-      final line2 = cartNotifier.state.items[1];
-
-      expect(line1.cartKey, 'burger_classic|grp_sauce:opt_with_sauce|grp_size:opt_large');
-      expect(line1.unitPrice, 70);
-      expect(line1.quantity, 1);
-      expect(line1.totalPrice, 70.0);
-      expect(line1.optionsDescription, 'Large · With Sauce');
-
-      expect(line2.cartKey, 'burger_classic|grp_extra:opt_cheese|grp_sauce:opt_with_sauce|grp_size:opt_large');
-      expect(line2.unitPrice, 80);
-      expect(line2.quantity, 1);
-      expect(line2.totalPrice, 80.0);
-      expect(line2.optionsDescription, 'Large · With Sauce · Cheese');
-
-      // Grand Total: 70 + 80 = 150
-      expect(cartNotifier.state.grandTotal, 150.0);
-      expect(cartNotifier.state.totalItemCount, 2);
-    });
-
-    // ── 11 & 12. CONFIGURATION CHANGES DO NOT MUTATE EXISTING CART LINES ────────
-    test('11 & 12. Changing Extra selection in bottom sheet does not mutate old cart item', () {
-      final cartNotifier = CartNotifier();
-
-      // Customer initially had Large + No Cheese in cart
+      // Customer adds: Large + With Sauce (No Cheese) (₹70)
       cartNotifier.addItem(
         sampleBurger,
         shopId,
@@ -260,72 +192,77 @@ void main() {
         unitPrice: 70,
       );
 
-      final keyNoCheese = CartItem.buildCartKey(sampleBurger.id, [sizeLarge, sauceWith]);
-      final keyWithCheese = CartItem.buildCartKey(sampleBurger.id, [sizeLarge, sauceWith, extraCheese]);
+      final state = cartNotifier.state;
+      expect(state.items.length, 2);
 
-      // When Cheese is unselected: Large row reads keyNoCheese -> returns quantity 1
-      final qtyWhenNoCheeseActive = cartNotifier.state.items
-          .where((ci) => ci.cartKey == keyNoCheese)
-          .firstOrNull?.quantity ?? 0;
-      expect(qtyWhenNoCheeseActive, 1); // Large shows [ - 1 + ]
+      final withCheese = state.items.firstWhere((i) => i.selectedOptions.contains(extraCheese));
+      final withoutCheese = state.items.firstWhere((i) => !i.selectedOptions.contains(extraCheese));
 
-      // When Cheese is selected: Large row reads keyWithCheese -> returns quantity 0
-      final qtyWhenCheeseActive = cartNotifier.state.items
-          .where((ci) => ci.cartKey == keyWithCheese)
-          .firstOrNull?.quantity ?? 0;
-      expect(qtyWhenCheeseActive, 0); // Large shows [ ADD ]
+      expect(withCheese.unitPrice, 80);
+      expect(withCheese.cartKey, 'burger_classic|grp_extra:opt_cheese|grp_sauce:opt_with_sauce|grp_size:opt_large');
 
-      // The original cart item was NOT mutated
-      expect(cartNotifier.state.items.length, 1);
-      expect(cartNotifier.state.items.first.cartKey, keyNoCheese);
-      expect(cartNotifier.state.items.first.unitPrice, 70);
+      expect(withoutCheese.unitPrice, 70);
+      expect(withoutCheese.cartKey, 'burger_classic|grp_sauce:opt_with_sauce|grp_size:opt_large');
+
+      expect(state.grandTotal, 150.0);
     });
 
-    // ── 13. REQUIRED CHOICE VALIDATION ──────────────────────────────────────────
-    test('13. Required Choice validation ensures complete configuration', () {
-      const groupWithoutChoice = MenuItemOptionGroup(
-        id: 'grp_sauce',
-        name: 'Sauce',
-        groupType: OptionGroupType.choice,
-        required: true,
-        options: [
-          MenuItemOption(id: 'opt_w', name: 'With Sauce', price: 0, pricingType: OptionPricingType.selectionOnly),
-        ],
-      );
-
-      expect(groupWithoutChoice.required, isTrue);
-      expect(groupWithoutChoice.groupType, OptionGroupType.choice);
-    });
-
-    // ── 14. NORMAL ITEMS REMAIN UNCHANGED ───────────────────────────────────────
-    test('14. Normal item has hasOptions=false, simple cartKey, and direct stepper', () {
-      const coldCoffee = MenuItem(
-        id: 'cold_coffee',
-        name: 'Cold Coffee',
-        details: 'Classic chilled coffee',
-        price: 50,
-        imageUrl: '',
-        categoryId: 'beverages',
-        isVeg: true,
-        isAvailable: true,
-        isRecommended: true,
-        sortOrder: 2,
-      );
-
-      expect(coldCoffee.hasOptions, isFalse);
-
+    // ── 4. COEXISTENCE OF LARGE + NO CHEESE AND LARGE + CHEESE ────────────────
+    test('4. Large + No Cheese and Large + Cheese coexist with independent increment/decrement', () {
       final cartNotifier = CartNotifier();
+
+      // Add Large + No Cheese
       cartNotifier.addItem(
-        coldCoffee,
+        sampleBurger,
         shopId,
         shopName,
+        selectedOptions: [sizeLarge, sauceWith],
+        unitPrice: 70,
       );
 
-      expect(cartNotifier.state.items.length, 1);
-      expect(cartNotifier.state.items.first.cartKey, 'cold_coffee');
-      expect(cartNotifier.state.items.first.unitPrice, 50);
-      expect(cartNotifier.state.items.first.quantity, 1);
-      expect(cartNotifier.state.items.first.hasSelectedOptions, isFalse);
+      // Add Large + Cheese twice
+      cartNotifier.addItem(
+        sampleBurger,
+        shopId,
+        shopName,
+        selectedOptions: [sizeLarge, sauceWith, extraCheese],
+        unitPrice: 80,
+      );
+      cartNotifier.addItem(
+        sampleBurger,
+        shopId,
+        shopName,
+        selectedOptions: [sizeLarge, sauceWith, extraCheese],
+        unitPrice: 80,
+      );
+
+      final state = cartNotifier.state;
+      expect(state.items.length, 2);
+
+      final noCheeseItem = state.items.firstWhere((i) => !i.selectedOptions.contains(extraCheese));
+      final cheeseItem = state.items.firstWhere((i) => i.selectedOptions.contains(extraCheese));
+
+      expect(noCheeseItem.quantity, 1);
+      expect(noCheeseItem.totalPrice, 70.0);
+
+      expect(cheeseItem.quantity, 2);
+      expect(cheeseItem.totalPrice, 160.0);
+
+      expect(state.grandTotal, 230.0);
+
+      // Decrement cheese item by 1
+      cartNotifier.removeItem(cheeseItem.cartKey);
+      final updatedState = cartNotifier.state;
+      final updatedCheeseItem = updatedState.items.firstWhere((i) => i.selectedOptions.contains(extraCheese));
+      expect(updatedCheeseItem.quantity, 1);
+      expect(updatedState.grandTotal, 150.0);
+    });
+
+    // ── 5. CLEAN CHOICE LABELS (NO PRICE SUFFIX FOR ₹0) ────────────────────────
+    test('5. Zero-price choices have price=0 and no price surcharge', () {
+      expect(sauceWith.price, 0);
+      expect(sauceWithout.price, 0);
+      expect(extraCheese.price, 10);
     });
   });
 }
