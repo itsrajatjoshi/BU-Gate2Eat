@@ -60,7 +60,7 @@ void main() {
     // ── 1. BURGER STARTING PRICE = ₹50 ─────────────────────────────────────────
     test('1. Burger startingPrice is exactly ₹50 (cheapest valid configuration)', () {
       expect(testBurger.startingPrice, 50);
-      expect(testBurger.formattedStartingPrice, 'Starting from ₹50');
+      expect(testBurger.formattedStartingPrice, '₹50');
     });
 
     // ── 2. OPTIONAL CHEESE DOES NOT INFLATE STARTING PRICE ─────────────────────
@@ -110,7 +110,7 @@ void main() {
       );
 
       expect(burgerWithMultipleExtras.startingPrice, 50);
-      expect(burgerWithMultipleExtras.formattedStartingPrice, 'Starting from ₹50');
+      expect(burgerWithMultipleExtras.formattedStartingPrice, '₹50');
     });
 
     // ── 3. OPTIONAL CHOICE INITIAL STATE: STARTS UNSELECTED ───────────────────
@@ -311,7 +311,7 @@ void main() {
 
       // 9. Starting price is Large base (₹60)
       expect(normalColdCoffee.startingPrice, 60);
-      expect(normalColdCoffee.formattedStartingPrice, 'Starting from ₹60');
+      expect(normalColdCoffee.formattedStartingPrice, '₹60');
 
       // 10. Optional Ice Cream starts unselected
       final initialSelections = <String, MenuItemOption?>{};

@@ -21,7 +21,6 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
-  late TextEditingController _ageController;
 
   @override
   void initState() {
@@ -29,48 +28,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final localStorage = ref.read(localStorageServiceProvider);
     _nameController = TextEditingController(text: localStorage.userName);
     _phoneController = TextEditingController(text: localStorage.userPhone);
-    _ageController = TextEditingController(
-      text: localStorage.userAge > 0 ? localStorage.userAge.toString() : '',
-    );
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _ageController.dispose();
     super.dispose();
   }
 
   Future<void> _saveProfile() async {
     final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
-    final ageText = _ageController.text.trim();
 
-    if (name.isEmpty || phone.isEmpty || ageText.isEmpty) {
+    if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
-      );
-      return;
-    }
-
-    if (phone.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid 10-digit phone number')),
-      );
-      return;
-    }
-
-    final age = int.tryParse(ageText);
-    if (age == null || age < 15 || age > 30) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid age (15-30)')),
+        const SnackBar(content: Text('Please enter your name')),
       );
       return;
     }
 
     final localStorage = ref.read(localStorageServiceProvider);
-    await localStorage.saveUserProfile(name: name, phone: phone, age: age);
+    await localStorage.updateName(name);
 
     if (mounted) {
       setState(() {});
@@ -295,33 +273,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           const SizedBox(height: AppSpacing.md),
 
-          // Phone field
+          // Phone field (read-only permanent identity)
           TextField(
             controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(10),
-            ],
-            decoration: const InputDecoration(
-              labelText: 'Phone Number',
-              prefixIcon: Icon(Icons.phone_outlined),
-              prefixText: '+91 ',
+            readOnly: true,
+            enableInteractiveSelection: false,
+            style: TextStyle(
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
             ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // Age field
-          TextField(
-            controller: _ageController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(2),
-            ],
-            decoration: const InputDecoration(
-              labelText: 'Age',
-              prefixIcon: Icon(Icons.cake_outlined),
+            decoration: InputDecoration(
+              labelText: 'Phone Number (Account Identity)',
+              prefixIcon: const Icon(Icons.phone_outlined),
+              prefixText: '+91 ',
+              suffixIcon: Tooltip(
+                message: 'Phone number is permanently linked to your account',
+                child: Icon(
+                  Icons.lock_outline_rounded,
+                  size: 18,
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.textHint,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),

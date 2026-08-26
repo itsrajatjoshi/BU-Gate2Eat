@@ -114,10 +114,33 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     }
   }
 
+  /// Checks if a menu item belongs to a specific category.
+  static bool _itemBelongsToCategory(MenuItem item, Category category) {
+    final itemCat = item.categoryId.trim().toLowerCase();
+    final targetId = category.id.trim().toLowerCase();
+    final targetName = category.name.trim().toLowerCase();
+
+    return itemCat == targetId ||
+        itemCat == targetName ||
+        (targetId == 'thalis' && itemCat == 'thali') ||
+        (targetId == 'thali' && itemCat == 'thalis') ||
+        (targetId == 'momos' && itemCat == 'momo') ||
+        (targetId == 'momo' && itemCat == 'momos') ||
+        (targetId == 'pizzas' && itemCat == 'pizza') ||
+        (targetId == 'pizza' && itemCat == 'pizzas') ||
+        (targetId == 'burgers' && itemCat == 'burger') ||
+        (targetId == 'burger' && itemCat == 'burgers');
+  }
+
   /// Centers the active category chip in top horizontal navigation bar
   void _autoScrollCategoryTab(String catId) {
     if (!_categoryScrollController.hasClients) return;
-    final categories = _getEffectiveCategories(widget.shopId, null);
+    final menuItems = ref.read(shopMenuItemsProvider(widget.shopId)).value;
+    final categories = _getEffectiveCategories(
+      widget.shopId,
+      ref.read(shopCategoriesProvider(widget.shopId)).value,
+      menuItems,
+    );
     final index = categories.indexWhere((c) => c.id == catId);
     if (index != -1) {
       const itemWidth = 74.0;
@@ -136,28 +159,14 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     if (catId != 'all') {
       final menuItems = ref.read(shopMenuItemsProvider(widget.shopId)).value ?? [];
       final categories = ref.read(shopCategoriesProvider(widget.shopId)).value ?? [];
-      final effectiveCategories = _getEffectiveCategories(widget.shopId, categories);
+      final effectiveCategories = _getEffectiveCategories(widget.shopId, categories, menuItems);
 
       final categoryObj = effectiveCategories.firstWhere(
         (c) => c.id == catId,
         orElse: () => Category(id: catId, name: catId, sortOrder: 0),
       );
 
-      final hasItems = menuItems.any((item) {
-        final itemCat = item.categoryId.toLowerCase();
-        final target = catId.toLowerCase();
-        final targetName = categoryObj.name.toLowerCase();
-        return itemCat == target ||
-            itemCat == targetName ||
-            (target == 'thalis' && itemCat == 'thali') ||
-            (target == 'thali' && itemCat == 'thalis') ||
-            (target == 'momos' && itemCat == 'momo') ||
-            (target == 'momo' && itemCat == 'momos') ||
-            (target == 'pizzas' && itemCat == 'pizza') ||
-            (target == 'pizza' && itemCat == 'pizzas') ||
-            (target == 'burgers' && itemCat == 'burger') ||
-            (target == 'burger' && itemCat == 'burgers');
-      });
+      final hasItems = menuItems.any((item) => item.isAvailable && _itemBelongsToCategory(item, categoryObj));
 
       if (!hasItems) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -228,7 +237,12 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   }
 
   /// Generates clean data-driven shop categories fetching dynamically from Firestore.
-  List<Category> _getEffectiveCategories(String shopId, List<Category>? fetched) {
+  /// Shows ONLY categories that contain at least one available menu item.
+  List<Category> _getEffectiveCategories(
+    String shopId,
+    List<Category>? fetched, [
+    List<MenuItem>? menuItems,
+  ]) {
     const allCat = Category(
       id: 'all',
       name: 'All',
@@ -241,6 +255,15 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     if (fetched != null && fetched.isNotEmpty) {
       for (final c in fetched) {
         if (c.id == 'all' || !c.isActive) continue;
+
+        // If menuItems list is provided, category must contain at least 1 available item
+        if (menuItems != null) {
+          final hasAvailableItem = menuItems.any(
+            (item) => item.isAvailable && _itemBelongsToCategory(item, c),
+          );
+          if (!hasAvailableItem) continue;
+        }
+
         String img = c.imageUrl;
         if (img.isEmpty) {
           final nameL = c.name.toLowerCase();
@@ -267,7 +290,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           imageUrl: img,
           isActive: c.isActive,
           shopId: shopId,
-        ),);
+        ));
       }
     }
 
@@ -621,14 +644,33 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                 pinned: true,
                 delegate: _StickyCategoryHeaderDelegate(
                   height: MediaQuery.of(context).size.width < 360 ? 106.0 : 114.0,
-                  child: _CategoryNavWidget(
-                    categories: _getEffectiveCategories(
-                      shop.id,
-                      categoriesAsync.value,
-                    ),
-                    selectedCategoryId: _selectedCategoryId,
-                    onCategorySelected: _onCategoryTapped,
-                    scrollController: _categoryScrollController,
+                  child: Builder(
+                    builder: (context) {
+                      final effectiveCategories = _getEffectiveCategories(
+                        shop.id,
+                        categoriesAsync.value,
+                        menuItemsAsync.value,
+                      );
+
+                      // Selected category safety check:
+                      if (_selectedCategoryId != 'all' &&
+                          !effectiveCategories.any((c) => c.id == _selectedCategoryId)) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            setState(() {
+                              _selectedCategoryId = 'all';
+                            });
+                          }
+                        });
+                      }
+
+                      return _CategoryNavWidget(
+                        categories: effectiveCategories,
+                        selectedCategoryId: _selectedCategoryId,
+                        onCategorySelected: _onCategoryTapped,
+                        scrollController: _categoryScrollController,
+                      );
+                    },
                   ),
                 ),
               ),
@@ -759,28 +801,19 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
         }
 
         // Domino's / Zomato style Categorized Sections
-        final effectiveCategories = _getEffectiveCategories(shop.id, categoriesAsync.value);
+        final effectiveCategories = _getEffectiveCategories(
+          shop.id,
+          categoriesAsync.value,
+          menuItemsAsync.value,
+        );
         final List<Widget> slivers = [];
 
         for (final category in effectiveCategories) {
           if (category.id == 'all') continue;
 
-          final categoryItems = filtered.where((item) {
-            final catId = item.categoryId.toLowerCase();
-            final target = category.id.toLowerCase();
-            final targetName = category.name.toLowerCase();
-
-            return catId == target ||
-                catId == targetName ||
-                (target == 'thalis' && catId == 'thali') ||
-                (target == 'thali' && catId == 'thalis') ||
-                (target == 'momos' && catId == 'momo') ||
-                (target == 'momo' && catId == 'momos') ||
-                (target == 'pizzas' && catId == 'pizza') ||
-                (target == 'pizza' && catId == 'pizzas') ||
-                (target == 'burgers' && catId == 'burger') ||
-                (target == 'burger' && catId == 'burgers');
-          }).toList();
+          final categoryItems = filtered
+              .where((item) => _itemBelongsToCategory(item, category))
+              .toList();
 
           if (categoryItems.isEmpty) continue;
 
@@ -1387,9 +1420,7 @@ class _MenuItemCard extends ConsumerWidget {
                               item.formattedStartingPrice,
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
-                                fontSize: isSmallScreen
-                                    ? (item.hasOptions ? 12.0 : 14.5)
-                                    : (item.hasOptions ? 13.0 : 15.5),
+                                fontSize: isSmallScreen ? 14.5 : 15.5,
                                 color: Theme.of(context)
                                     .textTheme
                                     .bodyLarge

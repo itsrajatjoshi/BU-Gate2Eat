@@ -20,14 +20,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _ageController = TextEditingController();
   bool _isLoading = false;
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _ageController.dispose();
     super.dispose();
   }
 
@@ -41,21 +39,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     await localStorage.saveUserProfile(
       name: _nameController.text.trim(),
       phone: phone,
-      age: int.parse(_ageController.text.trim()),
     );
 
     if (!mounted) return;
-    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanPhone.endsWith('8078643910') || cleanPhone == '8078643910') {
+    if (AppAuthRoles.isAdminPhone(phone)) {
       context.go(AppRoutes.admin);
-    } else if (cleanPhone.endsWith('8000383993') ||
-        cleanPhone == '8000383993' ||
-        cleanPhone.endsWith('8295643910') ||
-        cleanPhone == '8295643910' ||
-        cleanPhone.endsWith('8875344034') ||
-        cleanPhone == '8875344034' ||
-        cleanPhone.endsWith('8079065843') ||
-        cleanPhone == '8079065843') {
+    } else if (AppAuthRoles.isShopkeeperPhone(phone)) {
       context.go(AppRoutes.shopkeeper);
     } else {
       context.go(AppRoutes.home);
@@ -148,37 +137,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     }
                     if (!RegExp(r'^[6-9]\d{9}$').hasMatch(value.trim())) {
                       return 'Please enter a valid Indian phone number';
-                    }
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: AppSpacing.lg),
-
-                // Age field
-                Text(
-                  'Age',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                TextFormField(
-                  controller: _ageController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(2),
-                  ],
-                  decoration: const InputDecoration(
-                    hintText: 'Your age',
-                    prefixIcon: Icon(Icons.cake_outlined),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your age';
-                    }
-                    final age = int.tryParse(value.trim());
-                    if (age == null || age < 15 || age > 30) {
-                      return 'Please enter a valid age (15-30)';
                     }
                     return null;
                   },

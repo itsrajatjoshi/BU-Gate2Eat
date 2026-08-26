@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers.dart';
+import '../../../../core/utils/order_timer_helper.dart';
 import '../../../../models/order_model.dart';
 import 'accept_order_dialog.dart';
 import 'mark_delivered_dialog.dart';
@@ -104,16 +105,12 @@ class _ShopkeeperOrderDetailsModalState
     if (confirmed == true && mounted) {
       setState(() => _isSubmitting = true);
       try {
-        String deliveryPersonId = '8295643910';
-        String deliveryPersonName = 'Shopkeeper';
+        String deliveryPersonId = '';
+        String deliveryPersonName = '';
         try {
           final localStorage = ref.read(localStorageServiceProvider);
-          if (localStorage.userPhone.trim().isNotEmpty) {
-            deliveryPersonId = localStorage.userPhone.trim();
-          }
-          if (localStorage.userName.trim().isNotEmpty) {
-            deliveryPersonName = localStorage.userName.trim();
-          }
+          deliveryPersonId = localStorage.userPhone.trim();
+          deliveryPersonName = localStorage.userName.trim();
         } catch (_) {}
 
         await ref.read(orderServiceProvider).updateOrderStatus(
@@ -224,28 +221,45 @@ class _ShopkeeperOrderDetailsModalState
     }
   }
 
-  @override
+   @override
   Widget build(BuildContext context) {
-    final order = widget.order;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
+
+    final order = widget.order;
     final isPlaced = order.status == 'placed';
     final isAccepted = order.status == 'accepted';
     final isDelivered = order.status == 'delivered';
     final isRejected = order.status == 'rejected';
     final isCancelled = order.status == 'cancelled';
+    final isExpired = order.status == 'delivery_expired';
+
+    // Auto-reconcile on expired zero boundary
+    if (isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+      });
+    } else if (isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+      });
+    }
 
     final Color statusColor;
     final String statusText;
     final IconData statusIcon;
+    String headerCountdown = '';
 
     if (isDelivered) {
       statusColor = AppColors.success;
       statusText = 'DELIVERED';
       statusIcon = Icons.task_alt_rounded;
     } else if (isAccepted) {
+      final rem = OrderTimerHelper.getRemainingDeliveryDuration(order, now);
+      headerCountdown = OrderTimerHelper.formatCountdown(rem);
       statusColor = AppColors.success;
       statusText = 'ACCEPTED';
-      statusIcon = Icons.check_circle_outline_rounded;
+      statusIcon = Icons.delivery_dining_rounded;
     } else if (isRejected) {
       statusColor = AppColors.error;
       statusText = 'REJECTED';
@@ -256,10 +270,16 @@ class _ShopkeeperOrderDetailsModalState
           : AppColors.textSecondary;
       statusText = 'CANCELLED';
       statusIcon = Icons.block_rounded;
+    } else if (isExpired) {
+      statusColor = Colors.deepPurple;
+      statusText = 'EXPIRED';
+      statusIcon = Icons.hourglass_disabled_rounded;
     } else {
+      final rem = OrderTimerHelper.getRemainingAcceptDuration(order, now);
+      headerCountdown = OrderTimerHelper.formatCountdown(rem);
       statusColor = AppColors.warning;
       statusText = 'PLACED';
-      statusIcon = Icons.fiber_new_rounded;
+      statusIcon = Icons.schedule_rounded;
     }
 
     final customerDisplayName = order.customerName.trim().isNotEmpty
@@ -370,6 +390,17 @@ class _ShopkeeperOrderDetailsModalState
                                       letterSpacing: 0.5,
                                     ),
                                   ),
+                                  if (headerCountdown.isNotEmpty) ...[
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      '($headerCountdown)',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: statusColor,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -555,6 +586,82 @@ class _ShopkeeperOrderDetailsModalState
                       ],
                     ),
                   ),
+                  if (order.isDelivered) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Delivery Information',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark
+                              ? AppColors.darkDivider
+                              : AppColors.divider,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withValues(
+                                alpha: isDark ? 0.20 : 0.10,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.delivery_dining_rounded,
+                              size: 18,
+                              color: AppColors.success,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Delivery By',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? AppColors.darkTextSecondary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  order.deliveryPersonName.trim().isNotEmpty
+                                      ? order.deliveryPersonName.trim()
+                                      : 'Not available',
+                                  style: TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? AppColors.darkTextPrimary
+                                        : AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
 
                   // ── Order Items Breakdown ──────────────────────────────────
@@ -850,11 +957,7 @@ class _ShopkeeperOrderDetailsModalState
                 child: isAccepted
                     ? Builder(
                         builder: (context) {
-                          final canRejectAccepted = order.rejectDeadline != null
-                              ? DateTime.now().isBefore(order.rejectDeadline!)
-                              : (order.acceptedAt != null
-                                  ? DateTime.now().difference(order.acceptedAt!).inMinutes < 15
-                                  : true);
+                          final canRejectAccepted = !OrderTimerHelper.isRejectExpired(order, now);
 
                           if (!canRejectAccepted) {
                             // 15-min rejection window has expired: Only show Mark Delivered button
@@ -895,6 +998,10 @@ class _ShopkeeperOrderDetailsModalState
                             );
                           }
 
+                          final rejectCountdown = OrderTimerHelper.formatCountdown(
+                            OrderTimerHelper.getRemainingRejectDuration(order, now),
+                          );
+
                           return Row(
                             children: [
                               // Reject Order Button (Active only within 15-min window)
@@ -912,11 +1019,30 @@ class _ShopkeeperOrderDetailsModalState
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  child: const Text(
-                                    'Reject Order',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Text(
+                                          'Reject Order',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13.5,
+                                          ),
+                                        ),
+                                        if (rejectCountdown.isNotEmpty) ...[
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '($rejectCountdown)',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                 ),

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
+import '../../core/utils/order_timer_helper.dart';
 import '../../models/order_model.dart';
 
 class ActiveOrdersScreen extends ConsumerWidget {
@@ -109,7 +110,7 @@ class ActiveOrdersScreen extends ConsumerWidget {
   }
 }
 
-class _ActiveOrderCard extends StatelessWidget {
+class _ActiveOrderCard extends ConsumerWidget {
   const _ActiveOrderCard({
     required this.order,
     required this.isDark,
@@ -119,16 +120,41 @@ class _ActiveOrderCard extends StatelessWidget {
   final bool isDark;
 
   @override
-  Widget build(BuildContext context) {
-    final isAccepted = order.status == 'accepted';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
 
-    // Status styling
+    final isAccepted = order.status == 'accepted';
+    final isPlaced = order.status == 'placed';
+
+    // Auto-reconciliation trigger on live zero boundary
+    if (isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+      });
+    } else if (isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+      });
+    }
+
+    // Status & Countdown styling
     final statusColor = isAccepted ? AppColors.success : const Color(0xFFE58500);
     final statusBgColor = statusColor.withValues(alpha: isDark ? 0.20 : 0.12);
     final statusBorderColor = statusColor.withValues(alpha: isDark ? 0.45 : 0.30);
     final statusText = isAccepted ? 'ACCEPTED' : 'PLACED';
-    final statusSubtext =
-        isAccepted ? 'Order Accepted • Preparing' : 'Placed • Waiting for shopkeeper';
+
+    String countdownBadgeText = '';
+    if (isPlaced) {
+      final rem = OrderTimerHelper.getRemainingAcceptDuration(order, now);
+      countdownBadgeText = OrderTimerHelper.formatCountdown(rem);
+    } else if (isAccepted) {
+      final rem = OrderTimerHelper.getRemainingDeliveryDuration(order, now);
+      countdownBadgeText = OrderTimerHelper.formatCountdown(rem);
+    }
+
+    final statusSubtext = isAccepted
+        ? 'Accepted • Delivery due in $countdownBadgeText'
+        : 'Placed • Accept within $countdownBadgeText';
 
     final itemsSummary = order.items
         .map((i) => i.hasOptions
@@ -165,7 +191,7 @@ class _ActiveOrderCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Header Row: Shop Name & Status Badge
+                // 1. Header Row: Shop Name & Status Badge with Countdown
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -220,7 +246,7 @@ class _ActiveOrderCard extends StatelessWidget {
                         children: [
                           Icon(
                             isAccepted
-                                ? Icons.check_circle_rounded
+                                ? Icons.delivery_dining_rounded
                                 : Icons.schedule_rounded,
                             size: 13,
                             color: statusColor,
@@ -235,6 +261,17 @@ class _ActiveOrderCard extends StatelessWidget {
                               letterSpacing: 0.5,
                             ),
                           ),
+                          if (countdownBadgeText.isNotEmpty) ...[
+                            const SizedBox(width: 3),
+                            Text(
+                              '($countdownBadgeText)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: statusColor,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

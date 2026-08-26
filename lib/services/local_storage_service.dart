@@ -37,16 +37,22 @@ class LocalStorageService {
   // ─── User Profile & Identity ───────────────────────────────
 
   /// Gets the stored customer ID or initializes a stable device/phone identifier.
+  /// When a phone number exists, customer ID is strictly and deterministically derived from it.
   String get customerId {
+    final phone = userPhone.trim();
+    if (phone.isNotEmpty) {
+      final expectedId = 'cust_$phone';
+      final currentId = _prefs.getString(_keyCustomerId);
+      if (currentId != expectedId) {
+        _prefs.setString(_keyCustomerId, expectedId);
+      }
+      return expectedId;
+    }
+
     var id = _prefs.getString(_keyCustomerId);
     if (id == null || id.isEmpty) {
-      final phone = userPhone.trim();
-      if (phone.isNotEmpty) {
-        id = 'cust_$phone';
-      } else {
-        final rand = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
-        id = 'cust_anon_$rand';
-      }
+      final rand = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+      id = 'cust_anon_$rand';
       _prefs.setString(_keyCustomerId, id);
     }
     return id;
@@ -65,11 +71,17 @@ class LocalStorageService {
   Future<void> saveUserProfile({
     required String name,
     required String phone,
-    required int age,
+    int? age,
   }) async {
-    await _prefs.setString(_keyName, name);
-    await _prefs.setString(_keyPhone, phone);
-    await _prefs.setInt(_keyAge, age);
+    final cleanPhone = phone.trim();
+    await _prefs.setString(_keyName, name.trim());
+    await _prefs.setString(_keyPhone, cleanPhone);
+    if (cleanPhone.isNotEmpty) {
+      await _prefs.setString(_keyCustomerId, 'cust_$cleanPhone');
+    }
+    if (age != null) {
+      await _prefs.setInt(_keyAge, age);
+    }
     await _prefs.setBool(_keyIsOnboarded, true);
   }
 
@@ -78,9 +90,13 @@ class LocalStorageService {
     await _prefs.setString(_keyName, name);
   }
 
-  /// Updates the phone number.
+  /// Updates the phone number and synchronizes the customer ID.
   Future<void> updatePhone(String phone) async {
-    await _prefs.setString(_keyPhone, phone);
+    final cleanPhone = phone.trim();
+    await _prefs.setString(_keyPhone, cleanPhone);
+    if (cleanPhone.isNotEmpty) {
+      await _prefs.setString(_keyCustomerId, 'cust_$cleanPhone');
+    }
   }
 
   /// Updates the age.
@@ -113,11 +129,12 @@ class LocalStorageService {
 
   // ─── Session Management ────────────────────────────────────
 
-  /// Clears the user profile and onboarding state, effectively logging out.
+  /// Clears the user profile, customer identity, and onboarding state, effectively logging out.
   Future<void> logout() async {
     await _prefs.remove(_keyIsOnboarded);
     await _prefs.remove(_keyName);
     await _prefs.remove(_keyPhone);
     await _prefs.remove(_keyAge);
+    await _prefs.remove(_keyCustomerId);
   }
 }

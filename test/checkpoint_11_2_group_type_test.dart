@@ -297,7 +297,7 @@ void main() {
 
       // Starting price must be Small (₹40), since Sauce is ₹0 and Extras is optional (₹0)
       expect(burger.startingPrice, 40);
-      expect(burger.formattedStartingPrice, 'Starting from ₹40');
+      expect(burger.formattedStartingPrice, '₹40');
     });
 
     // ── 9. NORMAL ITEMS REMAIN COMPLETELY UNCHANGED ───────────────────────────

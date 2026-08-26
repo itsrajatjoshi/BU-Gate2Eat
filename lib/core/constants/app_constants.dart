@@ -86,3 +86,60 @@ class AppConfig {
   // App version
   static const String appVersion = '1.0.4';
 }
+
+// ─── Auth Roles & Phone Mappings ──────────────────────────────
+class AppAuthRoles {
+  AppAuthRoles._();
+
+  static const String adminPhone = '8078643910';
+
+  /// Authoritative phone to shopId mapping for registered shopkeepers.
+  static const Map<String, String> shopkeeperPhoneMap = {
+    '8295643910': 'rajat_shop',
+    '8875344034': 'nayan_shop',
+    '8000383993': 'kivisha_shop',
+    '8745007244': 'up16_junction_fast_food',
+    '8745950335': 'up16_junction_fast_food',
+    '8079065843': 'up16_junction_fast_food',
+  };
+
+  /// Extracts digits only and strips international +91 prefix for clean 10-digit comparison.
+  static String normalizeCleanPhone(String raw) {
+    var digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.startsWith('91') && digits.length == 12) {
+      digits = digits.substring(2);
+    }
+    if (digits.startsWith('0') && digits.length == 11) {
+      digits = digits.substring(1);
+    }
+    return digits;
+  }
+
+  /// Whether the phone number belongs to the Administrator.
+  static bool isAdminPhone(String rawPhone) {
+    final clean = normalizeCleanPhone(rawPhone);
+    return clean == adminPhone || clean.endsWith(adminPhone);
+  }
+
+  /// Whether the phone number belongs to an approved Shopkeeper.
+  static bool isShopkeeperPhone(String rawPhone) {
+    final clean = normalizeCleanPhone(rawPhone);
+    return shopkeeperPhoneMap.containsKey(clean) ||
+        shopkeeperPhoneMap.keys.any((p) => clean.endsWith(p));
+  }
+
+  /// Resolves the shopId assigned to the shopkeeper phone, or returns null if not found.
+  static String? getShopIdForPhone(String rawPhone) {
+    final clean = normalizeCleanPhone(rawPhone);
+    if (shopkeeperPhoneMap.containsKey(clean)) {
+      return shopkeeperPhoneMap[clean];
+    }
+    for (final entry in shopkeeperPhoneMap.entries) {
+      if (clean.endsWith(entry.key)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+}
+

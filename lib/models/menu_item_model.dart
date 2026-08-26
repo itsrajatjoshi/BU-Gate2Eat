@@ -312,9 +312,8 @@ class MenuItem {
   String get formattedPrice => '₹$price';
 
   /// Formatted starting price for menu cards.
-  /// Example: "Starting from ₹80" for option items, "₹50" for normal items.
-  String get formattedStartingPrice =>
-      hasOptions ? 'Starting from ₹$startingPrice' : formattedPrice;
+  /// Example: "₹80" for option items, "₹50" for normal items.
+  String get formattedStartingPrice => '₹$startingPrice';
 
   /// Converts MenuItem to a Firestore-compatible map.
   /// Only writes 'optionGroups' when options actually exist to preserve clean documents for normal items.

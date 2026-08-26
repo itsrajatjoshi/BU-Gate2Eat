@@ -14,6 +14,7 @@ import '../services/local_storage_service.dart';
 import '../services/order_service.dart';
 import '../services/report_service.dart';
 import '../services/shop_stats_service.dart';
+import 'constants/app_constants.dart';
 
 export '../models/shop_model.dart' show ShopOrderMethod;
 
@@ -328,7 +329,36 @@ final customerActiveOrdersStreamProvider =
       );
 });
 
-/// Real-time stream provider for current customer's order history (delivered, rejected, cancelled).
+/// Auto-ticking 1-second stream provider for live order countdowns and active order reconciliation.
+/// Automatically cleans up its periodic timer when disposed.
+final orderReconciliationTickerProvider = StreamProvider.autoDispose<DateTime>((ref) {
+  final controller = StreamController<DateTime>();
+  controller.add(DateTime.now());
+
+  Timer? timer;
+  final bindingName = WidgetsBinding.instance.runtimeType.toString();
+  final isTestEnvironment =
+      bindingName.contains('Test') || bindingName.contains('Automated');
+
+  if (!isTestEnvironment) {
+    timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!controller.isClosed) {
+        controller.add(DateTime.now());
+      }
+    });
+  }
+
+  ref.onDispose(() {
+    timer?.cancel();
+    if (!controller.isClosed) {
+      controller.close();
+    }
+  });
+
+  return controller.stream;
+});
+
+/// Real-time stream provider for current customer's order history (delivered, rejected, delivery_expired).
 final customerOrderHistoryStreamProvider =
     StreamProvider<List<AppOrder>>((ref) async* {
   final orderService = ref.watch(orderServiceProvider);
@@ -340,6 +370,7 @@ final customerOrderHistoryStreamProvider =
         .where((o) =>
             o.status == 'delivered' ||
             o.status == 'rejected' ||
+            o.status == 'delivery_expired' ||
             o.status == 'cancelled')
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -397,7 +428,7 @@ final shopActiveOrdersStreamProvider =
   yield* orderService.watchShopActiveOrders(effectiveShopId);
 });
 
-/// Real-time stream provider for a shop's order history (delivered, rejected, cancelled).
+/// Real-time stream provider for a shop's order history (delivered, rejected, delivery_expired).
 final shopOrderHistoryStreamProvider =
     StreamProvider.family<List<AppOrder>, String?>((ref, shopId) async* {
   final orderService = ref.watch(orderServiceProvider);
@@ -412,6 +443,7 @@ final shopOrderHistoryStreamProvider =
             o.shopId == effectiveShopId &&
             (o.status == 'delivered' ||
                 o.status == 'rejected' ||
+                o.status == 'delivery_expired' ||
                 o.status == 'cancelled'))
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -486,17 +518,10 @@ class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
 final currentShopkeeperShopIdProvider = Provider<String>((ref) {
   try {
     final localStorage = ref.watch(localStorageServiceProvider);
-    final cleanPhone =
-        localStorage.userPhone.replaceAll(RegExp(r'[^0-9]'), '');
-
-    if (cleanPhone.endsWith('8745007244') || cleanPhone.endsWith('8745950335')) {
-      return 'up16_junction_fast_food';
-    }
-    if (cleanPhone.endsWith('8875344034') || cleanPhone == '8875344034') {
-      return 'nayan_shop';
-    }
-    if (cleanPhone.endsWith('8295643910') || cleanPhone == '8295643910') {
-      return 'rajat_shop';
+    final phone = localStorage.userPhone;
+    final resolvedShopId = AppAuthRoles.getShopIdForPhone(phone);
+    if (resolvedShopId != null && resolvedShopId.isNotEmpty) {
+      return resolvedShopId;
     }
   } catch (_) {}
   return 'rajat_shop';

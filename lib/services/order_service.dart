@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/utils/order_timer_helper.dart';
 import '../models/order_model.dart';
 
 /// Exceptions for Order Service operations.
@@ -159,13 +160,19 @@ class OrderService {
     if (!isAvailable) return const Stream.empty();
     return _ordersRef.doc(orderId).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) return null;
-      return AppOrder.fromFirestore(doc);
+      final order = AppOrder.fromFirestore(doc);
+      if ((order.isPlaced && OrderTimerHelper.isAcceptExpired(order)) ||
+          (order.isAccepted && OrderTimerHelper.isDeliveryExpired(order))) {
+        checkAndExpireOrder(order.orderId);
+      }
+      return order;
     });
   }
 
   // ─── Customer Streams ──────────────────────────────────────────────────────
 
   /// Real-time stream of a customer's active orders (placed, accepted).
+  /// Excludes expired orders immediately from active output and triggers atomic background expiry.
   Stream<List<AppOrder>> watchCustomerActiveOrders({
     String? customerId,
     String? customerPhone,
@@ -183,10 +190,22 @@ class OrderService {
         .where('status', whereIn: OrderStatusRules.activeStatuses.toList())
         .snapshots()
         .map((snapshot) {
-      final orders =
-          snapshot.docs.map((doc) => AppOrder.fromFirestore(doc)).toList();
-      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return orders;
+      final now = DateTime.now();
+      final activeList = <AppOrder>[];
+      for (final doc in snapshot.docs) {
+        final order = AppOrder.fromFirestore(doc);
+        if (order.isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
+          checkAndExpireOrder(order.orderId, customNow: now);
+          continue;
+        }
+        if (order.isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
+          checkAndExpireOrder(order.orderId, customNow: now);
+          continue;
+        }
+        activeList.add(order);
+      }
+      activeList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return activeList;
     });
   }
 
@@ -218,6 +237,7 @@ class OrderService {
   // ─── Shopkeeper Streams ────────────────────────────────────────────────────
 
   /// Real-time stream of a shop's active orders (placed, accepted).
+  /// Excludes expired orders immediately from active output and triggers atomic background expiry.
   Stream<List<AppOrder>> watchShopActiveOrders(String shopId) {
     if (!isAvailable) return const Stream.empty();
     return _ordersRef
@@ -225,10 +245,22 @@ class OrderService {
         .where('status', whereIn: OrderStatusRules.activeStatuses.toList())
         .snapshots()
         .map((snapshot) {
-      final orders =
-          snapshot.docs.map((doc) => AppOrder.fromFirestore(doc)).toList();
-      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return orders;
+      final now = DateTime.now();
+      final activeList = <AppOrder>[];
+      for (final doc in snapshot.docs) {
+        final order = AppOrder.fromFirestore(doc);
+        if (order.isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
+          checkAndExpireOrder(order.orderId, customNow: now);
+          continue;
+        }
+        if (order.isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
+          checkAndExpireOrder(order.orderId, customNow: now);
+          continue;
+        }
+        activeList.add(order);
+      }
+      activeList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return activeList;
     });
   }
 
@@ -505,65 +537,80 @@ class OrderService {
   // ─── Timer Expiration Check ────────────────────────────────────────────────
 
   /// Checks if an active order has exceeded its 20-min accept deadline or 90-min delivery deadline.
-  /// If expired, executes the atomic expiration transition.
+  /// If expired, executes the atomic expiration transition and shopStats counter increments.
   Future<bool> checkAndExpireOrder(String orderId, {DateTime? customNow}) async {
     if (!isAvailable) return false;
     try {
-      final doc = await _ordersRef.doc(orderId).get();
-      if (!doc.exists || doc.data() == null) return false;
-
-      final data = doc.data()!;
-      final status = (data['status'] as String?) ?? '';
       final now = customNow ?? DateTime.now();
+      return await _firestore.runTransaction<bool>((transaction) async {
+        final orderDocRef = _ordersRef.doc(orderId);
+        final doc = await transaction.get(orderDocRef);
+        if (!doc.exists || doc.data() == null) return false;
 
-      if (status == OrderStatusRules.statusPlaced) {
-        final acceptDeadlineRaw = data['acceptDeadline'];
-        DateTime? acceptDeadline;
-        if (acceptDeadlineRaw is Timestamp) {
-          acceptDeadline = acceptDeadlineRaw.toDate();
-        } else if (acceptDeadlineRaw is String) {
-          acceptDeadline = DateTime.tryParse(acceptDeadlineRaw);
-        }
+        final data = doc.data()!;
+        final status = (data['status'] as String?) ?? '';
+        final shopId = (data['shopId'] as String?) ?? '';
+        final statsDocRef = _statsRef.doc(shopId);
 
-        if (acceptDeadline != null && now.isAfter(acceptDeadline)) {
-          await updateOrderStatus(
-            orderId,
-            OrderStatusRules.statusRejected,
-            rejectionReason:
-                'Order was automatically rejected because the shopkeeper did not accept it within 20 minutes.',
-            customNow: now,
-          );
-          return true;
-        }
-      } else if (status == OrderStatusRules.statusAccepted) {
-        final deliveryDeadlineRaw = data['deliveryDeadline'];
-        final acceptedAtRaw = data['acceptedAt'];
-        DateTime? deliveryDeadline;
-        if (deliveryDeadlineRaw is Timestamp) {
-          deliveryDeadline = deliveryDeadlineRaw.toDate();
-        } else if (acceptedAtRaw is Timestamp) {
-          deliveryDeadline = acceptedAtRaw.toDate().add(const Duration(minutes: 90));
-        }
+        if (status == OrderStatusRules.statusPlaced) {
+          final acceptDeadlineRaw = data['acceptDeadline'];
+          final createdAtRaw = data['createdAt'];
+          DateTime? acceptDeadline;
+          if (acceptDeadlineRaw is Timestamp) {
+            acceptDeadline = acceptDeadlineRaw.toDate();
+          } else if (acceptDeadlineRaw is String) {
+            acceptDeadline = DateTime.tryParse(acceptDeadlineRaw);
+          } else if (createdAtRaw is Timestamp) {
+            acceptDeadline = createdAtRaw.toDate().add(const Duration(minutes: OrderTimerHelper.acceptWindowMinutes));
+          }
 
-        if (deliveryDeadline != null && now.isAfter(deliveryDeadline)) {
-          final shopId = (data['shopId'] as String?) ?? '';
-          await _firestore.runTransaction((transaction) async {
-            transaction.update(_ordersRef.doc(orderId), {
+          if (acceptDeadline != null && !now.isBefore(acceptDeadline)) {
+            transaction.update(orderDocRef, {
+              'status': OrderStatusRules.statusRejected,
+              'rejectionReason':
+                  'Order was automatically rejected because the shopkeeper did not accept it within 20 minutes.',
+              'rejectedAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+            transaction.set(statsDocRef, {
+              'shopId': shopId,
+              'appOrders': FieldValue.increment(1),
+              'notAccepted': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+            debugPrint('⏱️ OrderService.checkAndExpireOrder: Order #$orderId auto-expired (placed 20m timeout)');
+            return true;
+          }
+        } else if (status == OrderStatusRules.statusAccepted) {
+          final deliveryDeadlineRaw = data['deliveryDeadline'];
+          final acceptedAtRaw = data['acceptedAt'];
+          DateTime? deliveryDeadline;
+          if (deliveryDeadlineRaw is Timestamp) {
+            deliveryDeadline = deliveryDeadlineRaw.toDate();
+          } else if (deliveryDeadlineRaw is String) {
+            deliveryDeadline = DateTime.tryParse(deliveryDeadlineRaw);
+          } else if (acceptedAtRaw is Timestamp) {
+            deliveryDeadline = acceptedAtRaw.toDate().add(const Duration(minutes: OrderTimerHelper.deliveryWindowMinutes));
+          }
+
+          if (deliveryDeadline != null && !now.isBefore(deliveryDeadline)) {
+            transaction.update(orderDocRef, {
               'status': OrderStatusRules.statusDeliveryExpired,
               'rejectionReason': 'Delivery window of 90 minutes expired.',
               'updatedAt': FieldValue.serverTimestamp(),
             });
-            transaction.set(_statsRef.doc(shopId), {
+            transaction.set(statsDocRef, {
               'shopId': shopId,
               'deliveryExpired': FieldValue.increment(1),
               'updatedAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
-          });
-          return true;
+            debugPrint('⏱️ OrderService.checkAndExpireOrder: Order #$orderId auto-expired (delivery 90m timeout)');
+            return true;
+          }
         }
-      }
 
-      return false;
+        return false;
+      });
     } catch (e) {
       debugPrint('❌ OrderService checkAndExpireOrder error: $e');
       return false;

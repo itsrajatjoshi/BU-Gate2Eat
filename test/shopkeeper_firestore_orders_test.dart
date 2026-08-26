@@ -201,10 +201,10 @@ class MockShopkeeperOrderService extends OrderService {
   }
 }
 
+DateTime get fixedTime => DateTime.now();
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  final fixedTime = DateTime(2026, 8, 23, 12, 0, 0);
 
   AppOrder createTestOrder({
     required String orderId,

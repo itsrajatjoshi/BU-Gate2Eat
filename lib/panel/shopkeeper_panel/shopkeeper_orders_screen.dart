@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers.dart';
 import '../../../core/router.dart';
+import '../../../core/utils/order_timer_helper.dart';
 import '../../../models/order_model.dart';
 import 'widgets/shopkeeper_order_details_modal.dart';
 
@@ -309,7 +310,7 @@ class _ShopkeeperOrdersScreenState
   }
 }
 
-class _CompactShopkeeperOrderCard extends StatelessWidget {
+class _CompactShopkeeperOrderCard extends ConsumerWidget {
   const _CompactShopkeeperOrderCard({
     required this.order,
     required this.isDark,
@@ -319,19 +320,43 @@ class _CompactShopkeeperOrderCard extends StatelessWidget {
   final bool isDark;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
+
+    final isAccepted = order.status == 'accepted';
+    final isPlaced = order.status == 'placed';
+
+    // Auto-reconciliation trigger on live zero boundary
+    if (isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+      });
+    } else if (isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+      });
+    }
+
     final displayName = order.customerName.trim().isNotEmpty
         ? order.customerName.trim()
         : 'Customer';
 
-    final isAccepted = order.status == 'accepted';
-
     final Color statusColor =
         isAccepted ? AppColors.success : AppColors.warning;
+
+    String countdownBadgeText = '';
+    if (isPlaced) {
+      final rem = OrderTimerHelper.getRemainingAcceptDuration(order, now);
+      countdownBadgeText = OrderTimerHelper.formatCountdown(rem);
+    } else if (isAccepted) {
+      final rem = OrderTimerHelper.getRemainingDeliveryDuration(order, now);
+      countdownBadgeText = OrderTimerHelper.formatCountdown(rem);
+    }
+
     final String statusText = isAccepted ? 'ACCEPTED' : 'PLACED';
     final IconData statusIcon = isAccepted
-        ? Icons.check_circle_outline_rounded
-        : Icons.fiber_new_rounded;
+        ? Icons.delivery_dining_rounded
+        : Icons.schedule_rounded;
 
     return Container(
       decoration: BoxDecoration(
@@ -434,6 +459,17 @@ class _CompactShopkeeperOrderCard extends StatelessWidget {
                               letterSpacing: 0.5,
                             ),
                           ),
+                          if (countdownBadgeText.isNotEmpty) ...[
+                            const SizedBox(width: 3),
+                            Text(
+                              '($countdownBadgeText)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: statusColor,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

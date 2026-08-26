@@ -373,6 +373,21 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       }
     } catch (e) {
       debugPrint('❌ WhatsApp order placement error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to process WhatsApp order. Please try again.',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isPlacingOrder = false);

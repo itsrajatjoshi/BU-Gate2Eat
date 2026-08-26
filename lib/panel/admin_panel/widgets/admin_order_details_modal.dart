@@ -534,7 +534,9 @@ class AdminOrderDetailsModal extends StatelessWidget {
                 ),
               ),
               Text(
-                order.deliveryPersonName.isNotEmpty ? order.deliveryPersonName : 'Shopkeeper',
+                order.deliveryPersonName.trim().isNotEmpty
+                    ? order.deliveryPersonName.trim()
+                    : 'Not available',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
               ),
             ],

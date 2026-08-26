@@ -293,7 +293,7 @@ void main() {
         // Starting price = Large price
         final expectedStartingPrice = sizeGroup.options[0].price;
         expect(item.startingPrice, expectedStartingPrice);
-        expect(item.formattedStartingPrice, 'Starting from ₹$expectedStartingPrice');
+        expect(item.formattedStartingPrice, '₹$expectedStartingPrice');
       }
     });
 
@@ -345,7 +345,7 @@ void main() {
         expect(sizeGroup.options[2].price, s['xxl']);
 
         expect(item.startingPrice, s['large']);
-        expect(item.formattedStartingPrice, 'Starting from ₹${s['large']}');
+        expect(item.formattedStartingPrice, '₹${s['large']}');
       }
     });
 

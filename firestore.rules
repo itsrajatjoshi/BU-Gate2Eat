@@ -51,6 +51,28 @@ service cloud.firestore {
           || status == 'cancelled';
     }
 
+    // 5. Shop & Menu Item Validations
+    function isValidShopWrite() {
+      let data = request.resource.data;
+      return data.get('name', '') is string && data.get('name', '').size() > 0;
+    }
+
+    function isValidCategoryWrite() {
+      let data = request.resource.data;
+      return data.get('name', '') is string && data.get('name', '').size() > 0;
+    }
+
+    function isValidMenuItemWrite() {
+      let data = request.resource.data;
+      return data.get('name', '') is string && data.get('name', '').size() > 0
+          && data.get('price', 0) is number && data.get('price', 0) >= 0;
+    }
+
+    function isValidShopStatsWrite(shopId) {
+      let data = request.resource.data;
+      return data.get('shopId', shopId) == shopId;
+    }
+
     // ─── 1. ORDERS COLLECTION ──────────────────────────────────────────
     match /orders/{orderId} {
       // Live streaming & reading allowed for customer, shopkeeper, and admin
@@ -72,7 +94,7 @@ service cloud.firestore {
       allow read: if true;
 
       // Atomic counter increments (OrderService transactions, WhatsApp clicks, Admin reset)
-      allow create, update: if true;
+      allow create, update: if isValidShopStatsWrite(shopId);
 
       // Stats documents should not be deleted (only reset to 0)
       allow delete: if false;
@@ -80,7 +102,7 @@ service cloud.firestore {
       // Monthly stats subcollection for month-specific WhatsApp counters
       match /monthlyStats/{monthKey} {
         allow read: if true;
-        allow create, update: if true;
+        allow create, update: if isValidShopStatsWrite(shopId);
         allow delete: if false;
       }
     }
@@ -88,16 +110,19 @@ service cloud.firestore {
     // ─── 3. SHOPS & MENU ITEMS ─────────────────────────────────────────
     match /shops/{shopId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update: if isValidShopWrite();
+      allow delete: if true;
 
       match /categories/{categoryId} {
         allow read: if true;
-        allow write: if true;
+        allow create, update: if isValidCategoryWrite();
+        allow delete: if true;
       }
 
       match /menuItems/{menuItemId} {
         allow read: if true;
-        allow write: if true;
+        allow create, update: if isValidMenuItemWrite();
+        allow delete: if true;
       }
     }
 

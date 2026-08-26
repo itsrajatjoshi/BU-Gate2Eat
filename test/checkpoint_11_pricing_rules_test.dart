@@ -61,7 +61,7 @@ void main() {
 
       expect(momosItem.hasOptions, isTrue);
       expect(momosItem.startingPrice, equals(80));
-      expect(momosItem.formattedStartingPrice, equals('Starting from ₹80'));
+      expect(momosItem.formattedStartingPrice, equals('₹80'));
     });
 
     test('3. SelectionOnly option group contributes ₹0 to price and stores 0 internally', () {
@@ -95,20 +95,20 @@ void main() {
       expect(restored.name, equals('Dry'));
     });
 
-    test('4. Fixed + SelectionOnly (Momos: Portion Half ₹80/Full ₹140 + Prep Dry/Gravy) = Starting from ₹80', () {
+    test('4. Fixed + SelectionOnly (Momos: Portion Half ₹80/Full ₹140 + Prep Dry/Gravy) = ₹80', () {
       const portionGroup = MenuItemOptionGroup(
         id: 'grp_portion',
         name: 'Portion',
         options: [
           MenuItemOption(
             id: 'opt_half',
-            name: 'Half',
+            name: 'Half (6 Pcs)',
             price: 80,
             pricingType: OptionPricingType.fixedPrice,
           ),
           MenuItemOption(
             id: 'opt_full',
-            name: 'Full',
+            name: 'Full (12 Pcs)',
             price: 140,
             pricingType: OptionPricingType.fixedPrice,
           ),
@@ -135,7 +135,7 @@ void main() {
       );
 
       const momosItem = MenuItem(
-        id: 'momos_combo',
+        id: 'momos_1',
         name: 'Chicken Momos',
         details: 'Served with sauce',
         price: 0,
@@ -149,10 +149,10 @@ void main() {
       );
 
       expect(momosItem.startingPrice, equals(80));
-      expect(momosItem.formattedStartingPrice, equals('Starting from ₹80'));
+      expect(momosItem.formattedStartingPrice, equals('₹80'));
     });
 
-    test('5. Fixed + PriceAdjustment (Coffee: Size Large ₹60/XL ₹80 + Ice Cream +₹0/+₹10) = Starting from ₹60', () {
+    test('5. Fixed + PriceAdjustment (Coffee: Size Large ₹60/XL ₹80 + Ice Cream +₹0/+₹10) = ₹60', () {
       const sizeGroup = MenuItemOptionGroup(
         id: 'grp_size',
         name: 'Size',
@@ -212,7 +212,7 @@ void main() {
       );
 
       expect(coffeeItem.startingPrice, equals(60));
-      expect(coffeeItem.formattedStartingPrice, equals('Starting from ₹60'));
+      expect(coffeeItem.formattedStartingPrice, equals('₹60'));
     });
 
     test('6. Base Price + Adjustment-only (Pizza Base ₹150 + Cheese +₹20) uses base price as startingPrice', () {
@@ -250,10 +250,10 @@ void main() {
       );
 
       expect(pizzaItem.startingPrice, equals(150));
-      expect(pizzaItem.formattedStartingPrice, equals('Starting from ₹150'));
+      expect(pizzaItem.formattedStartingPrice, equals('₹150'));
     });
 
-    test('7. Base Price + SelectionOnly (Base ₹140 + Prep Dry/Gravy) = Starting from ₹140', () {
+    test('7. Base Price + SelectionOnly (Base ₹140 + Prep Dry/Gravy) = ₹140', () {
       const prepGroup = MenuItemOptionGroup(
         id: 'grp_prep',
         name: 'Preparation',
@@ -288,7 +288,7 @@ void main() {
       );
 
       expect(item.startingPrice, equals(140));
-      expect(item.formattedStartingPrice, equals('Starting from ₹140'));
+      expect(item.formattedStartingPrice, equals('₹140'));
     });
 
     test('8. MenuItemOption toMap & fromMap preserves selectionOnly', () {

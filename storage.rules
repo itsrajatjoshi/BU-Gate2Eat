@@ -8,10 +8,11 @@ service firebase.storage {
       allow read: if true;
     }
 
-    // Allow uploads (< 1MB) and deletes to any shop image folders
+    // Allow image uploads (< 1MB) and deletes to any shop image folders
     // Note: Temporary development permission. Will be hardened with Firebase Auth in a future phase.
     match /shops/{shopId}/{allPaths=**} {
-      allow create, update: if request.resource.size < 1 * 1024 * 1024;
+      allow create, update: if request.resource.size < 1 * 1024 * 1024
+                            && request.resource.contentType.matches('image/.*');
       allow delete: if true;
     }
   }

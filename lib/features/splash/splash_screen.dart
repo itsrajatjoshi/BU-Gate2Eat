@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
 
@@ -169,21 +170,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       ),
     );
 
-    // Navigate to home, shopkeeper, or onboarding (GoRouter's FadeTransition handles the single smooth fade)
+    // Navigate to home, shopkeeper, admin, or onboarding
     final localStorage = ref.read(localStorageServiceProvider);
     if (localStorage.isOnboarded) {
-      final cleanPhone =
-          localStorage.userPhone.replaceAll(RegExp(r'[^0-9]'), '');
-      if (cleanPhone.endsWith('8078643910') || cleanPhone == '8078643910') {
+      final phone = localStorage.userPhone;
+      if (AppAuthRoles.isAdminPhone(phone)) {
         context.go(AppRoutes.admin);
-      } else if (cleanPhone.endsWith('8000383993') ||
-          cleanPhone == '8000383993' ||
-          cleanPhone.endsWith('8295643910') ||
-          cleanPhone == '8295643910' ||
-          cleanPhone.endsWith('8875344034') ||
-          cleanPhone == '8875344034' ||
-          cleanPhone.endsWith('8079065843') ||
-          cleanPhone == '8079065843') {
+      } else if (AppAuthRoles.isShopkeeperPhone(phone)) {
         context.go(AppRoutes.shopkeeper);
       } else {
         context.go(AppRoutes.home);

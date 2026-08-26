@@ -23,7 +23,6 @@ class _ShopkeeperProfileScreenState
     extends ConsumerState<ShopkeeperProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
-  late TextEditingController _ageController;
 
   @override
   void initState() {
@@ -35,12 +34,7 @@ class _ShopkeeperProfileScreenState
           : 'Shop Manager',
     );
     _phoneController = TextEditingController(
-      text: localStorage.userPhone.isNotEmpty
-          ? localStorage.userPhone
-          : '8000383993',
-    );
-    _ageController = TextEditingController(
-      text: localStorage.userAge > 0 ? localStorage.userAge.toString() : '25',
+      text: localStorage.userPhone,
     );
   }
 
@@ -48,25 +42,21 @@ class _ShopkeeperProfileScreenState
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _ageController.dispose();
     super.dispose();
   }
 
   Future<void> _saveProfile() async {
     final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
-    final ageText = _ageController.text.trim();
 
-    if (name.isEmpty || phone.isEmpty || ageText.isEmpty) {
+    if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
+        const SnackBar(content: Text('Please enter your name')),
       );
       return;
     }
 
-    final age = int.tryParse(ageText) ?? 25;
     final localStorage = ref.read(localStorageServiceProvider);
-    await localStorage.saveUserProfile(name: name, phone: phone, age: age);
+    await localStorage.updateName(name);
 
     if (mounted) {
       setState(() {});
@@ -144,12 +134,17 @@ class _ShopkeeperProfileScreenState
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final localStorage = ref.watch(localStorageServiceProvider);
+    final activeShopId = ref.watch(currentShopkeeperShopIdProvider);
+    final shopsAsync = ref.watch(shopsProvider);
+    final currentShop = shopsAsync.valueOrNull?.where((s) => s.id == activeShopId).firstOrNull;
+    final shopName = currentShop?.name ?? 'Shop Manager';
+
     final userName = localStorage.userName.isNotEmpty
         ? localStorage.userName
         : 'Shop Manager';
     final userPhone = localStorage.userPhone.isNotEmpty
         ? '+91 ${localStorage.userPhone}'
-        : '+91 8000383993';
+        : '';
 
     final screenWidth = MediaQuery.of(context).size.width;
     final horizontalPadding = screenWidth < 360 ? 12.0 : 16.0;
@@ -200,17 +195,22 @@ class _ShopkeeperProfileScreenState
                   width: 58,
                   height: 58,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      userName.isNotEmpty ? userName[0].toUpperCase() : 'S',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
+                    color: AppColors.primary.withValues(
+                      alpha: isDark ? 0.20 : 0.12,
+                    ),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(
+                        alpha: isDark ? 0.50 : 0.35,
                       ),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.person_rounded,
+                      size: 32,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
@@ -281,7 +281,7 @@ class _ShopkeeperProfileScreenState
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              'Rajat Shop • Gate 3',
+                              '$shopName • Gate 3',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -323,33 +323,31 @@ class _ShopkeeperProfileScreenState
           ),
           const SizedBox(height: AppSpacing.md),
 
-          // Phone field
+          // Phone field (read-only permanent identity)
           TextField(
             controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(10),
-            ],
-            decoration: const InputDecoration(
-              labelText: 'Phone Number',
-              prefixIcon: Icon(Icons.phone_outlined),
-              prefixText: '+91 ',
+            readOnly: true,
+            enableInteractiveSelection: false,
+            style: TextStyle(
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
             ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // Age field
-          TextField(
-            controller: _ageController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(2),
-            ],
-            decoration: const InputDecoration(
-              labelText: 'Age',
-              prefixIcon: Icon(Icons.cake_outlined),
+            decoration: InputDecoration(
+              labelText: 'Phone Number (Account Identity)',
+              prefixIcon: const Icon(Icons.phone_outlined),
+              prefixText: '+91 ',
+              suffixIcon: Tooltip(
+                message: 'Phone number is permanently linked to your shop account',
+                child: Icon(
+                  Icons.lock_outline_rounded,
+                  size: 18,
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.textHint,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),

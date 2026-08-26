@@ -137,6 +137,12 @@ class AppOrder {
     return m == 'whatsapp' || m == 'wa';
   }
 
+  bool get isPlaced => status.trim().toLowerCase() == 'placed';
+  bool get isAccepted => status.trim().toLowerCase() == 'accepted';
+  bool get isDelivered => status.trim().toLowerCase() == 'delivered';
+  bool get isRejected => status.trim().toLowerCase() == 'rejected';
+  bool get isCancelled => status.trim().toLowerCase() == 'cancelled';
+
   int get totalItemCount =>
       items.fold<int>(0, (acc, item) => acc + item.quantity);
 

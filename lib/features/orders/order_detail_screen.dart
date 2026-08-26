@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
+import '../../core/utils/order_timer_helper.dart';
 import '../../models/order_model.dart';
 import 'reorder_helper.dart';
 
@@ -28,50 +29,41 @@ class OrderDetailScreen extends ConsumerWidget {
     final dummyOrders = ref.watch(dummyOrdersProvider);
 
     // Fallback resolution for local testing/transitional orders
-    AppOrder? dummyFallback;
-    try {
-      dummyFallback = dummyOrders.firstWhere((o) => o.orderId == orderId);
-    } catch (_) {
-      dummyFallback = initialOrder;
+    AppOrder? getFallback() {
+      try {
+        return dummyOrders.firstWhere((o) => o.orderId == orderId);
+      } catch (_) {
+        return initialOrder;
+      }
     }
 
     return orderAsync.when(
-      data: (liveOrder) {
-        final order = liveOrder ?? dummyFallback;
-        if (order == null) {
+      data: (order) {
+        final effectiveOrder = order ?? getFallback();
+        if (effectiveOrder == null) {
           return _buildNotFoundScreen(context);
         }
-        return _buildOrderContent(context, ref, order, isDark);
+        return _buildOrderContent(context, ref, effectiveOrder, isDark);
       },
       loading: () {
-        if (dummyFallback != null) {
-          return _buildOrderContent(context, ref, dummyFallback, isDark);
+        final fallback = getFallback();
+        if (fallback != null) {
+          return _buildOrderContent(context, ref, fallback, isDark);
         }
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Order Details'),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => context.pop(),
-            ),
-          ),
+          appBar: AppBar(title: const Text('Order Details')),
           body: const Center(
             child: CircularProgressIndicator(color: AppColors.primary),
           ),
         );
       },
-      error: (error, _) {
-        if (dummyFallback != null) {
-          return _buildOrderContent(context, ref, dummyFallback, isDark);
+      error: (err, _) {
+        final fallback = getFallback();
+        if (fallback != null) {
+          return _buildOrderContent(context, ref, fallback, isDark);
         }
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Order Details'),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => context.pop(),
-            ),
-          ),
+          appBar: AppBar(title: const Text('Order Details')),
           body: Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -83,20 +75,11 @@ class OrderDetailScreen extends ConsumerWidget {
                     size: 48,
                     color: AppColors.error,
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Unable to load order details',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 12),
                   Text(
-                    'Please check your connection and try again.',
+                    'Failed to load order details: $err',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 13.5,
                       color: isDark
                           ? AppColors.darkTextSecondary
                           : AppColors.textSecondary,
@@ -172,11 +155,25 @@ class OrderDetailScreen extends ConsumerWidget {
     AppOrder order,
     bool isDark,
   ) {
+    final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
+
     final isCancelled = order.status == 'cancelled';
     final isRejected = order.status == 'rejected';
+    final isExpired = order.status == 'delivery_expired';
     final isDelivered = order.status == 'delivered';
     final isAccepted = order.status == 'accepted';
     final isPlaced = order.status == 'placed';
+
+    // Live zero-boundary auto-reconciliation
+    if (isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+      });
+    } else if (isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -238,7 +235,7 @@ class OrderDetailScreen extends ConsumerWidget {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      _buildStatusBadge(order.status, isDark),
+                      _buildStatusBadge(order, now, isDark),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -284,6 +281,46 @@ class OrderDetailScreen extends ConsumerWidget {
                                 'This order was rejected by shopkeeper.',
                                 style: TextStyle(
                                   color: AppColors.error,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (order.rejectionReason.trim().isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Reason: ${order.rejectionReason.trim()}',
+                              style: TextStyle(
+                                color: isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.textSecondary,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    )
+                  else if (isExpired)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.hourglass_disabled_rounded, color: Colors.deepPurple, size: 18),
+                              SizedBox(width: 8),
+                              Text(
+                                'This order has expired.',
+                                style: TextStyle(
+                                  color: Colors.deepPurple,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),
@@ -554,6 +591,65 @@ class OrderDetailScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            if (order.isDelivered) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkDivider : AppColors.divider,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.delivery_dining_rounded,
+                        size: 20,
+                        color: AppColors.success,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Delivered By',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            order.deliveryPersonName.trim().isNotEmpty
+                                ? order.deliveryPersonName.trim()
+                                : 'Not available',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.darkTextPrimary
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -689,22 +785,34 @@ class OrderDetailScreen extends ConsumerWidget {
     );
   }
 
-  static Widget _buildStatusBadge(String status, bool isDark) {
+  static Widget _buildStatusBadge(AppOrder order, DateTime now, bool isDark) {
     Color color = AppColors.warning;
     String label = 'Placed 🟡';
 
-    if (status == 'accepted') {
+    if (order.status == 'accepted') {
       color = AppColors.success;
       label = 'Accepted 🟢';
-    } else if (status == 'delivered') {
+    } else if (order.status == 'delivered') {
       color = AppColors.success;
       label = 'Delivered ✅';
-    } else if (status == 'cancelled') {
+    } else if (order.status == 'cancelled') {
       color = AppColors.error;
       label = 'Cancelled ❌';
-    } else if (status == 'rejected') {
+    } else if (order.status == 'rejected') {
       color = AppColors.error;
       label = 'Rejected ❌';
+    } else if (order.status == 'delivery_expired') {
+      color = Colors.deepPurple;
+      label = 'Expired ⏱️';
+    }
+
+    String countdown = '';
+    if (order.status == 'placed') {
+      final rem = OrderTimerHelper.getRemainingAcceptDuration(order, now);
+      countdown = OrderTimerHelper.formatCountdown(rem);
+    } else if (order.status == 'accepted') {
+      final rem = OrderTimerHelper.getRemainingDeliveryDuration(order, now);
+      countdown = OrderTimerHelper.formatCountdown(rem);
     }
 
     return Container(
@@ -713,13 +821,29 @@ class OrderDetailScreen extends ConsumerWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 12.5,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+            ),
+          ),
+          if (countdown.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            Text(
+              '($countdown)',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
