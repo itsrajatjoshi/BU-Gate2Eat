@@ -18,6 +18,8 @@ class ShopStats {
     this.rejectedAfterAccept = 0,
     this.deliveryExpired = 0,
     this.whatsappOrders = 0,
+    this.lifetimeWhatsappOrders = 0,
+    this.monthlyWhatsappOrders = const {},
     this.currentPeriod = '',
     this.lastResetAt,
     this.updatedAt,
@@ -52,12 +54,20 @@ class ShopStats {
 
   // ─── WhatsApp Counter ────────────────────────────────────────────────────
 
-  /// WhatsApp button initiation count. No order documents stored.
+  /// WhatsApp order initiation count for the current statement period (since lastResetAt).
+  /// Resets to 0 when admin performs a shop statistics reset.
   final int whatsappOrders;
+
+  /// Cumulative lifetime WhatsApp order initiations across all time.
+  /// Preserved across admin resets.
+  final int lifetimeWhatsappOrders;
+
+  /// Month-by-month WhatsApp order counters keyed by "YYYY-MM" (legacy support).
+  final Map<String, int> monthlyWhatsappOrders;
 
   // ─── Period & Timestamps ─────────────────────────────────────────────────
 
-  /// Optional label for the current billing period (e.g. "2026-08").
+  /// Optional label for the current billing period.
   final String currentPeriod;
 
   /// When admin last reset this shop's stats.
@@ -68,8 +78,26 @@ class ShopStats {
 
   // ─── Computed ────────────────────────────────────────────────────────────
 
-  /// Total orders across app + WhatsApp for quick admin display.
+  /// Total orders across app + WhatsApp for quick admin display in the current statement period.
   int get totalOrders => appOrders + whatsappOrders;
+
+  /// Returns the WhatsApp orders for a specific month (e.g. "2026-08").
+  /// If explicit month key exists, returns that count.
+  /// If not set yet and queried month is the current active month, falls back to rolling [whatsappOrders].
+  int getWhatsappOrdersForMonth(DateTime month) {
+    final key =
+        '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}';
+    if (monthlyWhatsappOrders.containsKey(key)) {
+      return monthlyWhatsappOrders[key]!;
+    }
+    final now = DateTime.now();
+    final currentKey =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}';
+    if (key == currentKey) {
+      return whatsappOrders;
+    }
+    return 0;
+  }
 
   // ─── Firestore Serialization ─────────────────────────────────────────────
 
@@ -84,6 +112,9 @@ class ShopStats {
       'rejectedAfterAccept': rejectedAfterAccept,
       'deliveryExpired': deliveryExpired,
       'whatsappOrders': whatsappOrders,
+      'lifetimeWhatsappOrders': lifetimeWhatsappOrders > 0 ? lifetimeWhatsappOrders : whatsappOrders,
+      if (monthlyWhatsappOrders.isNotEmpty)
+        'monthlyWhatsappOrders': monthlyWhatsappOrders,
       'currentPeriod': currentPeriod,
       if (lastResetAt != null) 'lastResetAt': Timestamp.fromDate(lastResetAt!),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -91,8 +122,20 @@ class ShopStats {
   }
 
   factory ShopStats.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc,) {
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data() ?? {};
+    final rawMonthly = data['monthlyWhatsappOrders'];
+    Map<String, int> monthlyMap = const {};
+    if (rawMonthly is Map) {
+      monthlyMap = rawMonthly.map(
+        (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+      );
+    }
+
+    final rawWhatsapp = (data['whatsappOrders'] as num?)?.toInt() ?? 0;
+    final rawLifetime = (data['lifetimeWhatsappOrders'] as num?)?.toInt() ?? rawWhatsapp;
+
     return ShopStats(
       shopId: (data['shopId'] as String?) ?? doc.id,
       shopName: (data['shopName'] as String?) ?? '',
@@ -103,7 +146,9 @@ class ShopStats {
       rejectedAfterAccept:
           (data['rejectedAfterAccept'] as num?)?.toInt() ?? 0,
       deliveryExpired: (data['deliveryExpired'] as num?)?.toInt() ?? 0,
-      whatsappOrders: (data['whatsappOrders'] as num?)?.toInt() ?? 0,
+      whatsappOrders: rawWhatsapp,
+      lifetimeWhatsappOrders: rawLifetime,
+      monthlyWhatsappOrders: monthlyMap,
       currentPeriod: (data['currentPeriod'] as String?) ?? '',
       lastResetAt: _parseNullableDateTime(data['lastResetAt']),
       updatedAt: _parseNullableDateTime(data['updatedAt']),
@@ -139,6 +184,8 @@ class ShopStats {
     int? rejectedAfterAccept,
     int? deliveryExpired,
     int? whatsappOrders,
+    int? lifetimeWhatsappOrders,
+    Map<String, int>? monthlyWhatsappOrders,
     String? currentPeriod,
     DateTime? lastResetAt,
     DateTime? updatedAt,
@@ -153,6 +200,10 @@ class ShopStats {
       rejectedAfterAccept: rejectedAfterAccept ?? this.rejectedAfterAccept,
       deliveryExpired: deliveryExpired ?? this.deliveryExpired,
       whatsappOrders: whatsappOrders ?? this.whatsappOrders,
+      lifetimeWhatsappOrders:
+          lifetimeWhatsappOrders ?? this.lifetimeWhatsappOrders,
+      monthlyWhatsappOrders:
+          monthlyWhatsappOrders ?? this.monthlyWhatsappOrders,
       currentPeriod: currentPeriod ?? this.currentPeriod,
       lastResetAt: lastResetAt ?? this.lastResetAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -161,7 +212,7 @@ class ShopStats {
 
   @override
   String toString() =>
-      'ShopStats($shopId: app=$appOrders, wa=$whatsappOrders, '
+      'ShopStats($shopId: app=$appOrders, wa=$whatsappOrders, lifetimeWa=$lifetimeWhatsappOrders, '
       'accepted=$accepted, delivered=$delivered, '
       'notAccepted=$notAccepted, rejAfterAccept=$rejectedAfterAccept, '
       'deliveryExpired=$deliveryExpired)';

@@ -6,6 +6,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 import '../models/shop_stats_model.dart';
 
@@ -133,10 +134,87 @@ class ShopStatsService {
     await _incrementField(shopId, 'deliveryExpired');
   }
 
-  /// Increments `whatsappOrders` when WhatsApp order button is successfully
-  /// launched for this shop. No order document is created.
-  Future<void> incrementWhatsappOrders(String shopId) async {
-    await _incrementField(shopId, 'whatsappOrders');
+  /// Increments `whatsappOrders` (statement counter) and `lifetimeWhatsappOrders`
+  /// when WhatsApp order button is successfully clicked for this shop.
+  /// No order document is created.
+  Future<void> incrementWhatsappOrders(
+    String shopId, {
+    DateTime? orderTime,
+  }) async {
+    if (!isAvailable) return;
+    final time = orderTime ?? DateTime.now();
+    final monthKey = DateFormat('yyyy-MM').format(time);
+
+    try {
+      // 1. Atomically increment statement counter, lifetime counter, and month map on shopStats/{shopId}
+      await _statsRef.doc(shopId).set(
+        {
+          'shopId': shopId,
+          'whatsappOrders': FieldValue.increment(1),
+          'lifetimeWhatsappOrders': FieldValue.increment(1),
+          'monthlyWhatsappOrders': {
+            monthKey: FieldValue.increment(1),
+          },
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      // 2. Also record in subcollection shopStats/{shopId}/monthlyStats/{monthKey} for future analytics
+      await _statsRef
+          .doc(shopId)
+          .collection('monthlyStats')
+          .doc(monthKey)
+          .set(
+        {
+          'shopId': shopId,
+          'monthKey': monthKey,
+          'whatsappOrders': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      debugPrint(
+        '✅ ShopStatsService: Atomically incremented WhatsApp orders (+1 statement, +1 lifetime) for shop $shopId',
+      );
+    } catch (e) {
+      debugPrint('❌ ShopStatsService incrementWhatsappOrders error for $shopId: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches the current statement WhatsApp order count for a specific shop.
+  /// Returns the WhatsApp orders since lastResetAt.
+  Future<int> getStatementWhatsappOrders(String shopId) async {
+    if (!isAvailable) return 0;
+
+    try {
+      final parentDoc = await _statsRef.doc(shopId).get();
+      if (parentDoc.exists && parentDoc.data() != null) {
+        final stats = ShopStats.fromFirestore(parentDoc);
+        return stats.whatsappOrders;
+      }
+    } catch (e) {
+      debugPrint('⚠️ ShopStatsService getStatementWhatsappOrders error: $e');
+    }
+    return 0;
+  }
+
+  /// Fetches the monthly WhatsApp order count for a specific shop and month (legacy/bridge support).
+  Future<int> getMonthlyWhatsappOrders(String shopId, DateTime month) async {
+    if (!isAvailable) return 0;
+
+    try {
+      final parentDoc = await _statsRef.doc(shopId).get();
+      if (parentDoc.exists && parentDoc.data() != null) {
+        final stats = ShopStats.fromFirestore(parentDoc);
+        return stats.getWhatsappOrdersForMonth(month);
+      }
+    } catch (e) {
+      debugPrint('⚠️ ShopStatsService getMonthlyWhatsappOrders error: $e');
+    }
+    return 0;
   }
 
   /// Internal helper: atomically increments a single numeric field.
@@ -146,11 +224,14 @@ class ShopStatsService {
   Future<void> _incrementField(String shopId, String field) async {
     if (!isAvailable) return;
     try {
-      await _statsRef.doc(shopId).set({
-        'shopId': shopId,
-        field: FieldValue.increment(1),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await _statsRef.doc(shopId).set(
+        {
+          'shopId': shopId,
+          field: FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
       debugPrint('✅ ShopStatsService: Atomically incremented $field (+1) for shop $shopId');
     } catch (e) {
       debugPrint('❌ ShopStatsService _incrementField error ($field) for $shopId: $e');
@@ -160,27 +241,31 @@ class ShopStatsService {
 
   // ─── Reset ──────────────────────────────────────────────────────────────────
 
-  /// Resets all counters to 0 for a specific shop.
+  /// Resets all current statement counters to 0 for a specific shop.
   /// Also sets `lastResetAt` to server timestamp.
   ///
-  /// This does NOT delete the stats document itself — it zeroes it out.
-  /// Order document deletion is handled separately by [deleteShopOrders].
+  /// CRITICAL INVARIANT:
+  /// `lifetimeWhatsappOrders` is NEVER wiped on reset! It preserves cumulative metrics.
+  /// Only statement counters (`whatsappOrders`, `appOrders`, etc.) reset to 0.
   Future<void> resetShopStats(String shopId) async {
     if (!isAvailable) return;
     try {
-      await _statsRef.doc(shopId).set({
-        'shopId': shopId,
-        'appOrders': 0,
-        'accepted': 0,
-        'delivered': 0,
-        'notAccepted': 0,
-        'rejectedAfterAccept': 0,
-        'deliveryExpired': 0,
-        'whatsappOrders': 0,
-        'lastResetAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      debugPrint('✅ ShopStatsService: Reset stats for $shopId');
+      await _statsRef.doc(shopId).set(
+        {
+          'shopId': shopId,
+          'appOrders': 0,
+          'accepted': 0,
+          'delivered': 0,
+          'notAccepted': 0,
+          'rejectedAfterAccept': 0,
+          'deliveryExpired': 0,
+          'whatsappOrders': 0,
+          'lastResetAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      debugPrint('✅ ShopStatsService: Reset statement stats for $shopId (lifetime WA preserved)');
     } catch (e) {
       debugPrint('❌ ShopStatsService resetShopStats error: $e');
       rethrow;

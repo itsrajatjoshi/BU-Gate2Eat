@@ -32,7 +32,27 @@ final reportServiceProvider = Provider<ReportService>((ref) {
   return ReportService();
 });
 
-/// Family provider for fetching monthly report data.
+/// Family provider for fetching authoritative reset-to-export vendor statement data.
+final shopStatementDataProvider = FutureProvider.family<
+    MonthlyReportData,
+    ({
+      String shopId,
+      String shopName,
+      DateTime? statementStart,
+      DateTime statementEnd,
+      DateTime? fallbackCreatedAt,
+    })>((ref, params) async {
+  final reportService = ref.watch(reportServiceProvider);
+  return reportService.fetchShopStatementData(
+    shopId: params.shopId,
+    shopName: params.shopName,
+    startDateTime: params.statementStart,
+    endDateTime: params.statementEnd,
+    fallbackCreatedAt: params.fallbackCreatedAt,
+  );
+});
+
+/// Family provider for fetching monthly report data (legacy adapter).
 final monthlyReportDataProvider = FutureProvider.family<MonthlyReportData, ({String shopId, String shopName, DateTime month})>((ref, params) async {
   final reportService = ref.watch(reportServiceProvider);
   return reportService.fetchMonthlyShopReportData(

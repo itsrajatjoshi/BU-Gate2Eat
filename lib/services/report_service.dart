@@ -1,13 +1,13 @@
 // BU Gate2Eat — Services
-// Admin Monthly Shop Report Service (PDF & XLSX Generator)
-// Generates isolated, strictly bounded monthly vendor statements and multi-sheet Excel workbooks.
+// Admin Shop Vendor Statement Report Service (PDF & XLSX Generator)
+// Generates isolated, strictly bounded reset-to-export vendor statements and multi-sheet Excel workbooks.
 // 100% READ-ONLY: Never modifies, deletes, or resets Firestore order data.
 
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -16,84 +16,124 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/order_model.dart';
+import '../models/shop_stats_model.dart';
+import 'file_download_helper.dart';
 import 'order_service.dart';
+import 'shop_stats_service.dart';
 
-/// Aggregated monthly report data structure for a single shop.
+/// Aggregated vendor statement data structure for a single shop.
+/// Strictly represents a CLOSED/HISTORICAL statement between [startDateTime] and [endDateTime].
+/// Active orders (placed, accepted, etc.) are excluded from all counts and financial totals.
 class MonthlyReportData {
-  const MonthlyReportData({
+  MonthlyReportData({
     required this.shopId,
     required this.shopName,
-    required this.month,
     required this.startDateTime,
     required this.endDateTime,
-    required this.orders,
+    required List<AppOrder> orders,
     required this.generatedAt,
-  });
+    DateTime? month,
+    int? explicitWhatsappOrdersCount,
+  })  : orders = orders
+            .where(
+              (o) => !OrderStatusRules.activeStatuses
+                  .contains(o.status.toLowerCase()),
+            )
+            .toList(),
+        _explicitMonth = month,
+        _explicitWhatsappOrdersCount = explicitWhatsappOrdersCount;
 
   final String shopId;
   final String shopName;
-  final DateTime month;
-  final DateTime startDateTime;
+
+  /// Authoritative statement start timestamp (shopStats.lastResetAt or shop.createdAt).
+  /// Null if neither is available.
+  final DateTime? startDateTime;
+
+  /// Authoritative statement end timestamp (export timestamp / now).
   final DateTime endDateTime;
+
   final List<AppOrder> orders;
   final DateTime generatedAt;
+  final DateTime? _explicitMonth;
+  final int? _explicitWhatsappOrdersCount;
+
+  /// Whether this statement has a valid authoritative start timestamp.
+  bool get hasValidPeriod => startDateTime != null;
+
+  /// Legacy month accessor for backwards compatibility with older tests.
+  DateTime get month => _explicitMonth ?? startDateTime ?? endDateTime;
 
   int get totalOrdersCount => orders.length;
 
-  List<AppOrder> get deliveredOrders =>
-      orders.where((o) => o.status == OrderStatusRules.statusDelivered).toList();
-
-  List<AppOrder> get rejectedOrders =>
-      orders.where((o) => o.status == OrderStatusRules.statusRejected).toList();
-
-  List<AppOrder> get cancelledOrders =>
-      orders.where((o) => o.status == OrderStatusRules.statusCancelled).toList();
-
-  List<AppOrder> get expiredOrders => orders
-      .where((o) => o.status == OrderStatusRules.statusDeliveryExpired)
+  List<AppOrder> get deliveredOrders => orders
+      .where((o) => o.status.toLowerCase() == OrderStatusRules.statusDelivered)
       .toList();
 
-  List<AppOrder> get placedOrders =>
-      orders.where((o) => o.status == OrderStatusRules.statusPlaced).toList();
+  List<AppOrder> get rejectedOrders => orders
+      .where((o) => o.status.toLowerCase() == OrderStatusRules.statusRejected)
+      .toList();
 
-  List<AppOrder> get acceptedOrders =>
-      orders.where((o) => o.status == OrderStatusRules.statusAccepted).toList();
+  List<AppOrder> get cancelledOrders => orders
+      .where((o) => o.status.toLowerCase() == OrderStatusRules.statusCancelled)
+      .toList();
+
+  List<AppOrder> get expiredOrders => orders
+      .where(
+        (o) =>
+            o.status.toLowerCase() == OrderStatusRules.statusDeliveryExpired,
+      )
+      .toList();
+
+  List<AppOrder> get whatsappOrders =>
+      orders.where((o) => o.isWhatsAppOrder).toList();
 
   List<AppOrder> get otherOrders => orders.where((o) {
-        return o.status != OrderStatusRules.statusDelivered &&
-            o.status != OrderStatusRules.statusRejected &&
-            o.status != OrderStatusRules.statusCancelled &&
-            o.status != OrderStatusRules.statusDeliveryExpired &&
-            o.status != OrderStatusRules.statusPlaced &&
-            o.status != OrderStatusRules.statusAccepted;
+        final s = o.status.toLowerCase();
+        return s != OrderStatusRules.statusDelivered &&
+            s != OrderStatusRules.statusRejected &&
+            s != OrderStatusRules.statusCancelled &&
+            s != OrderStatusRules.statusDeliveryExpired;
       }).toList();
 
   int get deliveredOrdersCount => deliveredOrders.length;
   int get rejectedOrdersCount => rejectedOrders.length;
   int get cancelledOrdersCount => cancelledOrders.length;
   int get expiredOrdersCount => expiredOrders.length;
-  int get activeOrdersCount => placedOrders.length + acceptedOrders.length;
+  int get whatsappOrdersCount =>
+      _explicitWhatsappOrdersCount ?? whatsappOrders.length;
   int get otherOrdersCount => otherOrders.length;
 
-  /// Total sales value from successfully delivered orders.
+  /// Total revenue from successfully delivered orders.
   double get deliveredSalesValue =>
       deliveredOrders.fold<double>(0.0, (acc, o) => acc + o.totalAmount);
 
-  /// Total gross order value across all orders created within the month.
-  double get grossOrderValue =>
+  /// Total closed order value across all closed/historical orders in this statement.
+  double get closedOrderValue =>
       orders.fold<double>(0.0, (acc, o) => acc + o.totalAmount);
+
+  /// Standardized alias for closedOrderValue.
+  double get grossOrderValue => closedOrderValue;
 
   int get totalItemsDelivered =>
       deliveredOrders.fold<int>(0, (acc, o) => acc + o.totalItemCount);
 
-  int get totalItemsOrdered =>
+  int get totalItemsInClosedOrders =>
       orders.fold<int>(0, (acc, o) => acc + o.totalItemCount);
 
-  String get formattedPeriod =>
-      '${DateFormat('01 MMM yyyy').format(startDateTime)} - ${DateFormat('dd MMM yyyy').format(endDateTime.subtract(const Duration(seconds: 1)))}';
+  /// Legacy alias for totalItemsInClosedOrders.
+  int get totalItemsOrdered => totalItemsInClosedOrders;
+
+  String get formattedPeriod {
+    if (startDateTime == null) {
+      return 'No reset/creation timestamp available';
+    }
+    final df = DateFormat('dd MMM yyyy, hh:mm a');
+    return '${df.format(startDateTime!)} - ${df.format(endDateTime)}';
+  }
 }
 
-/// Service class for fetching monthly order records and generating PDF & XLSX reports.
+/// Service class for fetching reset-to-export order records and generating PDF & XLSX vendor statements.
 class ReportService {
   ReportService({FirebaseFirestore? firestore}) : _customFirestore = firestore;
 
@@ -114,7 +154,7 @@ class ReportService {
   CollectionReference<Map<String, dynamic>> get _ordersRef =>
       _firestore.collection('orders');
 
-  /// Computes the exact [startDateTime, endDateTime) boundaries for a month.
+  /// Computes month boundaries (legacy utility).
   static ({DateTime start, DateTime end}) getMonthBoundaries(DateTime month) {
     final start = DateTime(month.year, month.month);
     final end = (month.month == 12)
@@ -131,28 +171,78 @@ class ReportService {
         .replaceAll(RegExp(r'\s+'), '_');
   }
 
-  /// Generates a standardized, deterministic filename.
-  static String getReportFileName(
+  /// Generates a standardized, deterministic statement filename based on shop name and export timestamp.
+  static String getStatementFileName(
     String shopName,
-    DateTime month,
+    DateTime endDateTime,
     String extension,
   ) {
     final sanitized = sanitizeFileName(shopName);
-    final period = DateFormat('yyyy-MM').format(month);
-    final cleanExt = extension.startsWith('.') ? extension.substring(1) : extension;
-    return 'YummBU_${sanitized}_${period}_Monthly_Report.$cleanExt';
+    final period = DateFormat('yyyyMMdd_HHmm').format(endDateTime);
+    final cleanExt =
+        extension.startsWith('.') ? extension.substring(1) : extension;
+    return 'YummBU_${sanitized}_${period}_Statement.$cleanExt';
   }
 
-  /// Fetches all orders for a single shop within the selected month.
-  /// Strictly isolates by [shopId] and exact date range.
-  Future<MonthlyReportData> fetchMonthlyShopReportData({
+  /// Legacy alias for backwards compatibility.
+  static String getReportFileName(
+    String shopName,
+    DateTime monthOrEnd,
+    String extension,
+  ) {
+    return getStatementFileName(shopName, monthOrEnd, extension);
+  }
+
+  /// Fetches closed/historical orders for a single shop within the authoritative reset-to-export statement window.
+  ///
+  /// Resolution order for statementStart:
+  /// 1. `shopStats.lastResetAt`
+  /// 2. `fallbackCreatedAt` (shop.createdAt)
+  /// 3. If neither is available, returns a statement with `startDateTime: null` and empty orders.
+  Future<MonthlyReportData> fetchShopStatementData({
     required String shopId,
     required String shopName,
-    required DateTime month,
+    required DateTime endDateTime,
+    DateTime? startDateTime,
+    DateTime? fallbackCreatedAt,
   }) async {
-    final boundaries = getMonthBoundaries(month);
-    final start = boundaries.start;
-    final end = boundaries.end;
+    DateTime? resolvedStart = startDateTime;
+    int whatsappCount = 0;
+
+    if (_isAvailable) {
+      final statsService = ShopStatsService(firestore: _customFirestore);
+
+      // If startDateTime was not explicitly provided, resolve from Firestore shopStats
+      if (resolvedStart == null) {
+        try {
+          final doc = await _firestore.collection('shopStats').doc(shopId).get();
+          if (doc.exists && doc.data() != null) {
+            final stats = ShopStats.fromFirestore(doc);
+            resolvedStart = stats.lastResetAt ?? fallbackCreatedAt;
+            whatsappCount = stats.whatsappOrders;
+          } else {
+            resolvedStart = fallbackCreatedAt;
+          }
+        } catch (e) {
+          debugPrint('⚠️ ReportService fetchShopStatementData stats error: $e');
+          resolvedStart = fallbackCreatedAt;
+        }
+      } else {
+        whatsappCount = await statsService.getStatementWhatsappOrders(shopId);
+      }
+    }
+
+    if (resolvedStart == null) {
+      return MonthlyReportData(
+        shopId: shopId,
+        shopName: shopName,
+        startDateTime: null,
+        endDateTime: endDateTime,
+        orders: const [],
+        generatedAt: endDateTime,
+        explicitWhatsappOrdersCount: 0,
+      );
+    }
 
     List<AppOrder> orders = [];
 
@@ -166,8 +256,13 @@ class ReportService {
           .map((doc) => AppOrder.fromFirestore(doc))
           .where((order) {
             final created = order.createdAt;
-            return (created.isAtSameMomentAs(start) || created.isAfter(start)) &&
-                created.isBefore(end);
+            final inDateRange = (created.isAtSameMomentAs(resolvedStart!) ||
+                    created.isAfter(resolvedStart)) &&
+                (created.isAtSameMomentAs(endDateTime) ||
+                    created.isBefore(endDateTime));
+            final isClosed = !OrderStatusRules.activeStatuses
+                .contains(order.status.toLowerCase());
+            return inDateRange && isClosed;
           })
           .toList();
 
@@ -178,11 +273,26 @@ class ReportService {
     return MonthlyReportData(
       shopId: shopId,
       shopName: shopName,
-      month: month,
-      startDateTime: start,
-      endDateTime: end,
+      startDateTime: resolvedStart,
+      endDateTime: endDateTime,
       orders: orders,
-      generatedAt: DateTime.now(),
+      generatedAt: endDateTime,
+      explicitWhatsappOrdersCount: whatsappCount,
+    );
+  }
+
+  /// Legacy method kept for backwards compatibility.
+  Future<MonthlyReportData> fetchMonthlyShopReportData({
+    required String shopId,
+    required String shopName,
+    required DateTime month,
+  }) async {
+    final boundaries = getMonthBoundaries(month);
+    return fetchShopStatementData(
+      shopId: shopId,
+      shopName: shopName,
+      startDateTime: boundaries.start,
+      endDateTime: boundaries.end,
     );
   }
 
@@ -190,10 +300,10 @@ class ReportService {
   // ── PDF GENERATION (Professional Bill / Statement Style) ───────────────────
   // ════════════════════════════════════════════════════════════════════════════
 
-  /// Generates a professional multi-page PDF statement for the selected shop and month.
+  /// Generates a professional multi-page PDF statement for the selected shop and statement window.
   Future<Uint8List> generatePdfReport(MonthlyReportData data) async {
     final pdf = pw.Document(
-      title: getReportFileName(data.shopName, data.month, 'pdf'),
+      title: getStatementFileName(data.shopName, data.endDateTime, 'pdf'),
       author: 'YummBU Admin Panel',
     );
 
@@ -288,7 +398,7 @@ class ReportService {
                 border: pw.Border.all(color: borderColor),
               ),
               child: pw.Text(
-                'No orders recorded for this shop in the selected billing period.',
+                'No orders recorded for this shop in the statement period.',
                 style: pw.TextStyle(
                   color: textMuted,
                   fontSize: 11,
@@ -432,7 +542,7 @@ class ReportService {
 
           pw.SizedBox(height: 20),
 
-          // ── Final Statement Totals Box ──
+          // ── Final Statement Totals Box (Standardized Closed Order Value, No Cancelled) ──
           pw.Container(
             padding: const pw.EdgeInsets.all(12),
             decoration: pw.BoxDecoration(
@@ -451,7 +561,7 @@ class ReportService {
                       style: pw.TextStyle(font: fontBold, fontSize: 10, color: darkHeader),
                     ),
                     pw.Text(
-                      'Total Orders: ${data.totalOrdersCount}  |  Delivered: ${data.deliveredOrdersCount}  |  Rejected: ${data.rejectedOrdersCount}  |  Cancelled: ${data.cancelledOrdersCount}',
+                      'Total Closed: ${data.totalOrdersCount}  |  Delivered: ${data.deliveredOrdersCount}  |  Rejected: ${data.rejectedOrdersCount}  |  Expired: ${data.expiredOrdersCount}  |  WhatsApp: ${data.whatsappOrdersCount}',
                       style: pw.TextStyle(fontSize: 8, color: textMuted),
                     ),
                   ],
@@ -464,7 +574,7 @@ class ReportService {
                       style: pw.TextStyle(font: fontBold, fontSize: 11, color: successColor),
                     ),
                     pw.Text(
-                      'Gross Order Value: Rs.${data.grossOrderValue.toStringAsFixed(0)}',
+                      'Closed Order Value: Rs.${data.closedOrderValue.toStringAsFixed(0)}',
                       style: pw.TextStyle(fontSize: 8.5, color: textMuted),
                     ),
                   ],
@@ -517,7 +627,7 @@ class ReportService {
                     ),
                     pw.SizedBox(width: 8),
                     pw.Text(
-                      'MONTHLY VENDOR STATEMENT',
+                      'VENDOR STATEMENT',
                       style: pw.TextStyle(
                         font: fontBold,
                         fontSize: 13,
@@ -603,7 +713,7 @@ class ReportService {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            'MONTHLY PERFORMANCE SUMMARY',
+            'STATEMENT PERFORMANCE SUMMARY',
             style: pw.TextStyle(
               font: fontBold,
               fontSize: 10,
@@ -615,13 +725,11 @@ class ReportService {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              _buildMetricTile('Total Orders', '${data.totalOrdersCount}', darkHeader, fontBold),
+              _buildMetricTile('Total Closed', '${data.totalOrdersCount}', darkHeader, fontBold),
               _buildMetricTile('Delivered / Completed', '${data.deliveredOrdersCount}', successColor, fontBold),
               _buildMetricTile('Rejected', '${data.rejectedOrdersCount}', errorColor, fontBold),
-              _buildMetricTile('Cancelled', '${data.cancelledOrdersCount}', errorColor, fontBold),
               _buildMetricTile('Expired', '${data.expiredOrdersCount}', amberColor, fontBold),
-              if (data.activeOrdersCount > 0)
-                _buildMetricTile('Active', '${data.activeOrdersCount}', amberColor, fontBold),
+              _buildMetricTile('WhatsApp Orders', '${data.whatsappOrdersCount}', primaryColor, fontBold),
             ],
           ),
           pw.SizedBox(height: 10),
@@ -634,15 +742,15 @@ class ReportService {
                 text: pw.TextSpan(
                   children: [
                     pw.TextSpan(
-                      text: 'Gross Order Value: ',
+                      text: 'Closed Order Value: ',
                       style: pw.TextStyle(font: fontSemiBold, fontSize: 9, color: darkHeader),
                     ),
                     pw.TextSpan(
-                      text: 'Rs.${data.grossOrderValue.toStringAsFixed(0)}',
+                      text: 'Rs.${data.closedOrderValue.toStringAsFixed(0)}',
                       style: pw.TextStyle(font: fontBold, fontSize: 10, color: darkHeader),
                     ),
                     pw.TextSpan(
-                      text: ' (${data.totalItemsOrdered} items ordered)',
+                      text: ' (${data.totalItemsInClosedOrders} items)',
                       style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
                     ),
                   ],
@@ -754,7 +862,7 @@ class ReportService {
       alignment: pw.Alignment.center,
       padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: pw.BoxDecoration(
-        color: color.luminance > 0.5 ? color : color,
+        color: color,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
       ),
       child: pw.Text(
@@ -912,28 +1020,30 @@ class ReportService {
     }
 
     // Title
-    addRow([(text: 'YummBU — Monthly Shop Statement', style: 2, isNum: false)]);
+    addRow([(text: 'YummBU — Vendor Statement', style: 2, isNum: false)]);
     r++; // Empty row
 
     // Metadata
     addRow([(text: 'Shop Name', style: 1, isNum: false), (text: data.shopName, style: 3, isNum: false)]);
     addRow([(text: 'Shop ID', style: 1, isNum: false), (text: data.shopId, style: 3, isNum: false)]);
-    addRow([(text: 'Billing Period', style: 1, isNum: false), (text: data.formattedPeriod, style: 3, isNum: false)]);
+    addRow([(text: 'Statement Period', style: 1, isNum: false), (text: data.formattedPeriod, style: 3, isNum: false)]);
     addRow([(text: 'Report Generated At', style: 1, isNum: false), (text: DateFormat('yyyy-MM-dd HH:mm:ss').format(data.generatedAt), style: 3, isNum: false)]);
     r++; // Empty row
 
-    // KPIs Table Header
+    // KPIs Table Header (No Cancelled, No Gross Order Value)
     addRow([(text: 'Performance Metric', style: 1, isNum: false), (text: 'Value', style: 1, isNum: false)]);
-    addRow([(text: 'Total Orders Placed', style: 3, isNum: false), (text: '${data.totalOrdersCount}', style: 3, isNum: true)]);
+    addRow([(text: 'Total Closed Orders', style: 3, isNum: false), (text: '${data.totalOrdersCount}', style: 3, isNum: true)]);
     addRow([(text: 'Delivered / Completed Orders', style: 3, isNum: false), (text: '${data.deliveredOrdersCount}', style: 3, isNum: true)]);
     addRow([(text: 'Rejected Orders', style: 3, isNum: false), (text: '${data.rejectedOrdersCount}', style: 3, isNum: true)]);
-    addRow([(text: 'Cancelled Orders', style: 3, isNum: false), (text: '${data.cancelledOrdersCount}', style: 3, isNum: true)]);
     addRow([(text: 'Delivery Expired Orders', style: 3, isNum: false), (text: '${data.expiredOrdersCount}', style: 3, isNum: true)]);
-    addRow([(text: 'Active / Other Orders', style: 3, isNum: false), (text: '${data.activeOrdersCount + data.otherOrdersCount}', style: 3, isNum: true)]);
+    addRow([(text: 'WhatsApp Orders', style: 3, isNum: false), (text: '${data.whatsappOrdersCount}', style: 3, isNum: true)]);
+    if (data.otherOrdersCount > 0) {
+      addRow([(text: 'Other Closed Orders', style: 3, isNum: false), (text: '${data.otherOrdersCount}', style: 3, isNum: true)]);
+    }
     addRow([(text: 'Total Items Delivered', style: 3, isNum: false), (text: '${data.totalItemsDelivered}', style: 3, isNum: true)]);
-    addRow([(text: 'Total Items Ordered (Gross)', style: 3, isNum: false), (text: '${data.totalItemsOrdered}', style: 3, isNum: true)]);
+    addRow([(text: 'Total Items in Closed Orders', style: 3, isNum: false), (text: '${data.totalItemsInClosedOrders}', style: 3, isNum: true)]);
     addRow([(text: 'Delivered / Completed Sales (INR)', style: 1, isNum: false), (text: data.deliveredSalesValue.toStringAsFixed(0), style: 4, isNum: true)]);
-    addRow([(text: 'Gross Order Value (INR)', style: 1, isNum: false), (text: data.grossOrderValue.toStringAsFixed(0), style: 4, isNum: true)]);
+    addRow([(text: 'Closed Order Value (INR)', style: 1, isNum: false), (text: data.closedOrderValue.toStringAsFixed(0), style: 4, isNum: true)]);
 
     return '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
@@ -1085,13 +1195,22 @@ class ReportService {
   // ── EXPORT & SHARE ACTIONS ────────────────────────────────────────────────
   // ════════════════════════════════════════════════════════════════════════════
 
-  /// Exports and opens the PDF statement via print / native share sheet.
+  /// Exports and opens the PDF statement via direct browser download on web, or native share sheet on mobile.
   Future<void> exportPdf({
     required MonthlyReportData data,
     required BuildContext context,
   }) async {
     final pdfBytes = await generatePdfReport(data);
-    final filename = getReportFileName(data.shopName, data.month, 'pdf');
+    final filename = getStatementFileName(data.shopName, data.endDateTime, 'pdf');
+
+    if (kIsWeb) {
+      await downloadFileToBrowser(
+        bytes: pdfBytes,
+        fileName: filename,
+        mimeType: 'application/pdf',
+      );
+      return;
+    }
 
     await Printing.sharePdf(
       bytes: pdfBytes,
@@ -1099,25 +1218,38 @@ class ReportService {
     );
   }
 
-  /// Exports and shares the XLSX workbook file.
+  /// Exports and shares the XLSX workbook file via direct browser download on web, or native share on mobile.
   Future<void> exportXlsx({
     required MonthlyReportData data,
     required BuildContext context,
   }) async {
     final xlsxBytes = generateXlsxReport(data);
-    final filename = getReportFileName(data.shopName, data.month, 'xlsx');
+    final filename = getStatementFileName(data.shopName, data.endDateTime, 'xlsx');
+
+    if (kIsWeb) {
+      await downloadFileToBrowser(
+        bytes: xlsxBytes,
+        fileName: filename,
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      return;
+    }
 
     final xFile = XFile.fromData(
       xlsxBytes,
       name: filename,
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
 
     await SharePlus.instance.share(
       ShareParams(
         files: [xFile],
-        subject: 'YummBU Monthly Statement - ${data.shopName} (${DateFormat('MMMM yyyy').format(data.month)})',
-        text: 'Attached is the monthly order statement workbook for ${data.shopName}.',
+        subject:
+            'YummBU Vendor Statement - ${data.shopName} (${data.formattedPeriod})',
+        text:
+            'Attached is the vendor statement workbook for ${data.shopName}.',
       ),
     );
   }

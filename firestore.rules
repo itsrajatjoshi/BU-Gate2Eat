@@ -76,6 +76,13 @@ service cloud.firestore {
 
       // Stats documents should not be deleted (only reset to 0)
       allow delete: if false;
+
+      // Monthly stats subcollection for month-specific WhatsApp counters
+      match /monthlyStats/{monthKey} {
+        allow read: if true;
+        allow create, update: if true;
+        allow delete: if false;
+      }
     }
 
     // ─── 3. SHOPS & MENU ITEMS ─────────────────────────────────────────

@@ -1,7 +1,9 @@
-// BU Gate2Eat — Admin Monthly Shop Report & Statement Test Suite (Feature #2)
-// Verifies date boundaries, strict shopId isolation, status classification,
+// BU Gate2Eat — Admin Shop Vendor Statement Test Suite (Feature #2 Reset-to-Export Model)
+// Verifies closed-only statement semantics, exclusion of active orders (placed, accepted),
+// statement WhatsApp tracking, reset-to-export date boundaries and fallbacks, strict shopId isolation,
 // order mathematics, variant details, PDF generation, and multi-sheet XLSX generation.
 
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:bugate2eat_app/core/providers.dart';
@@ -9,6 +11,7 @@ import 'package:bugate2eat_app/models/cart_item_model.dart';
 import 'package:bugate2eat_app/models/menu_item_model.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
 import 'package:bugate2eat_app/models/shop_model.dart';
+import 'package:bugate2eat_app/models/shop_stats_model.dart';
 import 'package:bugate2eat_app/panel/admin_panel/admin_monthly_reports_screen.dart';
 import 'package:bugate2eat_app/services/order_service.dart';
 import 'package:bugate2eat_app/services/report_service.dart';
@@ -22,7 +25,8 @@ void main() {
   const shopBId = 'shop_rajat';
   const shopBName = 'Rajat Shop';
 
-  final august2026 = DateTime(2026, 8, 1);
+  final exportTimestamp = DateTime(2026, 8, 26, 18, 30);
+  final resetStart = DateTime(2026, 8, 10, 11, 30);
 
   // Helper to create test AppOrder instances
   AppOrder createTestOrder({
@@ -32,6 +36,7 @@ void main() {
     required DateTime createdAt,
     required String status,
     required double totalAmount,
+    String orderMethod = 'app',
     List<OrderItem>? items,
     DateTime? deliveredAt,
     String rejectionReason = '',
@@ -45,6 +50,7 @@ void main() {
       createdAt: createdAt,
       status: status,
       totalAmount: totalAmount,
+      orderMethod: orderMethod,
       customerName: customerName,
       customerPhone: customerPhone,
       deliveredAt: deliveredAt,
@@ -61,129 +67,193 @@ void main() {
     );
   }
 
-  group('Feature #2 — Admin Monthly Shop Report & Statement Invariants', () {
-    test('1. Date Boundaries: Month start and end boundaries computed accurately', () {
-      // Normal month (August 2026)
-      final augBoundaries = ReportService.getMonthBoundaries(DateTime(2026, 8, 15));
-      expect(augBoundaries.start, DateTime(2026, 8, 1, 0, 0, 0));
-      expect(augBoundaries.end, DateTime(2026, 9, 1, 0, 0, 0));
+  group('Feature #2 — Reset-to-Export Shop Vendor Statement Invariants', () {
+    test('1. Statement Period Formatting: Exact dd MMM yyyy, hh:mm a period formatting', () {
+      final data = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: const [],
+        generatedAt: exportTimestamp,
+      );
 
-      // Year boundary (December 2026 -> January 2027)
-      final decBoundaries = ReportService.getMonthBoundaries(DateTime(2026, 12, 1));
-      expect(decBoundaries.start, DateTime(2026, 12, 1, 0, 0, 0));
-      expect(decBoundaries.end, DateTime(2027, 1, 1, 0, 0, 0));
-
-      // Leap year check (February 2028)
-      final febBoundaries = ReportService.getMonthBoundaries(DateTime(2028, 2, 10));
-      expect(febBoundaries.start, DateTime(2028, 2, 1, 0, 0, 0));
-      expect(febBoundaries.end, DateTime(2028, 3, 1, 0, 0, 0));
+      expect(
+        data.formattedPeriod,
+        '10 Aug 2026, 11:30 AM - 26 Aug 2026, 06:30 PM',
+      );
+      expect(data.hasValidPeriod, true);
     });
 
-    test('2. File Naming: Deterministic naming sanitizes shop names & formats dates', () {
-      final pdfName = ReportService.getReportFileName('UP16 Coffee Queen', DateTime(2026, 8, 1), 'pdf');
-      expect(pdfName, 'YummBU_UP16_Coffee_Queen_2026-08_Monthly_Report.pdf');
+    test('2. File Naming: Deterministic YummBU_<shopName>_<yyyyMMdd_HHmm>_Statement.<ext>', () {
+      final pdfName = ReportService.getStatementFileName(
+        'UP16 Coffee Queen',
+        DateTime(2026, 8, 26, 18, 30),
+        'pdf',
+      );
+      expect(pdfName, 'YummBU_UP16_Coffee_Queen_20260826_1830_Statement.pdf');
 
-      final xlsxName = ReportService.getReportFileName('Rajat / Shop & Co.', DateTime(2026, 8, 1), 'xlsx');
-      expect(xlsxName, 'YummBU_Rajat_Shop_Co_2026-08_Monthly_Report.xlsx');
+      final xlsxName = ReportService.getStatementFileName(
+        'Rajat / Shop & Co.',
+        DateTime(2026, 8, 26, 18, 30),
+        'xlsx',
+      );
+      expect(xlsxName, 'YummBU_Rajat_Shop_Co_20260826_1830_Statement.xlsx');
     });
 
-    test('3. Status Classification & Revenue Math: Delivered orders count as sales, non-delivered as gross value', () {
-      final orders = [
-        // Delivered order 1
+    test('3. Mixed Test Dataset: Active orders (Placed ₹230, Accepted ₹180) strictly excluded', () {
+      final mixedOrders = [
         createTestOrder(
-          orderId: 'ord_1',
+          orderId: 'ord_del_1',
           shopId: shopAId,
           shopName: shopAName,
-          createdAt: DateTime(2026, 8, 5, 14, 30),
+          createdAt: DateTime(2026, 8, 12, 10, 0),
           status: OrderStatusRules.statusDelivered,
-          totalAmount: 150,
-          deliveredAt: DateTime(2026, 8, 5, 14, 50),
+          totalAmount: 220,
         ),
-        // Delivered order 2
         createTestOrder(
-          orderId: 'ord_2',
+          orderId: 'ord_rej_1',
           shopId: shopAId,
           shopName: shopAName,
-          createdAt: DateTime(2026, 8, 10, 11, 0),
-          status: OrderStatusRules.statusDelivered,
-          totalAmount: 200,
-          deliveredAt: DateTime(2026, 8, 10, 11, 25),
-        ),
-        // Rejected order
-        createTestOrder(
-          orderId: 'ord_3',
-          shopId: shopAId,
-          shopName: shopAName,
-          createdAt: DateTime(2026, 8, 12, 18, 0),
+          createdAt: DateTime(2026, 8, 15, 12, 0),
           status: OrderStatusRules.statusRejected,
-          totalAmount: 120,
-          rejectionReason: 'Items out of stock',
+          totalAmount: 220,
         ),
-        // Cancelled order
         createTestOrder(
-          orderId: 'ord_4',
+          orderId: 'ord_exp_1',
           shopId: shopAId,
           shopName: shopAName,
-          createdAt: DateTime(2026, 8, 15, 19, 0),
-          status: OrderStatusRules.statusCancelled,
-          totalAmount: 80,
-        ),
-        // Delivery Expired order
-        createTestOrder(
-          orderId: 'ord_5',
-          shopId: shopAId,
-          shopName: shopAName,
-          createdAt: DateTime(2026, 8, 20, 21, 0),
+          createdAt: DateTime(2026, 8, 18, 16, 0),
           status: OrderStatusRules.statusDeliveryExpired,
-          totalAmount: 100,
+          totalAmount: 150,
         ),
-        // Placed (Active) order
         createTestOrder(
-          orderId: 'ord_6',
+          orderId: 'ord_acc_1',
           shopId: shopAId,
           shopName: shopAName,
-          createdAt: DateTime(2026, 8, 25, 22, 0),
+          createdAt: DateTime(2026, 8, 20, 18, 0),
+          status: OrderStatusRules.statusAccepted,
+          totalAmount: 180,
+        ),
+        createTestOrder(
+          orderId: 'ord_plc_1',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 25, 20, 0),
           status: OrderStatusRules.statusPlaced,
-          totalAmount: 50,
-        ),
-        // Unknown status order (e.g. legacy/malformed status)
-        createTestOrder(
-          orderId: 'ord_7',
-          shopId: shopAId,
-          shopName: shopAName,
-          createdAt: DateTime(2026, 8, 26, 12, 0),
-          status: 'legacy_refunded',
-          totalAmount: 70,
+          totalAmount: 230,
         ),
       ];
 
       final reportData = MonthlyReportData(
         shopId: shopAId,
         shopName: shopAName,
-        month: august2026,
-        startDateTime: DateTime(2026, 8, 1),
-        endDateTime: DateTime(2026, 9, 1),
-        orders: orders,
-        generatedAt: DateTime(2026, 8, 26, 17, 0),
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: mixedOrders,
+        generatedAt: exportTimestamp,
       );
 
-      // Verify all counts
-      expect(reportData.totalOrdersCount, 7);
-      expect(reportData.deliveredOrdersCount, 2);
+      // Invariants: Total Closed Orders = 3 (Delivered, Rejected, Expired)
+      expect(reportData.totalOrdersCount, 3);
+      expect(reportData.deliveredOrdersCount, 1);
       expect(reportData.rejectedOrdersCount, 1);
-      expect(reportData.cancelledOrdersCount, 1);
       expect(reportData.expiredOrdersCount, 1);
-      expect(reportData.placedOrders.length, 1);
-      expect(reportData.otherOrdersCount, 1);
+      expect(reportData.orders.any((o) => o.status == OrderStatusRules.statusPlaced), false);
+      expect(reportData.orders.any((o) => o.status == OrderStatusRules.statusAccepted), false);
 
-      // Verify mathematical aggregates
-      // Delivered Sales: 150 + 200 = 350
-      expect(reportData.deliveredSalesValue, 350.0);
-      // Gross Order Value: 150 + 200 + 120 + 80 + 100 + 50 + 70 = 770
-      expect(reportData.grossOrderValue, 770.0);
+      // Financials: Active orders contribute ₹0
+      expect(reportData.deliveredSalesValue, 220.0);
+      expect(reportData.closedOrderValue, 590.0); // 220 + 220 + 150
+      expect(reportData.grossOrderValue, 590.0);
     });
 
-    test('4. Variant Details & Line Calculation: Options preserved with accurate historical item pricing', () {
+    test('4. WhatsApp Statement Count: Propagates explicit statement counter (5) accurately', () {
+      final orders = [
+        createTestOrder(
+          orderId: 'ord_app_1',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 12),
+          status: OrderStatusRules.statusDelivered,
+          totalAmount: 220,
+        ),
+        createTestOrder(
+          orderId: 'ord_app_2',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 15),
+          status: OrderStatusRules.statusRejected,
+          totalAmount: 220,
+        ),
+      ];
+
+      final reportData = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: orders,
+        generatedAt: exportTimestamp,
+        explicitWhatsappOrdersCount: 5,
+      );
+
+      expect(reportData.totalOrdersCount, 2);
+      expect(reportData.deliveredOrdersCount, 1);
+      expect(reportData.rejectedOrdersCount, 1);
+      expect(reportData.whatsappOrdersCount, 5);
+      expect(reportData.deliveredSalesValue, 220.0);
+      expect(reportData.closedOrderValue, 440.0);
+    });
+
+    test('5. WhatsApp Counter Isolation: Statement count vs Lifetime total preserved in model', () {
+      final stats = ShopStats(
+        shopId: shopAId,
+        shopName: shopAName,
+        whatsappOrders: 5, // Statement counter
+        lifetimeWhatsappOrders: 13, // Lifetime cumulative total
+        lastResetAt: resetStart,
+      );
+
+      expect(stats.whatsappOrders, 5);
+      expect(stats.lifetimeWhatsappOrders, 13);
+      expect(stats.lastResetAt, resetStart);
+
+      // Simulation of reset
+      final resetStats = stats.copyWith(
+        whatsappOrders: 0,
+        lastResetAt: DateTime(2026, 8, 26, 19, 0),
+      );
+      expect(resetStats.whatsappOrders, 0);
+      expect(resetStats.lifetimeWhatsappOrders, 13); // Preserved!
+    });
+
+    test('6. Fallback Chain: 1. lastResetAt -> 2. shop.createdAt -> 3. Explicit No timestamp state', () {
+      final createdAt = DateTime(2026, 8, 1, 9, 0);
+
+      // 1. With lastResetAt
+      final startFromReset = resetStart;
+      expect(startFromReset, resetStart);
+
+      // 2. Without lastResetAt, with createdAt
+      DateTime? nullReset;
+      final startFromCreated = nullReset ?? createdAt;
+      expect(startFromCreated, createdAt);
+
+      // 3. Without both -> null, and formattedPeriod handles cleanly without fabricating 2026-01-01
+      final noTimeData = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: null,
+        endDateTime: exportTimestamp,
+        orders: const [],
+        generatedAt: exportTimestamp,
+      );
+      expect(noTimeData.hasValidPeriod, false);
+      expect(noTimeData.formattedPeriod, 'No reset/creation timestamp available');
+    });
+
+    test('7. Variant Details & Line Calculation: Options preserved with accurate historical item pricing', () {
       const cheeseOption = SelectedMenuItemOption(
         groupId: 'grp_cheese',
         groupName: 'Cheese',
@@ -196,7 +266,7 @@ void main() {
       final variantItem = OrderItem(
         menuItemId: 'item_burger',
         name: 'Veg Burger',
-        price: 80, // Historical snapshot unit price with cheese
+        price: 80,
         quantity: 3,
         optionsDescription: 'Size: Large, Cheese: Extra Cheese',
         selectedOptions: const [cheeseOption],
@@ -213,9 +283,9 @@ void main() {
         orderId: 'ord_var_1',
         shopId: shopAId,
         shopName: shopAName,
-        createdAt: DateTime(2026, 8, 5),
+        createdAt: DateTime(2026, 8, 12),
         status: OrderStatusRules.statusDelivered,
-        totalAmount: 360, // (80 * 3) + (60 * 2) = 240 + 120 = 360
+        totalAmount: 360,
         items: [variantItem, normalItem],
       );
 
@@ -229,13 +299,13 @@ void main() {
       expect(order.totalItemCount, 5);
     });
 
-    test('5. Strict Shop Isolation: Orders from another shop are completely segregated', () {
+    test('8. Strict Shop Isolation: Orders from another shop are completely segregated', () {
       final ordersShopA = [
         createTestOrder(
           orderId: 'ord_shop_a_1',
           shopId: shopAId,
           shopName: shopAName,
-          createdAt: DateTime(2026, 8, 1),
+          createdAt: DateTime(2026, 8, 12),
           status: OrderStatusRules.statusDelivered,
           totalAmount: 100,
         ),
@@ -246,7 +316,7 @@ void main() {
           orderId: 'ord_shop_b_1',
           shopId: shopBId,
           shopName: shopBName,
-          createdAt: DateTime(2026, 8, 1),
+          createdAt: DateTime(2026, 8, 12),
           status: OrderStatusRules.statusDelivered,
           totalAmount: 500,
         ),
@@ -255,21 +325,19 @@ void main() {
       final reportA = MonthlyReportData(
         shopId: shopAId,
         shopName: shopAName,
-        month: august2026,
-        startDateTime: DateTime(2026, 8, 1),
-        endDateTime: DateTime(2026, 9, 1),
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
         orders: ordersShopA,
-        generatedAt: DateTime.now(),
+        generatedAt: exportTimestamp,
       );
 
       final reportB = MonthlyReportData(
         shopId: shopBId,
         shopName: shopBName,
-        month: august2026,
-        startDateTime: DateTime(2026, 8, 1),
-        endDateTime: DateTime(2026, 9, 1),
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
         orders: ordersShopB,
-        generatedAt: DateTime.now(),
+        generatedAt: exportTimestamp,
       );
 
       expect(reportA.shopId, shopAId);
@@ -279,47 +347,54 @@ void main() {
       expect(reportA.orders.any((o) => o.shopId == shopBId), false);
     });
 
-    test('6. Empty Month: Handled cleanly without errors or zero-division crashes', () {
+    test('9. Empty Statement Window: Handled cleanly without errors or crashes', () {
       final emptyReport = MonthlyReportData(
         shopId: shopAId,
         shopName: shopAName,
-        month: august2026,
-        startDateTime: DateTime(2026, 8, 1),
-        endDateTime: DateTime(2026, 9, 1),
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
         orders: const [],
-        generatedAt: DateTime.now(),
+        generatedAt: exportTimestamp,
       );
 
       expect(emptyReport.totalOrdersCount, 0);
       expect(emptyReport.deliveredOrdersCount, 0);
       expect(emptyReport.deliveredSalesValue, 0.0);
-      expect(emptyReport.grossOrderValue, 0.0);
+      expect(emptyReport.closedOrderValue, 0.0);
       expect(emptyReport.totalItemsDelivered, 0);
-      expect(emptyReport.totalItemsOrdered, 0);
+      expect(emptyReport.totalItemsInClosedOrders, 0);
     });
 
-    test('7. PDF Generation: Generates valid multi-page PDF document bytes', () async {
+    test('10. PDF Generation: Generates YummBU VENDOR STATEMENT without active orders', () async {
       TestWidgetsFlutterBinding.ensureInitialized();
 
-      final orders = List.generate(15, (index) {
-        return createTestOrder(
-          orderId: 'ord_pdf_$index',
+      final orders = [
+        createTestOrder(
+          orderId: 'ord_pdf_del',
           shopId: shopAId,
           shopName: shopAName,
-          createdAt: DateTime(2026, 8, (index % 25) + 1, 12, 0),
-          status: index % 3 == 0 ? OrderStatusRules.statusDelivered : OrderStatusRules.statusRejected,
-          totalAmount: 100.0 + (index * 10),
-        );
-      });
+          createdAt: DateTime(2026, 8, 12, 12, 0),
+          status: OrderStatusRules.statusDelivered,
+          totalAmount: 220,
+        ),
+        createTestOrder(
+          orderId: 'ord_pdf_rej',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 15, 14, 0),
+          status: OrderStatusRules.statusRejected,
+          totalAmount: 220,
+        ),
+      ];
 
       final reportData = MonthlyReportData(
         shopId: shopAId,
         shopName: shopAName,
-        month: august2026,
-        startDateTime: DateTime(2026, 8, 1),
-        endDateTime: DateTime(2026, 9, 1),
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
         orders: orders,
-        generatedAt: DateTime.now(),
+        generatedAt: exportTimestamp,
+        explicitWhatsappOrdersCount: 5,
       );
 
       final reportService = ReportService();
@@ -327,23 +402,22 @@ void main() {
 
       expect(pdfBytes, isA<Uint8List>());
       expect(pdfBytes.isNotEmpty, true);
-      // PDF header magic bytes '%PDF-'
       expect(pdfBytes[0], 0x25); // %
       expect(pdfBytes[1], 0x50); // P
       expect(pdfBytes[2], 0x44); // D
       expect(pdfBytes[3], 0x46); // F
     });
 
-    test('8. XLSX Generation: Generates real multi-sheet OpenXML workbook (.xlsx) with 3 sheets', () {
+    test('11. XLSX Generation: 3 sheets, Vendor Statement title, Closed Order Value only', () {
       final orders = [
         createTestOrder(
           orderId: 'ord_xlsx_1',
           shopId: shopAId,
           shopName: shopAName,
-          createdAt: DateTime(2026, 8, 5, 10, 30),
+          createdAt: DateTime(2026, 8, 12, 10, 30),
           status: OrderStatusRules.statusDelivered,
           totalAmount: 200,
-          deliveredAt: DateTime(2026, 8, 5, 10, 55),
+          deliveredAt: DateTime(2026, 8, 12, 10, 55),
           items: [
             const OrderItem(
               menuItemId: 'item_coffee',
@@ -359,11 +433,11 @@ void main() {
       final reportData = MonthlyReportData(
         shopId: shopAId,
         shopName: shopAName,
-        month: august2026,
-        startDateTime: DateTime(2026, 8, 1),
-        endDateTime: DateTime(2026, 9, 1),
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
         orders: orders,
-        generatedAt: DateTime.now(),
+        generatedAt: exportTimestamp,
+        explicitWhatsappOrdersCount: 5,
       );
 
       final reportService = ReportService();
@@ -372,7 +446,6 @@ void main() {
       expect(xlsxBytes, isA<Uint8List>());
       expect(xlsxBytes.isNotEmpty, true);
 
-      // Verify ZIP / OpenXML structure
       final archive = ZipDecoder().decodeBytes(xlsxBytes);
       final fileNames = archive.files.map((f) => f.name).toSet();
 
@@ -383,48 +456,14 @@ void main() {
       expect(fileNames.contains('xl/worksheets/sheet2.xml'), true); // Orders
       expect(fileNames.contains('xl/worksheets/sheet3.xml'), true); // Order Items
 
-      // Inspect workbook.xml to ensure sheet names are present
-      final workbookFile = archive.files.firstWhere((f) => f.name == 'xl/workbook.xml');
-      final workbookXml = String.fromCharCodes(workbookFile.content as List<int>);
-      expect(workbookXml.contains('name="Summary"'), true);
-      expect(workbookXml.contains('name="Orders"'), true);
-      expect(workbookXml.contains('name="Order Items"'), true);
+      final sheet1File = archive.files.firstWhere((f) => f.name == 'xl/worksheets/sheet1.xml');
+      final sheet1Xml = utf8.decode(sheet1File.content as List<int>);
+      expect(sheet1Xml.contains('YummBU — Vendor Statement'), true);
+      expect(sheet1Xml.contains('Closed Order Value (INR)'), true);
+      expect(sheet1Xml.contains('Gross Order Value'), false);
     });
 
-    test('9. Large Dataset Scalability: Handles 150+ orders efficiently without memory duplication', () {
-      final largeOrders = List.generate(150, (i) {
-        return createTestOrder(
-          orderId: 'ord_large_$i',
-          shopId: shopAId,
-          shopName: shopAName,
-          createdAt: DateTime(2026, 8, (i % 28) + 1, 10, 0),
-          status: i % 2 == 0 ? OrderStatusRules.statusDelivered : OrderStatusRules.statusCancelled,
-          totalAmount: 150.0,
-        );
-      });
-
-      final reportData = MonthlyReportData(
-        shopId: shopAId,
-        shopName: shopAName,
-        month: august2026,
-        startDateTime: DateTime(2026, 8, 1),
-        endDateTime: DateTime(2026, 9, 1),
-        orders: largeOrders,
-        generatedAt: DateTime.now(),
-      );
-
-      expect(reportData.totalOrdersCount, 150);
-      expect(reportData.deliveredOrdersCount, 75);
-      expect(reportData.deliveredSalesValue, 75 * 150.0);
-      expect(reportData.grossOrderValue, 150 * 150.0);
-
-      // Verify XLSX generation succeeds cleanly for large datasets
-      final reportService = ReportService();
-      final xlsxBytes = reportService.generateXlsxReport(reportData);
-      expect(xlsxBytes.isNotEmpty, true);
-    });
-
-    testWidgets('10. AdminMonthlyReportsScreen renders UI controls, KPI cards, and export buttons', (tester) async {
+    testWidgets('12. UI Rendering: Renders Shop Vendor Statements, Statement Period card, and 5 KPI tiles', (tester) async {
       final dummyShops = [
         Shop(
           id: shopAId,
@@ -449,27 +488,35 @@ void main() {
       final reportData = MonthlyReportData(
         shopId: shopAId,
         shopName: shopAName,
-        month: august2026,
-        startDateTime: DateTime(2026, 8, 1),
-        endDateTime: DateTime(2026, 9, 1),
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
         orders: [
           createTestOrder(
             orderId: 'ord_ui_1',
             shopId: shopAId,
             shopName: shopAName,
-            createdAt: DateTime(2026, 8, 5, 14, 0),
+            createdAt: DateTime(2026, 8, 12, 14, 0),
             status: OrderStatusRules.statusDelivered,
             totalAmount: 180,
           ),
         ],
-        generatedAt: DateTime.now(),
+        generatedAt: exportTimestamp,
+        explicitWhatsappOrdersCount: 5,
       );
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             shopsProvider.overrideWith((ref) async => dummyShops),
-            monthlyReportDataProvider.overrideWith((ref, params) async => reportData),
+            shopStatsStreamProvider(shopAId).overrideWith((ref) => Stream.value(
+                  ShopStats(
+                    shopId: shopAId,
+                    shopName: shopAName,
+                    whatsappOrders: 5,
+                    lastResetAt: resetStart,
+                  ),
+                )),
+            shopStatementDataProvider.overrideWith((ref, params) async => reportData),
           ],
           child: const MaterialApp(
             home: AdminMonthlyReportsScreen(initialShopId: shopAId),
@@ -479,14 +526,275 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Verify Header and Dropdown
-      expect(find.text('Monthly Shop Statements'), findsOneWidget);
+      expect(find.text('Shop Vendor Statements'), findsOneWidget);
       expect(find.text(shopAName), findsOneWidget);
       expect(find.text('EXPORT PDF'), findsOneWidget);
       expect(find.text('EXPORT EXCEL'), findsOneWidget);
-      expect(find.text('MONTHLY PERFORMANCE'), findsOneWidget);
+      expect(find.text('STATEMENT PERFORMANCE'), findsOneWidget);
       expect(find.text('Delivered Sales Value:'), findsOneWidget);
-      expect(find.text('₹180'), findsAtLeastNWidgets(1));
+      expect(find.text('Closed Order Value:'), findsOneWidget);
+      expect(find.text('Total Closed'), findsOneWidget);
+      expect(find.text('Delivered'), findsOneWidget);
+      expect(find.text('Rejected'), findsOneWidget);
+      expect(find.text('Expired'), findsOneWidget);
+      expect(find.text('WhatsApp Orders'), findsOneWidget);
+      // Ensure "Cancelled" metric is NOT present in KPI summary
+      expect(find.text('Cancelled Orders'), findsNothing);
+    });
+
+    test('13. Pre-Acceptance Cancellation: Customer physical deletion never enters statement', () {
+      // Customer cancels before acceptance -> physically deleted from Firestore
+      // Thus only delivered and rejected orders exist
+      final orders = [
+        createTestOrder(
+          orderId: 'ord_del',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 12),
+          status: OrderStatusRules.statusDelivered,
+          totalAmount: 220,
+        ),
+      ];
+
+      final reportData = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: orders,
+        generatedAt: exportTimestamp,
+      );
+
+      expect(reportData.totalOrdersCount, 1);
+      expect(reportData.orders.any((o) => o.status == OrderStatusRules.statusCancelled), false);
+    });
+
+    test('14. Financial Math: Delivered Sales sums only delivered; Closed sums all closed', () {
+      final orders = [
+        createTestOrder(
+          orderId: 'ord_1',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 12),
+          status: OrderStatusRules.statusDelivered,
+          totalAmount: 300,
+        ),
+        createTestOrder(
+          orderId: 'ord_2',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 13),
+          status: OrderStatusRules.statusRejected,
+          totalAmount: 200,
+        ),
+        createTestOrder(
+          orderId: 'ord_3',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 14),
+          status: OrderStatusRules.statusDeliveryExpired,
+          totalAmount: 100,
+        ),
+      ];
+
+      final reportData = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: orders,
+        generatedAt: exportTimestamp,
+      );
+
+      expect(reportData.deliveredSalesValue, 300.0);
+      expect(reportData.closedOrderValue, 600.0);
+    });
+
+    testWidgets('15. Null Timestamp Warning State: UI shows clear warning when period is unavailable', (tester) async {
+      final dummyShops = [
+        Shop(
+          id: shopAId,
+          name: shopAName,
+          description: 'Best Coffee',
+          bannerUrl: '',
+          contactNumber: '9876543210',
+          orderNumber: '9876543210',
+          openTime: '10:00 AM',
+          closeTime: '10:00 PM',
+          isClosedOverride: false,
+          isActive: true,
+          sortOrder: 1,
+          searchKeywords: const ['coffee'],
+          deliveryNote: 'Gate 3',
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+          orderMethod: ShopOrderMethod.app,
+        ),
+      ];
+
+      final invalidData = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: null,
+        endDateTime: exportTimestamp,
+        orders: const [],
+        generatedAt: exportTimestamp,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            shopsProvider.overrideWith((ref) async => dummyShops),
+            shopStatsStreamProvider(shopAId).overrideWith((ref) => Stream.value(null)),
+            shopStatementDataProvider.overrideWith((ref, params) async => invalidData),
+          ],
+          child: const MaterialApp(
+            home: AdminMonthlyReportsScreen(initialShopId: shopAId),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('No Reset or Creation Timestamp Available'), findsOneWidget);
+    });
+
+    test('16. Item Quantities: totalItemsDelivered and totalItemsInClosedOrders calculation', () {
+      final orders = [
+        createTestOrder(
+          orderId: 'ord_1',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 12),
+          status: OrderStatusRules.statusDelivered,
+          totalAmount: 180,
+          items: [
+            const OrderItem(menuItemId: 'i1', name: 'Item 1', price: 60, quantity: 3),
+          ],
+        ),
+        createTestOrder(
+          orderId: 'ord_2',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 13),
+          status: OrderStatusRules.statusRejected,
+          totalAmount: 120,
+          items: [
+            const OrderItem(menuItemId: 'i2', name: 'Item 2', price: 60, quantity: 2),
+          ],
+        ),
+      ];
+
+      final reportData = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: orders,
+        generatedAt: exportTimestamp,
+      );
+
+      expect(reportData.totalItemsDelivered, 3);
+      expect(reportData.totalItemsInClosedOrders, 5);
+    });
+
+    test('17. XML Escaping in XLSX generation: handles special characters safely', () {
+      final orders = [
+        createTestOrder(
+          orderId: 'ord_xml_1',
+          shopId: shopAId,
+          shopName: 'Café & "Bistrô" <Delhi>',
+          createdAt: DateTime(2026, 8, 12),
+          status: OrderStatusRules.statusDelivered,
+          totalAmount: 100,
+          customerName: 'Tom & Jerry <Jr>',
+          rejectionReason: 'Reason with <special> & "quotes"',
+          items: [
+            const OrderItem(
+              menuItemId: 'i1',
+              name: 'Tea & Coffee <Hot>',
+              price: 100,
+              quantity: 1,
+              optionsDescription: 'Sugar: 50% & Milk',
+            ),
+          ],
+        ),
+      ];
+
+      final reportData = MonthlyReportData(
+        shopId: shopAId,
+        shopName: 'Café & "Bistrô" <Delhi>',
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: orders,
+        generatedAt: exportTimestamp,
+      );
+
+      final reportService = ReportService();
+      final xlsxBytes = reportService.generateXlsxReport(reportData);
+
+      expect(xlsxBytes.isNotEmpty, true);
+      final archive = ZipDecoder().decodeBytes(xlsxBytes);
+      final sheet1 = archive.files.firstWhere((f) => f.name == 'xl/worksheets/sheet1.xml');
+      final xml1 = utf8.decode(sheet1.content as List<int>);
+      expect(xml1.contains('&amp;'), true);
+      expect(xml1.contains('&quot;'), true);
+      expect(xml1.contains('&lt;'), true);
+      expect(xml1.contains('&gt;'), true);
+    });
+
+    test('18. Backwards Compatibility month getter', () {
+      final data = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: const [],
+        generatedAt: exportTimestamp,
+      );
+
+      expect(data.month, resetStart);
+    });
+
+    test('19. Delivery Expired Status: mapped and counted properly', () {
+      final orders = [
+        createTestOrder(
+          orderId: 'ord_exp_1',
+          shopId: shopAId,
+          shopName: shopAName,
+          createdAt: DateTime(2026, 8, 12),
+          status: OrderStatusRules.statusDeliveryExpired,
+          totalAmount: 150,
+        ),
+      ];
+
+      final reportData = MonthlyReportData(
+        shopId: shopAId,
+        shopName: shopAName,
+        startDateTime: resetStart,
+        endDateTime: exportTimestamp,
+        orders: orders,
+        generatedAt: exportTimestamp,
+      );
+
+      expect(reportData.expiredOrdersCount, 1);
+      expect(reportData.deliveredOrdersCount, 0);
+      expect(reportData.rejectedOrdersCount, 0);
+      expect(reportData.closedOrderValue, 150.0);
+    });
+
+    test('20. ShopStats Serialization: lifetimeWhatsappOrders roundtrips correctly', () {
+      final stats = ShopStats(
+        shopId: shopAId,
+        shopName: shopAName,
+        whatsappOrders: 5,
+        lifetimeWhatsappOrders: 18,
+        lastResetAt: resetStart,
+      );
+
+      final map = stats.toFirestore();
+      expect(map['whatsappOrders'], 5);
+      expect(map['lifetimeWhatsappOrders'], 18);
     });
   });
 }

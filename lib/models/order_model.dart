@@ -89,6 +89,7 @@ class AppOrder {
     this.rejectionReason = '',
     this.deliveryPersonId = '',
     this.deliveryPersonName = '',
+    this.orderMethod = 'app',
     this.updatedAt,
     this.acceptedAt,
     this.deliveredAt,
@@ -115,6 +116,8 @@ class AppOrder {
   /// Not exposed to Customer UI — only visible to Shopkeeper and Admin.
   final String deliveryPersonId;
   final String deliveryPersonName;
+  /// Order placement method / source ('app' or 'whatsapp').
+  final String orderMethod;
 
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -127,6 +130,12 @@ class AppOrder {
   final DateTime? acceptDeadline;
   final DateTime? rejectDeadline;
   final DateTime? deliveryDeadline;
+
+  /// Returns true if this order was placed via WhatsApp.
+  bool get isWhatsAppOrder {
+    final m = orderMethod.trim().toLowerCase();
+    return m == 'whatsapp' || m == 'wa';
+  }
 
   int get totalItemCount =>
       items.fold<int>(0, (acc, item) => acc + item.quantity);
@@ -151,6 +160,7 @@ class AppOrder {
     String? rejectionReason,
     String? deliveryPersonId,
     String? deliveryPersonName,
+    String? orderMethod,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? acceptedAt,
@@ -176,6 +186,7 @@ class AppOrder {
       rejectionReason: rejectionReason ?? this.rejectionReason,
       deliveryPersonId: deliveryPersonId ?? this.deliveryPersonId,
       deliveryPersonName: deliveryPersonName ?? this.deliveryPersonName,
+      orderMethod: orderMethod ?? this.orderMethod,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       acceptedAt: acceptedAt ?? this.acceptedAt,
@@ -205,6 +216,7 @@ class AppOrder {
       'deliveryNote': deliveryNote,
       'status': status,
       'rejectionReason': rejectionReason,
+      'orderMethod': orderMethod,
       if (deliveryPersonId.isNotEmpty) 'deliveryPersonId': deliveryPersonId,
       if (deliveryPersonName.isNotEmpty) 'deliveryPersonName': deliveryPersonName,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -268,6 +280,13 @@ class AppOrder {
       rejectionReason: (map['rejectionReason'] as String?) ?? '',
       deliveryPersonId: (map['deliveryPersonId'] as String?) ?? '',
       deliveryPersonName: (map['deliveryPersonName'] as String?) ?? '',
+      orderMethod: (map['orderMethod'] as String?) ??
+          (map['orderType'] as String?) ??
+          (map['orderingMethod'] as String?) ??
+          (map['source'] as String?) ??
+          (map['orderSource'] as String?) ??
+          (map['mode'] as String?) ??
+          ((map['isWhatsApp'] == true) ? 'whatsapp' : 'app'),
       createdAt: _parseDateTime(map['createdAt']),
       updatedAt: _parseNullableDateTime(map['updatedAt']),
       acceptedAt: _parseNullableDateTime(map['acceptedAt']),

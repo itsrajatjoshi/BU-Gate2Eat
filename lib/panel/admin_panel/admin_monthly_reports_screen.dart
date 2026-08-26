@@ -1,6 +1,6 @@
 // BU Gate2Eat — Admin Panel
-// Monthly Shop Reports & Statement Export Screen (Feature #2)
-// Generates professional PDF vendor statements & real XLSX workbooks.
+// Shop Vendor Statements & Export Screen (Feature #2)
+// Generates professional PDF vendor statements & real XLSX workbooks based on exact reset-to-export intervals.
 // Strict admin-only access, shop isolation, and read-only data guarantees.
 
 import 'package:flutter/material.dart';
@@ -12,6 +12,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/order_model.dart';
 import '../../models/shop_model.dart';
+import '../../models/shop_stats_model.dart';
 import '../../services/report_service.dart';
 
 class AdminMonthlyReportsScreen extends ConsumerStatefulWidget {
@@ -29,175 +30,22 @@ class AdminMonthlyReportsScreen extends ConsumerStatefulWidget {
 
 class _AdminMonthlyReportsScreenState
     extends ConsumerState<AdminMonthlyReportsScreen> {
-  late DateTime _selectedMonth;
   String? _selectedShopId;
+  late DateTime _exportTimestamp;
   bool _isExportingPdf = false;
   bool _isExportingXlsx = false;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _selectedMonth = DateTime(now.year, now.month);
     _selectedShopId = widget.initialShopId;
+    _exportTimestamp = DateTime.now();
   }
 
-  void _previousMonth() {
+  void _refreshTimestamp() {
     setState(() {
-      _selectedMonth = DateTime(
-        _selectedMonth.year,
-        _selectedMonth.month - 1,
-      );
+      _exportTimestamp = DateTime.now();
     });
-  }
-
-  void _nextMonth() {
-    setState(() {
-      _selectedMonth = DateTime(
-        _selectedMonth.year,
-        _selectedMonth.month + 1,
-      );
-    });
-  }
-
-  Future<void> _selectMonthDialog() async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    int pickedYear = _selectedMonth.year;
-    int pickedMonth = _selectedMonth.month;
-
-    final result = await showDialog<DateTime>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dialogCtx, setDialogState) {
-            return AlertDialog(
-              backgroundColor: isDark ? AppColors.darkSurface : AppColors.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: const Text(
-                'Select Billing Month',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              content: SizedBox(
-                width: 300,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Year selector
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.chevron_left_rounded),
-                          onPressed: () {
-                            setDialogState(() => pickedYear--);
-                          },
-                        ),
-                        Text(
-                          '$pickedYear',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.chevron_right_rounded),
-                          onPressed: () {
-                            setDialogState(() => pickedYear++);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Month Grid
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: List.generate(12, (index) {
-                        final m = index + 1;
-                        final isSelected =
-                            pickedMonth == m && pickedYear == _selectedMonth.year;
-                        final monthName = DateFormat('MMM').format(DateTime(2026, m));
-
-                        return InkWell(
-                          onTap: () {
-                            setDialogState(() => pickedMonth = m);
-                          },
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            width: 60,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : (isDark
-                                      ? AppColors.darkBackground
-                                      : Colors.grey.shade100),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : (isDark
-                                        ? AppColors.darkDivider
-                                        : AppColors.divider),
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                monthName,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : (isDark
-                                          ? AppColors.darkTextPrimary
-                                          : AppColors.textPrimary),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx, DateTime(pickedYear, pickedMonth));
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    'Select',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (result != null && mounted) {
-      setState(() {
-        _selectedMonth = result;
-      });
-    }
   }
 
   Future<void> _handleExportPdf(MonthlyReportData data) async {
@@ -251,13 +99,20 @@ class _AdminMonthlyReportsScreenState
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.background,
       appBar: AppBar(
         title: const Text(
-          'Monthly Shop Statements',
+          'Shop Vendor Statements',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Statement Window (Now)',
+            onPressed: _refreshTimestamp,
+          ),
+        ],
         elevation: 0,
       ),
       body: shopsAsync.when(
@@ -266,27 +121,29 @@ class _AdminMonthlyReportsScreenState
             return const Center(child: Text('No shops found in system.'));
           }
 
-          // Default selected shop
           if (_selectedShopId == null || !shops.any((s) => s.id == _selectedShopId)) {
             _selectedShopId = shops.first.id;
           }
 
           final selectedShop = shops.firstWhere((s) => s.id == _selectedShopId);
+          final statsAsync = ref.watch(shopStatsStreamProvider(selectedShop.id));
+          final stats = statsAsync.valueOrNull;
+
+          final statementStart = stats?.lastResetAt ?? selectedShop.createdAt;
 
           final reportAsync = ref.watch(
-            monthlyReportDataProvider((
+            shopStatementDataProvider((
               shopId: selectedShop.id,
               shopName: selectedShop.name,
-              month: _selectedMonth,
-            ),),
+              statementStart: statementStart,
+              statementEnd: _exportTimestamp,
+              fallbackCreatedAt: selectedShop.createdAt,
+            )),
           );
 
           return Column(
             children: [
-              // ── Header Controls (Shop Selector + Month Selector) ──
-              _buildFilterHeader(shops, selectedShop, isDark),
-
-              // ── Report Content & Previews ──
+              _buildFilterHeader(shops, selectedShop, stats, statementStart, isDark),
               Expanded(
                 child: reportAsync.when(
                   data: (data) => _buildReportContent(data, isDark),
@@ -301,7 +158,7 @@ class _AdminMonthlyReportsScreenState
                         children: [
                           const Icon(Icons.error_outline, size: 48, color: AppColors.error),
                           const SizedBox(height: 12),
-                          Text('Failed to load report: $err'),
+                          Text('Failed to load statement: $err'),
                         ],
                       ),
                     ),
@@ -319,7 +176,22 @@ class _AdminMonthlyReportsScreenState
     );
   }
 
-  Widget _buildFilterHeader(List<Shop> shops, Shop selectedShop, bool isDark) {
+  Widget _buildFilterHeader(
+    List<Shop> shops,
+    Shop selectedShop,
+    ShopStats? stats,
+    DateTime? statementStart,
+    bool isDark,
+  ) {
+    String startLabel;
+    if (stats?.lastResetAt != null) {
+      startLabel = DateFormat('dd MMM yyyy, hh:mm a').format(stats!.lastResetAt!);
+    } else {
+      startLabel = '${DateFormat('dd MMM yyyy, hh:mm a').format(selectedShop.createdAt)} (Shop Created)';
+    }
+
+    final endLabel = DateFormat('dd MMM yyyy, hh:mm a').format(_exportTimestamp);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
@@ -331,8 +203,8 @@ class _AdminMonthlyReportsScreenState
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Shop Selector Dropdown ──
           Row(
             children: [
               Icon(
@@ -372,7 +244,10 @@ class _AdminMonthlyReportsScreenState
                       }).toList(),
                       onChanged: (newShopId) {
                         if (newShopId != null) {
-                          setState(() => _selectedShopId = newShopId);
+                          setState(() {
+                            _selectedShopId = newShopId;
+                            _exportTimestamp = DateTime.now();
+                          });
                         }
                       },
                     ),
@@ -381,46 +256,67 @@ class _AdminMonthlyReportsScreenState
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
-          // ── Month Selector ──
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_rounded, size: 16),
-                onPressed: _previousMonth,
-                tooltip: 'Previous Month',
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkBackground : Colors.orange.shade50.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark ? AppColors.darkDivider : Colors.orange.shade200,
               ),
-              InkWell(
-                onTap: _selectMonthDialog,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Row(
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.history_toggle_off_rounded, size: 20, color: AppColors.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.calendar_month_rounded, size: 18, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        DateFormat('MMMM yyyy').format(_selectedMonth),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          const Text(
+                            'Period Start: ',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                          ),
+                          Expanded(
+                            child: Text(
+                              startLabel,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_drop_down, size: 18),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Text(
+                            'Export Window: ',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                          ),
+                          Expanded(
+                            child: Text(
+                              endLabel,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                onPressed: _nextMonth,
-                tooltip: 'Next Month',
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -428,13 +324,41 @@ class _AdminMonthlyReportsScreenState
   }
 
   Widget _buildReportContent(MonthlyReportData data, bool isDark) {
+    if (!data.hasValidPeriod) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
+              const SizedBox(height: 12),
+              const Text(
+                'No Reset or Creation Timestamp Available',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'A formal vendor statement requires an authoritative reset timestamp or shop creation date.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Export Action Buttons ──
           Row(
             children: [
               Expanded(
@@ -478,7 +402,7 @@ class _AdminMonthlyReportsScreenState
                     style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF107C41), // Excel Green
+                    backgroundColor: const Color(0xFF107C41),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -490,15 +414,9 @@ class _AdminMonthlyReportsScreenState
               ),
             ],
           ),
-
           const SizedBox(height: 18),
-
-          // ── Executive KPI Summary Card ──
           _buildKpiSummaryCard(data, isDark),
-
           const SizedBox(height: 20),
-
-          // ── Recent Orders Breakdown Preview ──
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -507,7 +425,7 @@ class _AdminMonthlyReportsScreenState
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               Text(
-                '${data.totalOrdersCount} orders',
+                '${data.totalOrdersCount} closed orders',
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
@@ -515,9 +433,7 @@ class _AdminMonthlyReportsScreenState
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
           if (data.orders.isEmpty)
             _buildEmptyOrdersState(isDark)
           else
@@ -553,7 +469,7 @@ class _AdminMonthlyReportsScreenState
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'MONTHLY PERFORMANCE',
+                'STATEMENT PERFORMANCE',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -561,21 +477,23 @@ class _AdminMonthlyReportsScreenState
                   color: AppColors.primary,
                 ),
               ),
-              Text(
-                data.formattedPeriod,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+              Expanded(
+                child: Text(
+                  data.formattedPeriod,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-
-          // 4-Grid Counters
           Row(
             children: [
-              _buildCounterBox('Total Orders', '${data.totalOrdersCount}', Icons.receipt_long_rounded, AppColors.primary, isDark),
+              _buildCounterBox('Total Closed', '${data.totalOrdersCount}', Icons.receipt_long_rounded, AppColors.primary, isDark),
               const SizedBox(width: 10),
               _buildCounterBox('Delivered', '${data.deliveredOrdersCount}', Icons.check_circle_rounded, AppColors.success, isDark),
             ],
@@ -585,15 +503,18 @@ class _AdminMonthlyReportsScreenState
             children: [
               _buildCounterBox('Rejected', '${data.rejectedOrdersCount}', Icons.cancel_rounded, AppColors.error, isDark),
               const SizedBox(width: 10),
-              _buildCounterBox('Cancelled / Exp', '${data.cancelledOrdersCount + data.expiredOrdersCount}', Icons.hourglass_disabled_rounded, Colors.orange, isDark),
+              _buildCounterBox('Expired', '${data.expiredOrdersCount}', Icons.hourglass_disabled_rounded, Colors.orange, isDark),
             ],
           ),
-
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildCounterBox('WhatsApp Orders', '${data.whatsappOrdersCount}', Icons.chat_rounded, const Color(0xFF25D366), isDark),
+            ],
+          ),
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 14),
-
-          // Revenue Line Items
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -616,14 +537,14 @@ class _AdminMonthlyReportsScreenState
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Gross Order Value:',
+                'Closed Order Value:',
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                 ),
               ),
               Text(
-                '₹${data.grossOrderValue.toStringAsFixed(0)}',
+                '₹${data.closedOrderValue.toStringAsFixed(0)}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -772,13 +693,13 @@ class _AdminMonthlyReportsScreenState
           ),
           const SizedBox(height: 12),
           const Text(
-            'No orders found for this shop in the selected month.',
+            'No closed orders recorded for this shop in the statement period.',
             textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
           ),
           const SizedBox(height: 6),
           Text(
-            'Select a different month or shop to generate statements.',
+            'New completed orders will appear here automatically.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
