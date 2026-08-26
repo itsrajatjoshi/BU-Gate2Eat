@@ -407,19 +407,7 @@ class _ShopkeeperProfileScreenState
                   thickness: 0.6,
                   color: isDark ? AppColors.darkDivider : AppColors.divider,
                 ),
-                const ListTile(
-                  leading: Icon(
-                    Icons.chat_bubble_outline_rounded,
-                    color: AppColors.success,
-                  ),
-                  title: Text('Ordering Method'),
-                  subtitle: Text('Direct WhatsApp with Vendor'),
-                ),
-                Divider(
-                  height: 1,
-                  thickness: 0.6,
-                  color: isDark ? AppColors.darkDivider : AppColors.divider,
-                ),
+
                 ListTile(
                   leading: const Icon(
                     Icons.palette_outlined,

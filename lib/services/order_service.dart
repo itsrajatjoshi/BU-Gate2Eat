@@ -354,14 +354,19 @@ class OrderService {
               'rejectedAt': FieldValue.serverTimestamp(),
               'updatedAt': FieldValue.serverTimestamp(),
             });
-            transaction.set(statsDocRef, {
-              'shopId': shopId,
-              'appOrders': FieldValue.increment(1),
-              'notAccepted': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            transaction.set(
+              statsDocRef,
+              {
+                'shopId': shopId,
+                'appOrders': FieldValue.increment(1),
+                'notAccepted': FieldValue.increment(1),
+                'updatedAt': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
             throw const OrderServiceException(
-                'Order acceptance deadline (20 mins) has expired.',);
+              'Order acceptance deadline (20 mins) has expired.',
+            );
           }
 
           final rejectDeadline = now.add(const Duration(minutes: 15));
@@ -375,12 +380,16 @@ class OrderService {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-          transaction.set(statsDocRef, {
-            'shopId': shopId,
-            'appOrders': FieldValue.increment(1),
-            'accepted': FieldValue.increment(1),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          transaction.set(
+            statsDocRef,
+            {
+              'shopId': shopId,
+              'appOrders': FieldValue.increment(1),
+              'accepted': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
         }
         // ── Transition: PLACED → REJECTED (Shopkeeper manual reject before accept) ──
         else if (currentStatus == OrderStatusRules.statusPlaced &&
@@ -392,12 +401,16 @@ class OrderService {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-          transaction.set(statsDocRef, {
-            'shopId': shopId,
-            'appOrders': FieldValue.increment(1),
-            'notAccepted': FieldValue.increment(1),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          transaction.set(
+            statsDocRef,
+            {
+              'shopId': shopId,
+              'appOrders': FieldValue.increment(1),
+              'notAccepted': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
         }
         // ── Transition: ACCEPTED → REJECTED (15-min rejection window) ──
         else if (currentStatus == OrderStatusRules.statusAccepted &&
@@ -424,11 +437,15 @@ class OrderService {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-          transaction.set(statsDocRef, {
-            'shopId': shopId,
-            'rejectedAfterAccept': FieldValue.increment(1),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          transaction.set(
+            statsDocRef,
+            {
+              'shopId': shopId,
+              'rejectedAfterAccept': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
         }
         // ── Transition: ACCEPTED → DELIVERED ──
         else if (currentStatus == OrderStatusRules.statusAccepted &&
@@ -449,11 +466,15 @@ class OrderService {
               'rejectionReason': 'Delivery window of 90 minutes expired.',
               'updatedAt': FieldValue.serverTimestamp(),
             });
-            transaction.set(statsDocRef, {
-              'shopId': shopId,
-              'deliveryExpired': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            transaction.set(
+              statsDocRef,
+              {
+                'shopId': shopId,
+                'deliveryExpired': FieldValue.increment(1),
+                'updatedAt': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
             throw const OrderServiceException(
               'Delivery window of 90 minutes has expired.',
             );
@@ -474,11 +495,15 @@ class OrderService {
 
           transaction.update(orderDocRef, updates);
 
-          transaction.set(statsDocRef, {
-            'shopId': shopId,
-            'delivered': FieldValue.increment(1),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          transaction.set(
+            statsDocRef,
+            {
+              'shopId': shopId,
+              'delivered': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
         }
         // ── Transition: PLACED → CANCELLED (Direct update fallback if called) ──
         else if (currentStatus == OrderStatusRules.statusPlaced &&
@@ -572,12 +597,16 @@ class OrderService {
               'rejectedAt': FieldValue.serverTimestamp(),
               'updatedAt': FieldValue.serverTimestamp(),
             });
-            transaction.set(statsDocRef, {
-              'shopId': shopId,
-              'appOrders': FieldValue.increment(1),
-              'notAccepted': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            transaction.set(
+              statsDocRef,
+              {
+                'shopId': shopId,
+                'appOrders': FieldValue.increment(1),
+                'notAccepted': FieldValue.increment(1),
+                'updatedAt': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
             debugPrint('⏱️ OrderService.checkAndExpireOrder: Order #$orderId auto-expired (placed 20m timeout)');
             return true;
           }
@@ -599,11 +628,15 @@ class OrderService {
               'rejectionReason': 'Delivery window of 90 minutes expired.',
               'updatedAt': FieldValue.serverTimestamp(),
             });
-            transaction.set(statsDocRef, {
-              'shopId': shopId,
-              'deliveryExpired': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            transaction.set(
+              statsDocRef,
+              {
+                'shopId': shopId,
+                'deliveryExpired': FieldValue.increment(1),
+                'updatedAt': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
             debugPrint('⏱️ OrderService.checkAndExpireOrder: Order #$orderId auto-expired (delivery 90m timeout)');
             return true;
           }
