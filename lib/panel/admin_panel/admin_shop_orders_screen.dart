@@ -26,7 +26,30 @@ class AdminShopOrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
   String _selectedFilter = 'All';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool _matchesOrderSearch(AppOrder order, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+
+    final nameMatches = order.customerName.toLowerCase().contains(q);
+    final phoneMatches = order.customerPhone
+        .replaceAll(RegExp(r'\s+'), '')
+        .contains(q.replaceAll(RegExp(r'\s+'), ''));
+    final cleanQ = q.replaceAll('#', '').trim();
+    final idMatches = order.orderId.toLowerCase().replaceAll('#', '').contains(cleanQ) ||
+        order.orderId.toLowerCase().contains(q);
+
+    return nameMatches || phoneMatches || idMatches;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,13 +107,17 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
               .where((o) => o.status.trim().toLowerCase() == OrderStatusRules.statusDeliveryExpired)
               .toList();
 
-          // Apply selected filter
-          final filteredOrders = switch (_selectedFilter) {
+          // Apply selected filter + search query with AND logic
+          final baseFiltered = switch (_selectedFilter) {
             'Delivered' => deliveredOrders,
             'Rejected' => rejectedOrders,
             'Expired' => expiredOrders,
             _ => terminalOrders,
           };
+
+          final filteredOrders = baseFiltered
+              .where((o) => _matchesOrderSearch(o, _searchQuery))
+              .toList();
 
           return Column(
             children: [
@@ -274,6 +301,55 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+
+          // ── Search Field (Customer Name, Phone, Order ID) ──
+          Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? AppColors.darkSurfaceVariant
+                  : AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: TextField(
+              controller: _searchController,
+              textAlignVertical: TextAlignVertical.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search customer, phone, order ID...',
+                hintStyle: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  size: 19,
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded, size: 16),
+                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+              ),
+              onChanged: (value) => setState(
+                () => _searchQuery = value.trim().toLowerCase(),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
 

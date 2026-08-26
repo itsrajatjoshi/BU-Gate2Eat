@@ -12,7 +12,7 @@ import '../../../core/router.dart';
 import '../../../models/order_model.dart';
 import 'widgets/shopkeeper_order_details_modal.dart';
 
-class ShopkeeperOrderHistoryScreen extends ConsumerWidget {
+class ShopkeeperOrderHistoryScreen extends ConsumerStatefulWidget {
   const ShopkeeperOrderHistoryScreen({
     this.shopId,
     super.key,
@@ -21,10 +21,41 @@ class ShopkeeperOrderHistoryScreen extends ConsumerWidget {
   final String? shopId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ShopkeeperOrderHistoryScreen> createState() =>
+      _ShopkeeperOrderHistoryScreenState();
+}
+
+class _ShopkeeperOrderHistoryScreenState
+    extends ConsumerState<ShopkeeperOrderHistoryScreen> {
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool _matchesOrderSearch(AppOrder order, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+
+    final nameMatches = order.customerName.toLowerCase().contains(q);
+    final phoneMatches = order.customerPhone
+        .replaceAll(RegExp(r'\s+'), '')
+        .contains(q.replaceAll(RegExp(r'\s+'), ''));
+    final cleanQ = q.replaceAll('#', '').trim();
+    final idMatches = order.orderId.toLowerCase().replaceAll('#', '').contains(cleanQ) ||
+        order.orderId.toLowerCase().contains(q);
+
+    return nameMatches || phoneMatches || idMatches;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final effectiveShopId =
-        shopId ?? ref.watch(currentShopkeeperShopIdProvider);
+        widget.shopId ?? ref.watch(currentShopkeeperShopIdProvider);
 
     final historyOrdersAsync =
         ref.watch(shopOrderHistoryStreamProvider(effectiveShopId));
@@ -78,14 +109,74 @@ class ShopkeeperOrderHistoryScreen extends ConsumerWidget {
         ],
       ),
       body: historyOrdersAsync.when(
-        data: (historyOrders) {
-          if (historyOrders.isEmpty) {
+        data: (allHistoryOrders) {
+          if (allHistoryOrders.isEmpty) {
             return _EmptyOrderHistoryView(isDark: isDark);
           }
+
+          final historyOrders = allHistoryOrders
+              .where((o) => _matchesOrderSearch(o, _searchQuery))
+              .toList();
+
           return ListView(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
             children: [
+              // ── Search Field (Customer Name, Phone, Order ID) ──
+              Container(
+                height: 42,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  textAlignVertical: TextAlignVertical.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Search customer, phone, order ID...',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.textSecondary,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      size: 20,
+                      color: isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.textSecondary,
+                    ),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textSecondary,
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (value) => setState(
+                    () => _searchQuery = value.trim().toLowerCase(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
               // 1. Section Header with Count Badge
               Row(
                 children: [
@@ -131,19 +222,35 @@ class ShopkeeperOrderHistoryScreen extends ConsumerWidget {
               const SizedBox(height: 12),
 
               // 2. Terminal Order Cards List
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: historyOrders.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final order = historyOrders[index];
-                  return _HistoryOrderCard(
-                    order: order,
-                    isDark: isDark,
-                  );
-                },
-              ),
+              if (historyOrders.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      'No matching past orders found',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: historyOrders.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final order = historyOrders[index];
+                    return _HistoryOrderCard(
+                      order: order,
+                      isDark: isDark,
+                    );
+                  },
+                ),
             ],
           );
         },
