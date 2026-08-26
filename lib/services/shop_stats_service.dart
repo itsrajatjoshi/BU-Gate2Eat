@@ -295,7 +295,8 @@ class ShopStatsService {
 
       // Filter only terminal orders (never placed or accepted)
       final terminalDocs = snapshot.docs.where((doc) {
-        final status = (doc.data()['status'] as String?) ?? '';
+        final status =
+            ((doc.data()['status'] as String?) ?? '').trim().toLowerCase();
         return status != 'placed' && status != 'accepted';
       }).toList();
 

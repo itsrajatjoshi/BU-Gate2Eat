@@ -323,8 +323,9 @@ class AdminOrderDetailsModal extends StatelessWidget {
           const SizedBox(height: 8),
           ...order.items.map((item) {
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -343,14 +344,44 @@ class AdminOrderDetailsModal extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      item.name,
-                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.name,
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                        ),
+                        if (item.optionsDescription.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            item.optionsDescription,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  Text(
-                    '₹${(item.price * item.quantity).toStringAsFixed(0)}',
-                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '₹${(item.price * item.quantity).toStringAsFixed(0)}',
+                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                      ),
+                      if (item.quantity > 1)
+                        Text(
+                          '₹${item.price} each',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -381,7 +412,7 @@ class AdminOrderDetailsModal extends StatelessWidget {
                 ),
               ),
               Text(
-                '₹${order.totalAmount.toStringAsFixed(0)}',
+                '₹${order.subtotal.toStringAsFixed(0)}',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
@@ -520,11 +551,12 @@ class AdminOrderDetailsModal extends StatelessWidget {
                 ),
               ),
               Text(
-                order.deliveryPersonId.isNotEmpty ? order.deliveryPersonId : '8295643910',
-                style: const TextStyle(
+                order.deliveryPersonId.isNotEmpty ? order.deliveryPersonId : 'Not provided',
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
+                  fontFamily: order.deliveryPersonId.isNotEmpty ? 'monospace' : null,
+                  fontStyle: order.deliveryPersonId.isNotEmpty ? FontStyle.normal : FontStyle.italic,
                 ),
               ),
             ],

@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/order_model.dart';
+import '../../services/order_service.dart';
 import 'widgets/admin_order_details_modal.dart';
 
 class AdminShopOrdersScreen extends ConsumerStatefulWidget {
@@ -55,18 +56,33 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
         data: (allOrders) {
           // Strict rule: Admin monitors ONLY processed/terminal business orders.
           // Active live orders (placed, accepted) are handled strictly in Customer & Shopkeeper operational panels.
-          final terminalOrders = allOrders
-              .where((o) => o.status != 'placed' && o.status != 'accepted')
-              .toList();
+          final terminalOrders = allOrders.where((o) {
+            final s = o.status.trim().toLowerCase();
+            return s != OrderStatusRules.statusPlaced &&
+                s != OrderStatusRules.statusAccepted;
+          }).toList();
+
+          // Deterministic sorting: newest createdAt first, with orderId as tie-breaker
+          terminalOrders.sort((a, b) {
+            final cmp = b.createdAt.compareTo(a.createdAt);
+            if (cmp != 0) return cmp;
+            return b.orderId.compareTo(a.orderId);
+          });
 
           if (terminalOrders.isEmpty) {
             return _buildEmptyState(isDark);
           }
 
-          // Compute filter counts
-          final deliveredOrders = terminalOrders.where((o) => o.status == 'delivered').toList();
-          final rejectedOrders = terminalOrders.where((o) => o.status == 'rejected').toList();
-          final expiredOrders = terminalOrders.where((o) => o.status == 'delivery_expired').toList();
+          // Compute filter counts with safe case-insensitive comparison
+          final deliveredOrders = terminalOrders
+              .where((o) => o.status.trim().toLowerCase() == OrderStatusRules.statusDelivered)
+              .toList();
+          final rejectedOrders = terminalOrders
+              .where((o) => o.status.trim().toLowerCase() == OrderStatusRules.statusRejected)
+              .toList();
+          final expiredOrders = terminalOrders
+              .where((o) => o.status.trim().toLowerCase() == OrderStatusRules.statusDeliveryExpired)
+              .toList();
 
           // Apply selected filter
           final filteredOrders = switch (_selectedFilter) {
