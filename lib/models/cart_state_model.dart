@@ -10,6 +10,7 @@ class CartState {
     this.shopId,
     this.shopName,
     this.items = const [],
+    this.specialInstructions = '',
   });
 
   /// Authoritative ID of the shop to which this cart belongs. Null if empty.
@@ -20,6 +21,9 @@ class CartState {
 
   /// List of cart items belonging exclusively to shopId.
   final List<CartItem> items;
+
+  /// Optional special instructions / notes for the active cart draft.
+  final String specialInstructions;
 
   /// Returns true if cart has no items.
   bool get isEmpty => items.isEmpty;
@@ -58,11 +62,13 @@ class CartState {
     String? shopId,
     String? shopName,
     List<CartItem>? items,
+    String? specialInstructions,
   }) {
     return CartState(
       shopId: shopId ?? this.shopId,
       shopName: shopName ?? this.shopName,
       items: items ?? this.items,
+      specialInstructions: specialInstructions ?? this.specialInstructions,
     );
   }
 }

@@ -180,10 +180,11 @@ class CartNotifier extends StateNotifier<CartState> {
     } else {
       updated.removeAt(existingIndex);
       if (updated.isEmpty) {
-        // EMPTY CART RULE: Reset active shop to null
+        // EMPTY CART RULE: Reset active shop and special instructions
         state = const CartState();
       } else {
-        state = state.copyWith(items: updated);
+        // Removing a cart item clears stale instructions so it never leaks across remaining items
+        state = state.copyWith(items: updated, specialInstructions: '');
       }
     }
 
@@ -205,7 +206,8 @@ class CartNotifier extends StateNotifier<CartState> {
     if (updated.isEmpty) {
       state = const CartState();
     } else {
-      state = state.copyWith(items: updated);
+      // Removing a cart item clears stale instructions so it never leaks across remaining items
+      state = state.copyWith(items: updated, specialInstructions: '');
     }
     _enforceInvariant();
   }
@@ -233,7 +235,12 @@ class CartNotifier extends StateNotifier<CartState> {
     _enforceInvariant();
   }
 
-  /// Clears all items and resets active shop to null.
+  /// Updates the special instructions / notes for the active cart draft.
+  void setSpecialInstructions(String instructions) {
+    state = state.copyWith(specialInstructions: instructions);
+  }
+
+  /// Clears all items, special instructions, and resets active shop to null.
   void clearCart() {
     state = const CartState();
   }
@@ -241,7 +248,7 @@ class CartNotifier extends StateNotifier<CartState> {
   /// Internal invariant enforcer to ensure state consistency.
   void _enforceInvariant() {
     if (state.items.isEmpty) {
-      if (state.shopId != null || state.shopName != null) {
+      if (state.shopId != null || state.shopName != null || state.specialInstructions.isNotEmpty) {
         state = const CartState();
       }
     }

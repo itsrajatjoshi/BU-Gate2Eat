@@ -12,6 +12,7 @@ import '../services/firestore_service.dart';
 import '../services/force_update_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/order_service.dart';
+import '../services/report_service.dart';
 import '../services/shop_stats_service.dart';
 
 export '../models/shop_model.dart' show ShopOrderMethod;
@@ -24,6 +25,21 @@ final firestoreServiceProvider = Provider<FirestoreService>((ref) {
 /// Provider for the Order service (singleton).
 final orderServiceProvider = Provider<OrderService>((ref) {
   return OrderService();
+});
+
+/// Provider for the Report service (singleton).
+final reportServiceProvider = Provider<ReportService>((ref) {
+  return ReportService();
+});
+
+/// Family provider for fetching monthly report data.
+final monthlyReportDataProvider = FutureProvider.family<MonthlyReportData, ({String shopId, String shopName, DateTime month})>((ref, params) async {
+  final reportService = ref.watch(reportServiceProvider);
+  return reportService.fetchMonthlyShopReportData(
+    shopId: params.shopId,
+    shopName: params.shopName,
+    month: params.month,
+  );
 });
 
 /// Provider for the Shop Statistics service (singleton).

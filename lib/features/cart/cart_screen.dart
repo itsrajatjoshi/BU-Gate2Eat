@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/cart_item_model.dart';
+import '../../models/cart_state_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../models/order_model.dart';
 import '../../services/whatsapp_service.dart';
@@ -188,6 +189,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
       // 5. Clear Cart ONLY after Firestore confirmation
       ref.read(cartProvider.notifier).clearCart();
+      _specialInstructionsController.clear();
 
       // 6. Navigate to Order Detail Screen
       if (mounted) {
@@ -350,6 +352,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         // Atomic shop-wise WhatsApp counter increment (Rule 9: No order doc, only counter)
         await ref.read(shopStatsServiceProvider).incrementWhatsappOrders(shopId);
         ref.read(cartProvider.notifier).clearCart();
+        _specialInstructionsController.clear();
       } else if (mounted) {
         showDialog<void>(
           context: context,
@@ -409,6 +412,19 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen to CartState changes to automatically destroy stale instructions on cart clear/empty/item remove
+    ref.listen<CartState>(cartProvider, (previous, next) {
+      if (next.isEmpty ||
+          (previous != null && previous.shopId != next.shopId) ||
+          next.specialInstructions.isEmpty) {
+        if (_specialInstructionsController.text.isNotEmpty && next.specialInstructions.isEmpty) {
+          _specialInstructionsController.clear();
+        }
+      } else if (_specialInstructionsController.text != next.specialInstructions) {
+        _specialInstructionsController.text = next.specialInstructions;
+      }
+    });
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cartState = ref.watch(cartProvider);
     final cartItems = cartState.items;
@@ -584,6 +600,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         controller: _specialInstructionsController,
                         maxLines: 2,
                         maxLength: AppConfig.maxSpecialInstructionsLength,
+                        onChanged: (text) {
+                          ref.read(cartProvider.notifier).setSpecialInstructions(text);
+                        },
                         decoration: const InputDecoration(
                           hintText: 'e.g., Extra spicy, No onion...',
                         ),

@@ -665,6 +665,33 @@ class _AdminShopStatsDetailScreenState
         ),
         const SizedBox(height: 12),
 
+        // ── Export Monthly Report (Feature #2) ──
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: OutlinedButton.icon(
+            onPressed: _isResetting
+                ? null
+                : () => context.push('/admin/reports?shopId=${widget.shopId}'),
+            icon: const Icon(Icons.summarize_rounded, size: 18, color: AppColors.primary),
+            label: const Text(
+              'EXPORT MONTHLY REPORT',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+                color: AppColors.primary,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.primary, width: 1.2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
         // ── Reset Shop Data (Phase E) ──
         SizedBox(
           width: double.infinity,

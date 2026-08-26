@@ -26,6 +26,13 @@ class AdminOrderStatsScreen extends ConsumerWidget {
           'Order Statistics',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.summarize_rounded),
+            tooltip: 'Monthly Statements',
+            onPressed: () => context.push('/admin/reports'),
+          ),
+        ],
         elevation: 0,
       ),
       body: shopsAsync.when(
