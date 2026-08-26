@@ -281,7 +281,7 @@ class _ShopkeeperProfileScreenState
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              'Rajat Shop • Gate 2',
+                              'Rajat Shop • Gate 3',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -402,7 +402,7 @@ class _ShopkeeperProfileScreenState
                     color: AppColors.primary,
                   ),
                   title: Text('Pickup Location'),
-                  subtitle: Text('Bennett University Gate No. 2'),
+                  subtitle: Text('Bennett University Gate No. 3'),
                 ),
                 Divider(
                   height: 1,

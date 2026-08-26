@@ -140,7 +140,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       final shop = await firestoreService.getShop(shopId);
       final deliveryNote = (shop != null && shop.deliveryNote.trim().isNotEmpty)
           ? shop.deliveryNote.trim()
-          : 'Bennett University • Gate No. 2';
+          : 'Bennett University • Gate No. 3';
 
       final now = DateTime.now();
       final orderId = _generateOrderId();
@@ -531,7 +531,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          'Gate 2 Pickup • $shopName',
+                          'Gate 3 Pickup • $shopName',
                           style: TextStyle(
                             color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                             fontSize: 13.5,
@@ -679,7 +679,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     const SizedBox(height: 8),
                     const _BillRow(label: 'Tax (5%)', value: 'Included'),
                     const SizedBox(height: 8),
-                    const _BillRow(label: 'Service Charge', value: 'Free (Gate 2)'),
+                    const _BillRow(label: 'Service Charge', value: 'Free (Gate 3)'),
                     const SizedBox(height: 12),
                     const Divider(height: 1, thickness: 0.8),
                     const SizedBox(height: 12),

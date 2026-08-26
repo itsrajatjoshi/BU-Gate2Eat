@@ -56,7 +56,7 @@ class WhatsAppService {
     }
 
     // Pickup location
-    buffer.writeln('I will collect the order from Bennett Gate No. 2.');
+    buffer.writeln('I will collect the order from Bennett Gate No. 3.');
     buffer.writeln();
 
     // Branding

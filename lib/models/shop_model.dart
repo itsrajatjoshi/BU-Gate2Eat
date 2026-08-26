@@ -65,7 +65,7 @@ class Shop {
       isActive: (data['isActive'] as bool?) ?? true,
       sortOrder: (data['sortOrder'] as int?) ?? 0,
       searchKeywords: keywords,
-      deliveryNote: (data['deliveryNote'] as String?) ?? 'Pickup from Gate 2',
+      deliveryNote: (data['deliveryNote'] as String?) ?? 'Pickup from Gate 3',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       orderMethod: ShopOrderMethod.fromString(data['orderMethod']),

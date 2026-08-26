@@ -255,7 +255,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              'Bennett University • Gate 2',
+                              'Bennett University • Gate 3',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -371,7 +371,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const ListTile(
                   leading: Icon(Icons.local_shipping_outlined, color: AppColors.primary),
                   title: Text('Pickup Location'),
-                  subtitle: Text('Bennett University Gate No. 2'),
+                  subtitle: Text('Bennett University Gate No. 3'),
                 ),
                 Divider(
                   height: 1,

@@ -36,7 +36,7 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
   final TextEditingController _closeTimeController =
       TextEditingController(text: '11:30 PM');
   final TextEditingController _pickupNoteController =
-      TextEditingController(text: 'Pickup from Gate 2');
+      TextEditingController(text: 'Pickup from Gate 3');
   final TextEditingController _contactController = TextEditingController();
 
   bool _isLoading = false;
@@ -192,7 +192,7 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
           ...name.toLowerCase().split(' ').where((w) => w.length > 2),
         ],
         deliveryNote: _pickupNoteController.text.trim().isEmpty
-            ? 'Pickup from Gate 2'
+            ? 'Pickup from Gate 3'
             : _pickupNoteController.text.trim(),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -610,7 +610,7 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
                       controller: _pickupNoteController,
                       decoration: const InputDecoration(
                         labelText: 'Pickup / Delivery Note',
-                        hintText: 'e.g. Pickup from Gate 2',
+                        hintText: 'e.g. Pickup from Gate 3',
                         prefixIcon: Icon(Icons.location_on_outlined),
                         border: OutlineInputBorder(),
                         isDense: true,

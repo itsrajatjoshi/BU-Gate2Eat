@@ -735,7 +735,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             TextField(
               controller: _pickupNoteController,
               decoration: const InputDecoration(
-                hintText: 'e.g. Pickup from Gate 2 / Near Canteen',
+                hintText: 'e.g. Pickup from Gate 3 / Near Canteen',
                 prefixIcon: Icon(Icons.location_on_outlined),
                 isDense: true,
               ),

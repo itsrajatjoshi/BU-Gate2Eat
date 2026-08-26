@@ -540,7 +540,7 @@ class OrderDetailScreen extends ConsumerWidget {
                         Text(
                           order.deliveryNote.isNotEmpty
                               ? order.deliveryNote
-                              : 'Bennett University • Gate No. 2',
+                              : 'Bennett University • Gate No. 3',
                           style: TextStyle(
                             fontSize: 12,
                             color: isDark
@@ -580,7 +580,7 @@ class OrderDetailScreen extends ConsumerWidget {
               const SizedBox(height: 6),
               _buildBillRow('Tax (5%)', 'Included', isDark),
               const SizedBox(height: 6),
-              _buildBillRow('Delivery / Service', 'Free (Gate 2)', isDark),
+              _buildBillRow('Delivery / Service', 'Free (Gate 3)', isDark),
               const SizedBox(height: 8),
               const Divider(height: 1, thickness: 0.8),
               const SizedBox(height: 8),

@@ -77,7 +77,7 @@ class AppConfig {
 
   static const String appName = 'YummBU';
   static const String appTagline = 'Everything around Bennett. One app. One tap.';
-  static const String pickupLocation = 'Bennett Gate No. 2';
+  static const String pickupLocation = 'Bennett Gate No. 3';
   static const String whatsappBranding = '~ Sent via YummBU';
 
   // Special instructions character limit

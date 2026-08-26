@@ -284,7 +284,7 @@ void main() {
       expect(message, contains('1 × Veg Momos — ₹60'));
       expect(message, contains('Total: ₹60'));
       expect(message, contains('Special Instructions: Extra spicy'));
-      expect(message, contains('Bennett Gate No. 2'));
+      expect(message, contains('Bennett Gate No. 3'));
     });
   });
 }

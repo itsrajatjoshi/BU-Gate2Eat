@@ -257,7 +257,7 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
           isActive: true,
           sortOrder: 1,
           searchKeywords: const [],
-          deliveryNote: 'Pickup from Gate 2',
+          deliveryNote: 'Pickup from Gate 3',
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -633,7 +633,7 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                               Text(
                                 shop.deliveryNote.isNotEmpty
                                     ? shop.deliveryNote
-                                    : 'Pickup from Gate 2',
+                                    : 'Pickup from Gate 3',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
