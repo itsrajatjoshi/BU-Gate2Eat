@@ -135,6 +135,10 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
   @override
   Widget build(BuildContext context) {
     final shopsAsync = ref.watch(shopsProvider);
+    final allMenuItemsMap =
+        ref.watch(allShopMenuItemsProvider).valueOrNull ?? const {};
+    final allCategoriesMap =
+        ref.watch(allShopCategoriesProvider).valueOrNull ?? const {};
     final activeOrders =
         ref.watch(customerActiveOrdersStreamProvider).valueOrNull ?? [];
 
@@ -386,56 +390,86 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
               },
               data: (shops) {
                 // Filter shops by search query AND active filter pill
+                // Authoritative fields ONLY: shop.name, menuItem.name, category.name, menuItem.isVeg, shop.isOpen
+                // Description/details fields are NEVER used for search or filtering.
                 final filteredShops = shops.where((shop) {
-                  // 1. Search Query Filter
+                  final menuItems = allMenuItemsMap[shop.id] ?? const [];
+                  final categories = allCategoriesMap[shop.id] ?? const [];
+
+                  // 1. Search Query Filter (Matches shop.name OR actual menuItem.name)
                   if (_searchQuery.isNotEmpty) {
-                    final nameMatches = shop.name.toLowerCase().contains(_searchQuery);
-                    final keywordMatches = shop.searchKeywords.any(
-                      (k) => k.toLowerCase().contains(_searchQuery),
+                    final query = _searchQuery;
+                    final nameMatches =
+                        shop.name.toLowerCase().contains(query);
+                    final foodMatches = menuItems.any(
+                      (item) => item.name.toLowerCase().contains(query),
                     );
-                    final descMatches = shop.description.toLowerCase().contains(_searchQuery);
-                    if (!nameMatches && !keywordMatches && !descMatches) return false;
+                    if (!nameMatches && !foodMatches) return false;
                   }
 
-                  // 2. Category / Status Filter Pill
+                  // 2. Category / Status Filter Pill (Authoritative data only)
                   switch (_selectedFilter) {
                     case 'Open Now':
                       return shop.isOpen;
                     case 'Fast Food':
-                      return shop.searchKeywords.any(
-                            (k) =>
-                                k.toLowerCase().contains('fast food') ||
-                                k.toLowerCase().contains('fastfood'),
-                          ) ||
-                          shop.description.toLowerCase().contains('fast food');
+                      final catMatch = categories.any(
+                        (c) =>
+                            c.name.toLowerCase().contains('fast food') ||
+                            c.name.toLowerCase().contains('fastfood'),
+                      );
+                      final itemMatch = menuItems.any(
+                        (i) =>
+                            i.name.toLowerCase().contains('burger') ||
+                            i.name.toLowerCase().contains('pizza') ||
+                            i.name.toLowerCase().contains('sandwich') ||
+                            i.name.toLowerCase().contains('wrap') ||
+                            i.name.toLowerCase().contains('fast food'),
+                      );
+                      return catMatch || itemMatch;
                     case 'Snacks':
-                      return shop.searchKeywords.any(
-                            (k) => k.toLowerCase().contains('snack'),
-                          ) ||
-                          shop.description.toLowerCase().contains('snack');
+                      final catMatch = categories.any(
+                        (c) => c.name.toLowerCase().contains('snack'),
+                      );
+                      final itemMatch = menuItems.any(
+                        (i) =>
+                            i.name.toLowerCase().contains('snack') ||
+                            i.name.toLowerCase().contains('fries') ||
+                            i.name.toLowerCase().contains('maggi') ||
+                            i.name.toLowerCase().contains('nugget') ||
+                            i.name.toLowerCase().contains('nachos') ||
+                            i.name.toLowerCase().contains('garlic bread'),
+                      );
+                      return catMatch || itemMatch;
                     case 'Thalis':
-                      return shop.searchKeywords.any(
-                            (k) => k.toLowerCase().contains('thali'),
-                          ) ||
-                          shop.description.toLowerCase().contains('thali');
+                      final catMatch = categories.any(
+                        (c) => c.name.toLowerCase().contains('thali'),
+                      );
+                      final itemMatch = menuItems.any(
+                        (i) => i.name.toLowerCase().contains('thali'),
+                      );
+                      return catMatch || itemMatch;
                     case 'Chinese':
-                      return shop.searchKeywords.any(
-                            (k) =>
-                                k.toLowerCase().contains('chinese') ||
-                                k.toLowerCase().contains('momo') ||
-                                k.toLowerCase().contains('noodle'),
-                          ) ||
-                          shop.description.toLowerCase().contains('chinese');
+                      final catMatch = categories.any(
+                        (c) =>
+                            c.name.toLowerCase().contains('chinese') ||
+                            c.name.toLowerCase().contains('momo') ||
+                            c.name.toLowerCase().contains('noodle'),
+                      );
+                      final itemMatch = menuItems.any(
+                        (i) =>
+                            i.name.toLowerCase().contains('chinese') ||
+                            i.name.toLowerCase().contains('momo') ||
+                            i.name.toLowerCase().contains('noodle') ||
+                            i.name.toLowerCase().contains('manchurian') ||
+                            i.name.toLowerCase().contains('chowmein'),
+                      );
+                      return catMatch || itemMatch;
                     case 'Veg':
-                      return true; // Both shops offer vegetarian items
+                      // Shop must offer at least one vegetarian menu item
+                      return menuItems.any((item) => item.isVeg);
                     case 'Non-Veg':
-                      return shop.searchKeywords.any(
-                            (k) =>
-                                k.toLowerCase().contains('non-veg') ||
-                                k.toLowerCase().contains('chicken'),
-                          ) ||
-                          shop.id == 'nayan_shop' ||
-                          shop.description.toLowerCase().contains('chicken');
+                      // Shop must offer at least one non-vegetarian menu item
+                      return menuItems.any((item) => !item.isVeg);
                     case 'All':
                     default:
                       return true;

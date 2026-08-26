@@ -100,6 +100,36 @@ final shopMenuItemsProvider =
   return firestoreService.getMenuItems(shopId);
 });
 
+/// Provider for fetching all menu items mapped by shop ID (shopId -> List<MenuItem>).
+/// Used by Homepage search and filter for instant, efficient in-memory filtering.
+final allShopMenuItemsProvider = FutureProvider<Map<String, List<MenuItem>>>((ref) async {
+  final shops = await ref.watch(shopsProvider.future);
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  final Map<String, List<MenuItem>> result = {};
+  await Future.wait(
+    shops.map((shop) async {
+      final items = await firestoreService.getMenuItems(shop.id);
+      result[shop.id] = items;
+    }),
+  );
+  return result;
+});
+
+/// Provider for fetching all categories mapped by shop ID (shopId -> List<Category>).
+/// Used by Homepage category filters for instant in-memory matching.
+final allShopCategoriesProvider = FutureProvider<Map<String, List<Category>>>((ref) async {
+  final shops = await ref.watch(shopsProvider.future);
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  final Map<String, List<Category>> result = {};
+  await Future.wait(
+    shops.map((shop) async {
+      final cats = await firestoreService.getCategories(shop.id);
+      result[shop.id] = cats;
+    }),
+  );
+  return result;
+});
+
 /// Cached provider for fetching recommended items for Cart "You may also like".
 final recommendedMenuItemsProvider =
     FutureProvider.family<List<MenuItem>, String>((ref, shopId) async {
