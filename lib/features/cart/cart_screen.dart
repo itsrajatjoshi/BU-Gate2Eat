@@ -15,7 +15,9 @@ import '../../models/cart_item_model.dart';
 import '../../models/cart_state_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../models/order_model.dart';
+import '../../models/shop_model.dart';
 import '../../services/whatsapp_service.dart';
+import '../shop/shop_detail_screen.dart';
 import 'cart_provider.dart';
 import 'widgets/minimum_order_progress_bar.dart';
 
@@ -172,12 +174,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   optionsDescription: ci.optionsDescription,
                   selectedOptions: ci.selectedOptions,
                   cartKey: ci.cartKey,
-                ))
+                ),)
             .toList(),
         totalAmount: grandTotal,
         specialInstructions: _specialInstructionsController.text.trim(),
         deliveryNote: deliveryNote,
-        status: 'placed',
         createdAt: now,
       );
 
@@ -224,7 +225,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
-            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -284,10 +284,21 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return;
     }
 
+    // In-flight guard to prevent duplicate taps / duplicate stats increment
     setState(() => _isPlacingOrder = true);
 
     try {
       final localStorage = ref.read(localStorageServiceProvider);
+      final customerIdentity = ref.read(customerIdentityProvider);
+
+      final customerName = customerIdentity.name.trim().isNotEmpty
+          ? customerIdentity.name.trim()
+          : (localStorage.userName.isNotEmpty
+              ? localStorage.userName
+              : 'Guest');
+      final customerPhone = customerIdentity.phone.trim().isNotEmpty
+          ? customerIdentity.phone.trim()
+          : localStorage.userPhone;
 
       // Find the shop's contact/order number from Firestore
       final firestoreService = ref.read(firestoreServiceProvider);
@@ -333,13 +344,19 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         return;
       }
 
-      // Generate the message
+      // Create an IMMUTABLE snapshot of the current cart state before initiating handoff
+      final snapshotCartItems = List<CartItem>.unmodifiable(cartItems);
+      final snapshotInstructions = _specialInstructionsController.text.trim();
+      final snapshotShopId = shopId;
+      final snapshotShopName = shopName;
+
+      // Generate the message from the immutable snapshot
       final message = WhatsAppService.generateOrderMessage(
-        shopName: shopName,
-        userName: localStorage.userName,
-        userPhone: localStorage.userPhone,
-        cartItems: cartItems,
-        specialInstructions: _specialInstructionsController.text,
+        shopName: snapshotShopName,
+        userName: customerName,
+        userPhone: customerPhone,
+        cartItems: snapshotCartItems,
+        specialInstructions: snapshotInstructions,
       );
 
       // Launch WhatsApp
@@ -349,11 +366,21 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       );
 
       if (success) {
-        // Atomic shop-wise WhatsApp counter increment (Rule 9: No order doc, only counter)
-        await ref.read(shopStatsServiceProvider).incrementWhatsappOrders(shopId);
+        // SUCCESS HANDOFF LIFECYCLE:
+        // 1. Immediately clear Cart and draft controllers so user returns to a clean empty cart
         ref.read(cartProvider.notifier).clearCart();
         _specialInstructionsController.clear();
+
+        // 2. Atomically increment shop WhatsApp counter (Rule 9: No order doc, only counter)
+        // Wrapped safely so a slow network/stats failure never compromises or reverts cart cleanup
+        try {
+          await ref.read(shopStatsServiceProvider).incrementWhatsappOrders(snapshotShopId);
+        } catch (statsErr) {
+          debugPrint('⚠️ Error updating WhatsApp shop stats for $snapshotShopId: $statsErr');
+        }
       } else if (mounted) {
+        // FAILED HANDOFF LIFECYCLE:
+        // Cart and instructions are preserved untouched so user can retry
         showDialog<void>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -376,9 +403,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
+            content: const Text(
               'Failed to process WhatsApp order. Please try again.',
-              style: const TextStyle(fontWeight: FontWeight.w500),
+              style: TextStyle(fontWeight: FontWeight.w500),
             ),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
@@ -633,7 +660,47 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     _CartSuggestionsSection(
                       suggestions: suggestions,
                       onAdd: (item) {
-                        cartNotifier.addItem(item, shopId, shopName);
+                        final currentShop = ref
+                            .read(shopsProvider)
+                            .valueOrNull
+                            ?.where((s) => s.id == shopId)
+                            .firstOrNull;
+                        if (currentShop != null) {
+                          handleCustomerAddToCart(
+                            context: context,
+                            ref: ref,
+                            item: item,
+                            shop: currentShop,
+                            isAvailable: item.isAvailable && currentShop.isOpen,
+                            displayImageUrl: _getEffectiveImageUrl(item),
+                          );
+                        } else {
+                          final fallbackShop = Shop(
+                            id: shopId,
+                            name: shopName,
+                            description: '',
+                            bannerUrl: '',
+                            contactNumber: '',
+                            orderNumber: '',
+                            openTime: '00:00',
+                            closeTime: '23:59',
+                            isClosedOverride: false,
+                            isActive: true,
+                            sortOrder: 0,
+                            searchKeywords: const <String>[],
+                            deliveryNote: 'Gate 3',
+                            createdAt: DateTime.now(),
+                            updatedAt: DateTime.now(),
+                          );
+                          handleCustomerAddToCart(
+                            context: context,
+                            ref: ref,
+                            item: item,
+                            shop: fallbackShop,
+                            isAvailable: item.isAvailable,
+                            displayImageUrl: _getEffectiveImageUrl(item),
+                          );
+                        }
                       },
                       getEffectiveImageUrl: _getEffectiveImageUrl,
                     ),
@@ -755,7 +822,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                             BorderRadius.circular(14),
                                       ),
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 6),
+                                          horizontal: 6,
+                                      ),
                                     ),
                                     child: _isPlacingOrder
                                         ? const SizedBox(
@@ -770,9 +838,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                             mainAxisAlignment:
                                                 MainAxisAlignment.center,
                                             children: [
-                                              Icon(Icons.send_rounded,
-                                                  color: Colors.white,
-                                                  size: 17),
+                                              Icon(
+                                                Icons.send_rounded,
+                                                color: Colors.white,
+                                                size: 17,
+                                              ),
                                               SizedBox(width: 6),
                                               Flexible(
                                                 child: Text(
@@ -814,37 +884,47 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                             BorderRadius.circular(14),
                                       ),
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 6),
+                                          horizontal: 6,
+                                      ),
                                     ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        SvgPicture.asset(
-                                          'assets/icons/whatsapp.svg',
-                                          width: 19,
-                                          height: 19,
-                                          colorFilter:
-                                              const ColorFilter.mode(
-                                            Colors.white,
-                                            BlendMode.srcIn,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        const Flexible(
-                                          child: Text(
-                                            'Order via WhatsApp',
-                                            style: TextStyle(
-                                              fontSize: 13.5,
-                                              fontWeight: FontWeight.bold,
-                                              letterSpacing: 0.2,
+                                    child: _isPlacingOrder
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2.2,
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                          )
+                                        : Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              SvgPicture.asset(
+                                                'assets/icons/whatsapp.svg',
+                                                width: 19,
+                                                height: 19,
+                                                colorFilter:
+                                                    const ColorFilter.mode(
+                                                  Colors.white,
+                                                  BlendMode.srcIn,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              const Flexible(
+                                                child: Text(
+                                                  'Order via WhatsApp',
+                                                  style: TextStyle(
+                                                    fontSize: 13.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    letterSpacing: 0.2,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
                                 ),
                               ),
@@ -912,8 +992,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                           ),
                                         ),
                                       ] else ...[
-                                        const Icon(Icons.send_rounded,
-                                            color: Colors.white, size: 20),
+                                        const Icon(
+                                          Icons.send_rounded,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
                                         const SizedBox(width: 8),
                                         const Text(
                                           'Place Order',
@@ -1283,17 +1366,19 @@ class _SuggestionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.shade200,
+    return GestureDetector(
+      onTap: onAdd,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.grey.shade200,
+          ),
         ),
-      ),
       child: Row(
         children: [
           // Food Image
@@ -1391,6 +1476,7 @@ class _SuggestionRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

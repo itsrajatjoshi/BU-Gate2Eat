@@ -122,8 +122,17 @@ class WhatsAppService {
 
     try {
       if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return true;
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) return true;
+      }
+    } catch (_) {}
+
+    try {
+      if (await canLaunchUrl(uri)) {
+        return await launchUrl(uri);
       }
     } catch (_) {}
 

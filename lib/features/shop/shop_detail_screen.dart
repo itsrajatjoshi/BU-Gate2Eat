@@ -290,7 +290,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           imageUrl: img,
           isActive: c.isActive,
           shopId: shopId,
-        ));
+        ),);
       }
     }
 
@@ -1226,17 +1226,12 @@ class _MenuItemCard extends ConsumerWidget {
     final quantityInCart = cartState.getQuantityForShop(shop.id, item.id);
 
     void showItemDetail() {
-      showModalBottomSheet<void>(
+      showItemDetailBottomSheet(
         context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: 0.55),
-        builder: (ctx) => _ItemDetailBottomSheet(
-          item: item,
-          shop: shop,
-          isAvailable: isAvailable,
-          displayImageUrl: displayImageUrl,
-        ),
+        item: item,
+        shop: shop,
+        isAvailable: isAvailable,
+        displayImageUrl: displayImageUrl,
       );
     }
 
@@ -1644,6 +1639,59 @@ class _CategoryNavWidget extends StatelessWidget {
   }
 }
 
+/// Universal Gateway for displaying the Item Customization Bottom Sheet.
+/// Can be invoked from Main Shop Menu, Cart Suggestions, Favourites, or Search.
+void showItemDetailBottomSheet({
+  required BuildContext context,
+  required MenuItem item,
+  required Shop shop,
+  bool isAvailable = true,
+  String displayImageUrl = '',
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.55),
+    builder: (ctx) => _ItemDetailBottomSheet(
+      item: item,
+      shop: shop,
+      isAvailable: isAvailable,
+      displayImageUrl: displayImageUrl,
+    ),
+  );
+}
+
+/// Universal routing helper for customer Add actions across Main Menu, Cart Suggestions, and Favourites.
+/// - If [item.hasOptions] is true: ALWAYS opens the item customization bottom sheet.
+/// - If [item.hasOptions] is false: Adds directly to cart (handling cross-shop dialog if needed).
+void handleCustomerAddToCart({
+  required BuildContext context,
+  required WidgetRef ref,
+  required MenuItem item,
+  required Shop shop,
+  bool isAvailable = true,
+  String displayImageUrl = '',
+}) {
+  if (item.hasOptions) {
+    showItemDetailBottomSheet(
+      context: context,
+      item: item,
+      shop: shop,
+      isAvailable: isAvailable,
+      displayImageUrl: displayImageUrl,
+    );
+  } else {
+    tryAddToCart(
+      context: context,
+      ref: ref,
+      item: item,
+      shopId: shop.id,
+      shopName: shop.name,
+    );
+  }
+}
+
 /// Modern, premium bottom sheet displaying full item details matching top-tier food delivery apps (Swiggy/Zomato/Zepto).
 class _ItemDetailBottomSheet extends ConsumerStatefulWidget {
   const _ItemDetailBottomSheet({
@@ -1663,6 +1711,7 @@ class _ItemDetailBottomSheet extends ConsumerStatefulWidget {
 }
 class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> {
   double _favoriteScale = 1.0;
+  int _choiceAnimationKey = 0;
   final Map<String, MenuItemOption> _selectedOptions = {};
 
   @override
@@ -2120,6 +2169,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                 child: InkWell(
                   onTap: () {
                     setState(() {
+                      _choiceAnimationKey++;
                       if (isSelected && !group.required) {
                         // Optional choice: tapping active selected option toggles it off
                         debugPrint('👉 Cleared optional choice: ${group.name}');
@@ -2542,13 +2592,80 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                 color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
                               ),
                               const SizedBox(height: 14),
-                              // Choice Priority: All Choice groups render before Fixed groups
+                              // 1. Choice Priority: All Choice groups render fixed at the top (STATIONARY)
                               ...widget.item.optionGroups
-                                  .where((g) => g.groupType == OptionGroupType.choice)
-                                  .map((group) => _buildOptionGroup(group, isDark, liveCart)),
-                              ...widget.item.optionGroups
-                                  .where((g) => g.groupType == OptionGroupType.fixed)
-                                  .map((group) => _buildOptionGroup(group, isDark, liveCart)),
+                                  .where(
+                                    (g) =>
+                                        g.groupType == OptionGroupType.choice &&
+                                        !g.options.any(
+                                          (o) =>
+                                              o.pricingType ==
+                                              OptionPricingType.fixedPrice,
+                                        ),
+                                  )
+                                  .map((group) => _buildChoiceGroup(group, isDark)),
+                              // 2. Fixed Option List: Entire list animates horizontally as ONE unit on choice tap
+                              () {
+                                final fixedGroups = widget.item.optionGroups
+                                    .where(
+                                      (g) =>
+                                          g.groupType ==
+                                              OptionGroupType.fixed ||
+                                          g.options.any(
+                                            (o) =>
+                                                o.pricingType ==
+                                                OptionPricingType.fixedPrice,
+                                          ),
+                                    )
+                                    .toList();
+                                if (fixedGroups.isEmpty) {
+                                  return const SizedBox.shrink();
+                                }
+                                return ClipRect(
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 280),
+                                    switchInCurve: Curves.easeOutCubic,
+                                    switchOutCurve: Curves.easeInCubic,
+                                    transitionBuilder: (Widget child, Animation<double> animation) {
+                                      final inAnimation = Tween<Offset>(
+                                        begin: const Offset(1.0, 0.0),
+                                        end: Offset.zero,
+                                      ).animate(animation);
+
+                                      final outAnimation = Tween<Offset>(
+                                        begin: const Offset(-1.0, 0.0),
+                                        end: Offset.zero,
+                                      ).animate(animation);
+
+                                      final isIncoming = (child.key as ValueKey<int>?)?.value == _choiceAnimationKey;
+                                      return SlideTransition(
+                                        position: isIncoming ? inAnimation : outAnimation,
+                                        child: child,
+                                      );
+                                    },
+                                    layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
+                                      return Stack(
+                                        alignment: Alignment.topCenter,
+                                        children: <Widget>[
+                                          ...previousChildren,
+                                          if (currentChild != null) currentChild,
+                                        ],
+                                      );
+                                    },
+                                    child: SizedBox(
+                                      key: ValueKey<int>(_choiceAnimationKey),
+                                      width: double.infinity,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: fixedGroups.map((group) {
+                                          return _buildOptionGroup(group, isDark, liveCart);
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }(),
                               const SizedBox(height: 6),
                             ],
                           ),

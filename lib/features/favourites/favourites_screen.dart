@@ -11,6 +11,7 @@ import '../../core/providers.dart';
 import '../../models/menu_item_model.dart';
 import '../cart/cart_dialog_helper.dart';
 import '../cart/cart_provider.dart';
+import '../shop/shop_detail_screen.dart';
 
 class FavouritesScreen extends ConsumerWidget {
   const FavouritesScreen({super.key});
@@ -192,248 +193,244 @@ class FavouritesScreen extends ConsumerWidget {
               final imageUrl = _getEffectiveImageUrl(item);
               final quantityInCart = cartState.getQuantityForShop(shop.id, item.id);
               final isAvailable = item.isAvailable && shop.isOpen;
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurface : AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(
-                    color: isDark ? AppColors.darkDivider : AppColors.divider,
-                    width: 0.8,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+              return GestureDetector(
+                onTap: () => showItemDetailBottomSheet(
+                  context: context,
+                  item: item,
+                  shop: shop,
+                  isAvailable: isAvailable,
+                  displayImageUrl: imageUrl,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Food Image with rounded border
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        child: Stack(
-                          children: [
-                            CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              width: 88,
-                              height: 88,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                width: 88,
-                                height: 88,
-                                color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
-                                child: const Center(
-                                  child: Icon(Icons.fastfood_rounded, color: Colors.grey, size: 28),
-                                ),
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                width: 88,
-                                height: 88,
-                                color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
-                                child: const Center(
-                                  child: Icon(Icons.fastfood_rounded, color: Colors.grey, size: 28),
-                                ),
-                              ),
-                            ),
-                            if (!isAvailable)
-                              Positioned.fill(
-                                child: Container(
-                                  color: Colors.black.withValues(alpha: 0.6),
-                                  alignment: Alignment.center,
-                                  child: const Text(
-                                    'UNAVAILABLE',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkSurface : AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(
+                      color: isDark ? AppColors.darkDivider : AppColors.divider,
+                      width: 0.8,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                      const SizedBox(width: 12),
-
-                      // Details Column
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Header Row: Veg Icon + Name + Heart Remove Button
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Food Image with rounded border
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          child: Stack(
+                            children: [
+                              CachedNetworkImage(
+                                imageUrl: imageUrl,
+                                width: 88,
+                                height: 88,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  width: 88,
+                                  height: 88,
+                                  color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
+                                  child: const Center(
+                                    child: Icon(Icons.fastfood_rounded, color: Colors.grey, size: 28),
+                                  ),
                                 ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    item.name,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14.5,
-                                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
-                                      height: 1.2,
+                                errorWidget: (context, url, error) => Container(
+                                  width: 88,
+                                  height: 88,
+                                  color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
+                                  child: const Center(
+                                    child: Icon(Icons.fastfood_rounded, color: Colors.grey, size: 28),
+                                  ),
+                                ),
+                              ),
+                              if (!isAvailable)
+                                Positioned.fill(
+                                  child: Container(
+                                    color: Colors.black.withValues(alpha: 0.6),
+                                    alignment: Alignment.center,
+                                    child: const Text(
+                                      'UNAVAILABLE',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5,
+                                      ),
                                     ),
                                   ),
                                 ),
-                                InkWell(
-                                  onTap: () {
-                                    ref.read(favoritesProvider.notifier).toggleFavorite(item.id, shop.id);
-                                  },
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4.0),
-                                    child: Icon(
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+
+                        // Item details
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Top row: Veg tag + Shop Name Badge + Favorite heart
+                              Row(
+                                children: [
+                                  item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        shop.name,
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark ? AppColors.primaryLight : AppColors.primary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  // Heart Icon (Filled red)
+                                  GestureDetector(
+                                    onTap: () {
+                                      ref
+                                          .read(favoritesProvider.notifier)
+                                          .toggleFavorite(item.id, shop.id);
+                                    },
+                                    child: const Icon(
                                       Icons.favorite_rounded,
-                                      size: 22,
-                                      color: AppColors.error,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            // Shop Name Attribution (e.g. "Rajat Shop")
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.storefront_outlined,
-                                  size: 13,
-                                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    shop.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
                                       color: AppColors.primary,
+                                      size: 20,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
 
-                            // Item details (e.g. "8 Pieces")
-                            if (item.details.isNotEmpty) ...[
-                              const SizedBox(height: 2),
+                              // Item Name
                               Text(
-                                item.details,
+                                item.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  letterSpacing: -0.2,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+
+                              // Category / Description subtitle
+                              Text(
+                                item.details.isNotEmpty ? item.details : 'Delicious & fresh',
                                 style: TextStyle(
                                   fontSize: 11.5,
                                   color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ],
+                              const SizedBox(height: 10),
 
-                            const SizedBox(height: 8),
-
-                            // Price and Add-to-Cart / Stepper
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  item.formattedPrice,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                              // Price and Add-to-Cart / Stepper
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    item.formattedPrice,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                                    ),
                                   ),
-                                ),
-                                if (isAvailable)
-                                  quantityInCart > 0
-                                      ? Container(
-                                          height: 28,
-                                          decoration: BoxDecoration(
-                                            color: AppColors.primary,
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              InkWell(
-                                                onTap: () => ref
-                                                    .read(cartProvider.notifier)
-                                                    .removeItem(item.id, shop.id),
-                                                child: const Padding(
-                                                  padding: EdgeInsets.symmetric(horizontal: 8),
-                                                  child: Icon(Icons.remove_rounded, size: 16, color: Colors.white),
-                                                ),
-                                              ),
-                                              Text(
-                                                '$quantityInCart',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                              InkWell(
-                                                onTap: () => tryAddToCart(
-                                                  context: context,
-                                                  ref: ref,
-                                                  item: item,
-                                                  shopId: shop.id,
-                                                  shopName: shop.name,
-                                                ),
-                                                child: const Padding(
-                                                  padding: EdgeInsets.symmetric(horizontal: 8),
-                                                  child: Icon(Icons.add_rounded, size: 16, color: Colors.white),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.primary,
-                                            foregroundColor: Colors.white,
-                                            elevation: 0,
-                                            minimumSize: const Size(64, 28),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                                            shape: RoundedRectangleBorder(
+                                  if (isAvailable)
+                                    (!item.hasOptions && quantityInCart > 0)
+                                        ? Container(
+                                            height: 28,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primary,
                                               borderRadius: BorderRadius.circular(6),
                                             ),
-                                            textStyle: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                InkWell(
+                                                  onTap: () => ref
+                                                      .read(cartProvider.notifier)
+                                                      .removeItem(item.id, shop.id),
+                                                  child: const Padding(
+                                                    padding: EdgeInsets.symmetric(horizontal: 8),
+                                                    child: Icon(Icons.remove_rounded, size: 16, color: Colors.white),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '$quantityInCart',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                                InkWell(
+                                                  onTap: () => tryAddToCart(
+                                                    context: context,
+                                                    ref: ref,
+                                                    item: item,
+                                                    shopId: shop.id,
+                                                    shopName: shop.name,
+                                                  ),
+                                                  child: const Padding(
+                                                    padding: EdgeInsets.symmetric(horizontal: 8),
+                                                    child: Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
+                                          )
+                                        : ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.primary,
+                                              foregroundColor: Colors.white,
+                                              elevation: 0,
+                                              minimumSize: const Size(64, 28),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              textStyle: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            onPressed: () => handleCustomerAddToCart(
+                                              context: context,
+                                              ref: ref,
+                                              item: item,
+                                              shop: shop,
+                                              isAvailable: isAvailable,
+                                              displayImageUrl: imageUrl,
+                                            ),
+                                            child: const Text('ADD'),
                                           ),
-                                          onPressed: () => tryAddToCart(
-                                            context: context,
-                                            ref: ref,
-                                            item: item,
-                                            shopId: shop.id,
-                                            shopName: shop.name,
-                                          ),
-                                          child: const Text('ADD'),
-                                        ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );
