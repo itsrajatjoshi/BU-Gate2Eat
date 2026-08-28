@@ -11,6 +11,7 @@ import 'core/router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'services/local_storage_service.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,11 +52,18 @@ void main() async {
   // Initialize local storage
   final localStorageService = await LocalStorageService.create();
 
+  // Initialize Notification Service foundation asynchronously
+  final notificationService = NotificationService();
+  notificationService.initialize(localStorage: localStorageService).catchError((Object e) {
+    debugPrint('⚠️ [FCM] NotificationService init catch: $e');
+  });
+
   runApp(
     ProviderScope(
       overrides: [
         // Override the local storage provider with the initialized instance
         localStorageServiceProvider.overrideWithValue(localStorageService),
+        notificationServiceProvider.overrideWithValue(notificationService),
       ],
       child: const BUGate2EatApp(),
     ),

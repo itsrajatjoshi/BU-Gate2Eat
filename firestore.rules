@@ -132,7 +132,22 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ─── 5. DEFAULT DENY ───────────────────────────────────────────────
+    // ─── 5. DEVICE TOKENS COLLECTION ───────────────────────────────────
+    function isValidDeviceTokenWrite(tokenId) {
+      let data = request.resource.data;
+      return data.token is string && data.token.size() > 0 && data.token == tokenId
+        && data.role in ['customer', 'shopkeeper', 'admin']
+        && (data.platform in ['android', 'ios', 'web', 'unknown'])
+        && (data.get('phone', '') is string);
+    }
+
+    match /deviceTokens/{tokenId} {
+      allow read: if true;
+      allow create, update: if isValidDeviceTokenWrite(tokenId);
+      allow delete: if true;
+    }
+
+    // ─── 6. DEFAULT DENY ───────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

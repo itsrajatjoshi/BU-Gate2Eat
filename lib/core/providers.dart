@@ -12,6 +12,7 @@ import '../services/firestore_service.dart';
 import '../services/force_update_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/order_service.dart';
+import '../services/notification_service.dart';
 import '../services/report_service.dart';
 import '../services/shop_stats_service.dart';
 import 'constants/app_constants.dart';
@@ -21,6 +22,11 @@ export '../models/shop_model.dart' show ShopOrderMethod;
 /// Provider for the Firestore service (singleton).
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService();
+});
+
+/// Provider for the Notification service (singleton).
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return NotificationService();
 });
 
 /// Provider for the Order service (singleton).
