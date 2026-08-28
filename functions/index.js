@@ -355,3 +355,80 @@ exports.onOrderStatusUpdated = functions.firestore
       return null;
     }
   });
+
+// ─── DIAGNOSTIC HTTP ENDPOINT ───────────────────────────────────────────────
+exports.testFcmDiagnostics = functions.https.onRequest(async (req, res) => {
+  try {
+    const tokensSnap = await db.collection("deviceTokens").get();
+    const tokens = [];
+    tokensSnap.forEach((doc) => {
+      const d = doc.data();
+      tokens.push({
+        id: doc.id.substring(0, 10) + "...",
+        fullToken: d.token,
+        role: d.role,
+        phone: d.phone,
+        customerId: d.customerId,
+        shopId: d.shopId,
+        platform: d.platform,
+        updatedAt: d.updatedAt ? d.updatedAt.toDate() : null,
+      });
+    });
+
+    const ordersSnap = await db.collection("orders").orderBy("createdAt", "desc").limit(3).get();
+    const orders = [];
+    ordersSnap.forEach((doc) => {
+      const d = doc.data();
+      orders.push({
+        orderId: d.orderId,
+        status: d.status,
+        shopId: d.shopId,
+        customerPhone: d.customerPhone,
+        customerId: d.customerId,
+        newOrderNotified: d.newOrderNotificationDispatched,
+        lastNotifiedStatus: d.lastNotifiedStatus,
+      });
+    });
+
+    // Optional: Trigger test push if requested
+    let testPushResult = null;
+    if (req.query.push === "true" && tokens.length > 0) {
+      const targetToken = tokens[0].fullToken;
+      try {
+        const msg = {
+          notification: {
+            title: "🧪 Test Push Notification",
+            body: "If you see this, Firebase FCM delivery is 100% working!",
+          },
+          data: {
+            type: "test_push",
+            timestamp: String(Date.now()),
+          },
+          android: {
+            priority: "high",
+            notification: {
+              channelId: "yummbu_customer_orders_channel",
+              sound: "default",
+            },
+          },
+          token: targetToken,
+        };
+        const fcmResp = await messaging.send(msg);
+        testPushResult = { success: true, messageId: fcmResp };
+      } catch (fcmErr) {
+        testPushResult = { success: false, error: fcmErr.message, code: fcmErr.code };
+      }
+    }
+
+    res.status(200).json({
+      timestamp: new Date().toISOString(),
+      totalRegisteredTokens: tokens.length,
+      registeredTokens: tokens.map(t => ({ role: t.role, phone: t.phone, customerId: t.customerId, shopId: t.shopId, platform: t.platform, updatedAt: t.updatedAt })),
+      recentOrders: orders,
+      testPushResult,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
