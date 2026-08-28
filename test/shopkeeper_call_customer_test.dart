@@ -67,7 +67,7 @@ void main() {
   });
 
   group('Checkpoint 1B — Item #5: ShopkeeperOrderDetailsModal Call Action UI & Safety', () {
-    testWidgets('1. Displays circular call icon button at bottom-right above action buttons for placed order', (tester) async {
+    testWidgets('1. Displays circular call icon button next to phone number inside Customer Details card', (tester) async {
       final order = createTestOrder(
         orderId: 'ORD-101',
         shopId: 'rajat_shop',

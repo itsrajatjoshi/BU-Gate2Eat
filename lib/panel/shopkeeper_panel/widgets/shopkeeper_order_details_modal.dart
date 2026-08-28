@@ -618,6 +618,46 @@ class _ShopkeeperOrderDetailsModalState
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            // Call Customer Action Button (Compact 34x34 circular icon button)
+                            Tooltip(
+                              message: customerDisplayPhone != 'Not provided'
+                                  ? 'Call $customerDisplayName (+91 $customerDisplayPhone)'
+                                  : 'Call $customerDisplayName',
+                              child: Material(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.black.withValues(alpha: 0.05),
+                                shape: const CircleBorder(),
+                                child: InkWell(
+                                  onTap: () => _handleCallCustomer(
+                                    order.customerPhone,
+                                    customerDisplayName,
+                                  ),
+                                  customBorder: const CircleBorder(),
+                                  child: Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.12)
+                                            : Colors.black.withValues(alpha: 0.08),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.call_outlined,
+                                      size: 17,
+                                      color: isDark
+                                          ? AppColors.darkTextPrimary
+                                          : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -986,53 +1026,7 @@ class _ShopkeeperOrderDetailsModalState
               ),
             ),
 
-            // 4. Call Customer Action Button (Bottom-Right, positioned above action buttons)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 6, 20, 6),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Tooltip(
-                  message: customerDisplayPhone != 'Not provided'
-                      ? 'Call $customerDisplayName (+91 $customerDisplayPhone)'
-                      : 'Call $customerDisplayName',
-                  child: Material(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.05),
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      onTap: () => _handleCallCustomer(
-                        order.customerPhone,
-                        customerDisplayName,
-                      ),
-                      customBorder: const CircleBorder(),
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : Colors.black.withValues(alpha: 0.08),
-                            width: 1,
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.call_outlined,
-                          size: 19,
-                          color: isDark
-                              ? AppColors.darkTextPrimary
-                              : AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // 5. Action Buttons (Only shown for Active Orders: Placed or Accepted)
+            // 4. Action Buttons (Only shown for Active Orders: Placed or Accepted)
             if (isPlaced || isAccepted) ...[
               const Divider(height: 1, thickness: 0.8),
               Padding(
