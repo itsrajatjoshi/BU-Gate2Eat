@@ -44,6 +44,20 @@ class SeedDataService {
     } catch (e) {
       debugPrint('Error checking/seeding UP16 Shop: $e');
     }
+
+    // 5. Rajat Hotel
+    try {
+      await _seedRajatHotel(firestore);
+    } catch (e) {
+      debugPrint('Error checking/seeding Rajat Hotel: $e');
+    }
+
+    // 6. UP16 Queens
+    try {
+      await _seedUP16Queens(firestore);
+    } catch (e) {
+      debugPrint('Error checking/seeding UP16 Queens: $e');
+    }
   }
 
   // ─── Shop 1: Rajat Shop ───────────────────────────────────────────────
@@ -425,6 +439,80 @@ class SeedDataService {
         defaultOrderMethod: 'both',
         defaultMinOrderAmount: 0,
         fallbackName: 'UP 16 Junction Fast Food',
+      );
+    }
+  }
+
+  // ─── Shop 5: Rajat Hotel ──────────────────────────────────────────────
+  static Future<void> _seedRajatHotel(FirebaseFirestore firestore) async {
+    const shopId = 'rajat_hotel';
+    final shopRef = firestore.collection('shops').doc(shopId);
+    final doc = await shopRef.get();
+
+    if (!doc.exists) {
+      debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      await shopRef.set({
+        'name': 'Rajat Hotel',
+        'description': 'North Indian, Tandoor, Mughlai & Dining',
+        'bannerUrl': 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500',
+        'contactNumber': '8295643910',
+        'orderNumber': '8295643910',
+        'openTime': '08:00',
+        'closeTime': '23:30',
+        'isClosedOverride': false,
+        'isActive': true,
+        'sortOrder': 5,
+        'searchKeywords': ['rajat', 'hotel', 'dining', 'north indian', 'thali', 'paneer'],
+        'deliveryNote': 'Pickup from Gate 3',
+        'orderMethod': 'whatsapp',
+        'minimumOrderAmount': 0,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      await _backfillMissingShopFields(
+        shopRef,
+        doc,
+        defaultOrderMethod: 'whatsapp',
+        defaultMinOrderAmount: 0,
+        fallbackName: 'Rajat Hotel',
+      );
+    }
+  }
+
+  // ─── Shop 6: UP16 Queens ──────────────────────────────────────────────
+  static Future<void> _seedUP16Queens(FirebaseFirestore firestore) async {
+    const shopId = 'up16_queens';
+    final shopRef = firestore.collection('shops').doc(shopId);
+    final doc = await shopRef.get();
+
+    if (!doc.exists) {
+      debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      await shopRef.set({
+        'name': 'UP16 Queens',
+        'description': 'Special Fast Food, Desserts & Beverages',
+        'bannerUrl': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500',
+        'contactNumber': '8295643910',
+        'orderNumber': '8295643910',
+        'openTime': '08:00',
+        'closeTime': '23:30',
+        'isClosedOverride': false,
+        'isActive': true,
+        'sortOrder': 6,
+        'searchKeywords': ['up16', 'queens', 'fast food', 'beverages', 'desserts'],
+        'deliveryNote': 'Pickup from Gate 3',
+        'orderMethod': 'whatsapp',
+        'minimumOrderAmount': 0,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      await _backfillMissingShopFields(
+        shopRef,
+        doc,
+        defaultOrderMethod: 'whatsapp',
+        defaultMinOrderAmount: 0,
+        fallbackName: 'UP16 Queens',
       );
     }
   }

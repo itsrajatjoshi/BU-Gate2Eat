@@ -51,10 +51,12 @@ void main() {
     });
 
     test('2. Resolves correct shopkeeper contact from AppAuthRoles for all shops', () {
-      expect(AppAuthRoles.getShopIdForPhone('8295643910'), 'rajat_shop');
-      expect(AppAuthRoles.getShopIdForPhone('8875344034'), 'nayan_shop');
-      expect(AppAuthRoles.getShopIdForPhone('8000383993'), 'kivisha_shop');
+      expect(AppAuthRoles.getShopIdForPhone('8000383993'), 'rajat_shop');
+      expect(AppAuthRoles.getShopIdForPhone('8295643910'), 'nayan_shop');
+      expect(AppAuthRoles.getShopIdForPhone('8875344034'), 'kivisha_shop');
       expect(AppAuthRoles.getShopIdForPhone('8079065843'), 'up16_junction_fast_food');
+      expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'rajat_hotel');
+      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_queens');
     });
   });
 

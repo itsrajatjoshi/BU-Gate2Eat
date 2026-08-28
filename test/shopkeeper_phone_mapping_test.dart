@@ -17,19 +17,22 @@ void main() {
 
   group('Checkpoint 1B — Central AppAuthRoles Phone-to-Shop Mapping Resolver', () {
     test('1. Resolves registered shopkeeper phones to correct shop IDs', () {
-      expect(AppAuthRoles.getShopIdForPhone('8295643910'), 'rajat_shop');
-      expect(AppAuthRoles.getShopIdForPhone('+91 8295643910'), 'rajat_shop');
-      expect(AppAuthRoles.getShopIdForPhone('08295643910'), 'rajat_shop');
+      expect(AppAuthRoles.getShopIdForPhone('8000383993'), 'rajat_shop');
+      expect(AppAuthRoles.getShopIdForPhone('+91 8000383993'), 'rajat_shop');
+      expect(AppAuthRoles.getShopIdForPhone('08000383993'), 'rajat_shop');
 
-      expect(AppAuthRoles.getShopIdForPhone('8875344034'), 'nayan_shop');
-      expect(AppAuthRoles.getShopIdForPhone('+91 8875344034'), 'nayan_shop');
+      expect(AppAuthRoles.getShopIdForPhone('8295643910'), 'nayan_shop');
+      expect(AppAuthRoles.getShopIdForPhone('+91 8295643910'), 'nayan_shop');
 
-      expect(AppAuthRoles.getShopIdForPhone('8000383993'), 'kivisha_shop');
-      expect(AppAuthRoles.getShopIdForPhone('+918000383993'), 'kivisha_shop');
+      expect(AppAuthRoles.getShopIdForPhone('8875344034'), 'kivisha_shop');
+      expect(AppAuthRoles.getShopIdForPhone('+918875344034'), 'kivisha_shop');
 
       expect(AppAuthRoles.getShopIdForPhone('8079065843'), 'up16_junction_fast_food');
       expect(AppAuthRoles.getShopIdForPhone('8745007244'), 'up16_junction_fast_food');
       expect(AppAuthRoles.getShopIdForPhone('8745950335'), 'up16_junction_fast_food');
+
+      expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'rajat_hotel');
+      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_queens');
     });
 
     test('2. Returns null for unknown / unregistered phone numbers', () {
@@ -43,8 +46,8 @@ void main() {
   group('Checkpoint 1B — currentShopkeeperShopIdProvider resolution via LocalStorage', () {
     test('1. Resolves shopId from logged-in LocalStorage phone', () async {
       SharedPreferences.setMockInitialValues({
-        'user_phone': '8875344034',
-        'user_name': 'Nayan Shopkeeper',
+        'user_phone': '8000383993',
+        'user_name': 'Rajat Shopkeeper',
       });
       final prefs = await SharedPreferences.getInstance();
       final localStorage = LocalStorageService(prefs);
@@ -55,7 +58,7 @@ void main() {
         ],
       );
 
-      expect(container.read(currentShopkeeperShopIdProvider), 'nayan_shop');
+      expect(container.read(currentShopkeeperShopIdProvider), 'rajat_shop');
     });
 
     test('2. Returns null when LocalStorage phone is unknown', () async {

@@ -78,18 +78,18 @@ void main() {
       expect(AppAuthRoles.isAdminPhone('9876543210'), isFalse);
     });
 
-    test('5. All 4 registered Shopkeepers correctly recognized and mapped to shopId', () {
+    test('5. All registered Shopkeepers correctly recognized and mapped to shopId', () {
       // Rajat Shop
-      expect(AppAuthRoles.isShopkeeperPhone('8295643910'), isTrue);
-      expect(AppAuthRoles.getShopIdForPhone('+91 8295643910'), 'rajat_shop');
+      expect(AppAuthRoles.isShopkeeperPhone('8000383993'), isTrue);
+      expect(AppAuthRoles.getShopIdForPhone('+91 8000383993'), 'rajat_shop');
 
       // Nayan Shop
-      expect(AppAuthRoles.isShopkeeperPhone('8875344034'), isTrue);
-      expect(AppAuthRoles.getShopIdForPhone('8875344034'), 'nayan_shop');
+      expect(AppAuthRoles.isShopkeeperPhone('8295643910'), isTrue);
+      expect(AppAuthRoles.getShopIdForPhone('8295643910'), 'nayan_shop');
 
       // Kivisha Shop
-      expect(AppAuthRoles.isShopkeeperPhone('8000383993'), isTrue);
-      expect(AppAuthRoles.getShopIdForPhone('+91 8000383993'), 'kivisha_shop');
+      expect(AppAuthRoles.isShopkeeperPhone('8875344034'), isTrue);
+      expect(AppAuthRoles.getShopIdForPhone('+91 8875344034'), 'kivisha_shop');
 
       // UP 16 Junction Fast Food (multiple lines)
       expect(AppAuthRoles.isShopkeeperPhone('8745007244'), isTrue);
@@ -98,6 +98,12 @@ void main() {
       expect(AppAuthRoles.getShopIdForPhone('8745950335'), 'up16_junction_fast_food');
       expect(AppAuthRoles.isShopkeeperPhone('8079065843'), isTrue);
       expect(AppAuthRoles.getShopIdForPhone('8079065843'), 'up16_junction_fast_food');
+
+      // Rajat Hotel & UP16 Queens
+      expect(AppAuthRoles.isShopkeeperPhone('8888822222'), isTrue);
+      expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'rajat_hotel');
+      expect(AppAuthRoles.isShopkeeperPhone('9999922222'), isTrue);
+      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_queens');
 
       // Regular customer
       expect(AppAuthRoles.isShopkeeperPhone('9876543210'), isFalse);

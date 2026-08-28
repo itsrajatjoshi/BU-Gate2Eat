@@ -95,12 +95,14 @@ class AppAuthRoles {
 
   /// Authoritative phone to shopId mapping for registered shopkeepers.
   static const Map<String, String> shopkeeperPhoneMap = {
-    '8295643910': 'rajat_shop',
-    '8875344034': 'nayan_shop',
-    '8000383993': 'kivisha_shop',
+    '8000383993': 'rajat_shop',
+    '8295643910': 'nayan_shop',
+    '8875344034': 'kivisha_shop',
+    '8079065843': 'up16_junction_fast_food',
     '8745007244': 'up16_junction_fast_food',
     '8745950335': 'up16_junction_fast_food',
-    '8079065843': 'up16_junction_fast_food',
+    '8888822222': 'rajat_hotel',
+    '9999922222': 'up16_queens',
   };
 
   /// Extracts digits only and strips international +91 prefix for clean 10-digit comparison.
