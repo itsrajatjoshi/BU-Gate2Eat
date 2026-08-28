@@ -1,0 +1,14 @@
+{
+  "name": "yummbu-functions",
+  "description": "YummBU Cloud Functions for Secure Backend FCM Order Notifications",
+  "version": "1.0.0",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.3.0",
+    "firebase-functions": "^7.3.2"
+  },
+  "private": true
+}
