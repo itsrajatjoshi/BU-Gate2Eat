@@ -26,9 +26,18 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: 'Rajat Joshi');
-    _phoneController = TextEditingController(text: '8078643910');
-    _ageController = TextEditingController(text: '25');
+    final localStorage = ref.read(localStorageServiceProvider);
+    final initialName =
+        localStorage.userName.isNotEmpty ? localStorage.userName : 'Rajat Joshi';
+    final initialPhone = localStorage.userPhone.isNotEmpty
+        ? localStorage.userPhone
+        : AppAuthRoles.adminPhone;
+    final initialAge =
+        localStorage.userAge > 0 ? localStorage.userAge.toString() : '25';
+
+    _nameController = TextEditingController(text: initialName);
+    _phoneController = TextEditingController(text: initialPhone);
+    _ageController = TextEditingController(text: initialAge);
   }
 
   @override
@@ -41,19 +50,46 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
 
   Future<void> _saveProfile() async {
     final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
     final ageText = _ageController.text.trim();
 
-    if (name.isEmpty || phone.isEmpty || ageText.isEmpty) {
+    if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
+        const SnackBar(
+          content: Text('Name cannot be empty'),
+          backgroundColor: AppColors.error,
+        ),
       );
       return;
     }
 
+    final localStorage = ref.read(localStorageServiceProvider);
+    await localStorage.updateName(name);
+
+    if (ageText.isNotEmpty) {
+      final parsedAge = int.tryParse(ageText);
+      if (parsedAge != null && parsedAge > 0 && parsedAge < 120) {
+        await localStorage.updateAge(parsedAge);
+      }
+    }
+
     if (mounted) {
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Admin Profile updated successfully')),
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Text('Admin Profile updated successfully'),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -125,8 +161,16 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const userName = 'Rajat Joshi';
-    const userPhone = '+91 8078643910';
+    final localStorage = ref.watch(localStorageServiceProvider);
+    final userName = localStorage.userName.isNotEmpty
+        ? localStorage.userName
+        : 'Rajat Joshi';
+    final rawPhone = localStorage.userPhone.isNotEmpty
+        ? localStorage.userPhone
+        : AppAuthRoles.adminPhone;
+    final userPhone = '+91 $rawPhone';
+    final initialLetter =
+        userName.isNotEmpty ? userName[0].toUpperCase() : 'A';
 
     final screenWidth = MediaQuery.of(context).size.width;
     final horizontalPadding = screenWidth < 360 ? 12.0 : 16.0;
@@ -180,10 +224,10 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                     color: AppColors.primary.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Text(
-                      'R',
-                      style: TextStyle(
+                      initialLetter,
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w800,
                         color: AppColors.primary,
@@ -310,16 +354,29 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                 const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    prefixIcon: Icon(Icons.phone_outlined),
+                  readOnly: true,
+                  enableInteractiveSelection: false,
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Phone Number (Admin Account Identity)',
+                    prefixIcon: const Icon(Icons.phone_outlined),
                     prefixText: '+91 ',
                     isDense: true,
+                    suffixIcon: Tooltip(
+                      message: 'Phone number is permanently linked to your Admin role',
+                      child: Icon(
+                        Icons.lock_outline_rounded,
+                        size: 18,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textHint,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -371,39 +428,44 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                 width: 0.8,
               ),
             ),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.settings_outlined,
-                    color: AppColors.primary,
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.settings_outlined,
+                      color: AppColors.primary,
+                    ),
+                    title: const Text('Settings'),
+                    subtitle: const Text('Theme, notifications, preferences'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push(AppRoutes.settings),
                   ),
-                  title: const Text('Settings'),
-                  subtitle: const Text('Theme, notifications, preferences'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.push(AppRoutes.settings),
-                ),
-                Divider(
-                  height: 1,
-                  color: isDark ? AppColors.darkDivider : AppColors.divider,
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.logout_rounded,
-                    color: AppColors.error,
+                  Divider(
+                    height: 1,
+                    color: isDark ? AppColors.darkDivider : AppColors.divider,
                   ),
-                  title: const Text(
-                    'Logout',
-                    style: TextStyle(color: AppColors.error),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.logout_rounded,
+                      color: AppColors.error,
+                    ),
+                    title: const Text(
+                      'Logout',
+                      style: TextStyle(color: AppColors.error),
+                    ),
+                    subtitle: const Text('Sign out from this device'),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.error,
+                    ),
+                    onTap: _showLogoutDialog,
                   ),
-                  subtitle: const Text('Sign out from this device'),
-                  trailing: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.error,
-                  ),
-                  onTap: _showLogoutDialog,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

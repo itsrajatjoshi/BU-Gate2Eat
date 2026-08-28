@@ -246,11 +246,11 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
     final shop = shops.where((s) => s.id == widget.shopId).firstOrNull ??
         Shop(
           id: widget.shopId,
-          name: widget.shopId == 'rajat_shop' ? 'Rajat Shop' : 'Shop',
+          name: 'Shop',
           description: '',
           bannerUrl: '',
-          contactNumber: widget.shopId == 'rajat_shop' ? '8295643910' : '',
-          orderNumber: widget.shopId == 'rajat_shop' ? '8295643910' : '',
+          contactNumber: '',
+          orderNumber: '',
           openTime: '08:00',
           closeTime: '23:30',
           isClosedOverride: false,

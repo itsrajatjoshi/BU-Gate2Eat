@@ -10,6 +10,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/utils/order_timer_helper.dart';
 import '../../models/order_model.dart';
+import '../../services/whatsapp_service.dart';
 import 'reorder_helper.dart';
 
 class OrderDetailScreen extends ConsumerWidget {
@@ -164,6 +165,18 @@ class OrderDetailScreen extends ConsumerWidget {
     final isAccepted = order.status == 'accepted';
     final isPlaced = order.status == 'placed';
 
+    final shops = ref.watch(shopsProvider).valueOrNull ?? [];
+    final shop = shops.where((s) => s.id == order.shopId).firstOrNull;
+    final shopPhone = (shop?.contactNumber.trim().isNotEmpty == true)
+        ? shop!.contactNumber.trim()
+        : ((shop?.orderNumber.trim().isNotEmpty == true)
+            ? shop!.orderNumber.trim()
+            : (AppAuthRoles.shopkeeperPhoneMap.entries
+                    .where((e) => e.value == order.shopId)
+                    .map((e) => e.key)
+                    .firstOrNull ??
+                ''));
+
     // Live zero-boundary auto-reconciliation
     if (isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -196,6 +209,49 @@ class OrderDetailScreen extends ConsumerWidget {
             ),
           ],
         ),
+        actions: [
+          if (!isCancelled)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: Tooltip(
+                  message: shopPhone.isNotEmpty
+                      ? 'Call ${order.shopName} (+91 $shopPhone)'
+                      : 'Call ${order.shopName}',
+                  child: Material(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.05),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      onTap: () => _handleCallShop(context, order.shopName, shopPhone),
+                      customBorder: const CircleBorder(),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.black.withValues(alpha: 0.08),
+                            width: 1,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.call_outlined,
+                          size: 19,
+                          color: isDark
+                              ? AppColors.darkTextPrimary
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
@@ -1032,5 +1088,34 @@ class OrderDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _handleCallShop(
+    BuildContext context,
+    String shopName,
+    String shopPhone,
+  ) async {
+    final clean = shopPhone.trim();
+    if (clean.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Contact number for $shopName is not available.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final launched = await WhatsAppService.launchPhoneCall(clean);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open phone dialer for +91 $clean'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }

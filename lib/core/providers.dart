@@ -415,6 +415,11 @@ final shopActiveOrdersStreamProvider =
       ? shopId
       : ref.watch(currentShopkeeperShopIdProvider);
 
+  if (effectiveShopId == null || effectiveShopId.isEmpty) {
+    yield [];
+    return;
+  }
+
   if (!orderService.isAvailable) {
     yield dummyOrders
         .where((o) =>
@@ -436,6 +441,11 @@ final shopOrderHistoryStreamProvider =
   final effectiveShopId = (shopId != null && shopId.isNotEmpty)
       ? shopId
       : ref.watch(currentShopkeeperShopIdProvider);
+
+  if (effectiveShopId == null || effectiveShopId.isEmpty) {
+    yield [];
+    return;
+  }
 
   if (!orderService.isAvailable) {
     yield dummyOrders
@@ -515,7 +525,8 @@ class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
 // shopMinimumOrderProvider REMOVED — shop.minimumOrderAmount from Firestore is the single source of truth.
 
 /// Provider for resolving active shopkeeper's shopId based on logged-in phone number.
-final currentShopkeeperShopIdProvider = Provider<String>((ref) {
+/// Returns null if phone number is not linked to any registered shopkeeper.
+final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
   try {
     final localStorage = ref.watch(localStorageServiceProvider);
     final phone = localStorage.userPhone;
@@ -524,7 +535,7 @@ final currentShopkeeperShopIdProvider = Provider<String>((ref) {
       return resolvedShopId;
     }
   } catch (_) {}
-  return 'rajat_shop';
+  return null;
 });
 
 

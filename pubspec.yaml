@@ -1,7 +1,7 @@
 name: bugate2eat_app
 description: "YummBU — Everything around Bennett. One app. One tap."
 publish_to: 'none'
-version: 1.0.0+2002
+version: 1.0.7+2002
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

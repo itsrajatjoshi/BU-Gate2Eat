@@ -1,10 +1,10 @@
-// BU Gate2Eat — Shopkeeper Panel
-// Main Shell with exactly 3 bottom tabs: Home | Orders | Profile
-// Visual styling identical to User App HomeScreen
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
+import '../../core/router.dart';
 import 'shopkeeper_home_screen.dart';
 import 'shopkeeper_order_history_screen.dart';
 import 'shopkeeper_orders_screen.dart';
@@ -22,24 +22,12 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final localStorage = ref.watch(localStorageServiceProvider);
-    final cleanPhone =
-        localStorage.userPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    // Single source of truth: central provider resolving phone to shopId
+    final shopId = ref.watch(currentShopkeeperShopIdProvider);
 
-    // Dynamically resolve shop ownership by phone number
-    String shopId = 'rajat_shop';
-    if (cleanPhone.endsWith('8079065843') ||
-        cleanPhone == '8079065843') {
-      shopId = 'up16_junction_fast_food';
-    } else if (cleanPhone.endsWith('8875344034') ||
-        cleanPhone == '8875344034') {
-      shopId = 'kivisha_shop';
-    } else if (cleanPhone.endsWith('8295643910') ||
-        cleanPhone == '8295643910') {
-      shopId = 'nayan_shop';
-    } else if (cleanPhone.endsWith('8000383993') ||
-        cleanPhone == '8000383993') {
-      shopId = 'rajat_shop';
+    // If phone number is unknown / not assigned to any shop, show safe unauthorized view
+    if (shopId == null || shopId.isEmpty) {
+      return _buildUnauthorizedView(context);
     }
 
     final screens = [
@@ -73,6 +61,83 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
             label: 'Shop',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUnauthorizedView(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final localStorage = ref.watch(localStorageServiceProvider);
+    final phone = localStorage.userPhone;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Shopkeeper Panel'),
+        automaticallyImplyLeading: false,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: isDark ? 0.20 : 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.store_mall_directory_outlined,
+                  size: 40,
+                  color: AppColors.error,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'No Shop Assigned',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                phone.isNotEmpty
+                    ? 'The phone number (+91 $phone) is not registered with any active food shop. Please contact the administrator.'
+                    : 'No phone number found for this session. Please log in again.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  await localStorage.logout();
+                  if (context.mounted) {
+                    context.go(AppRoutes.onboarding);
+                  }
+                },
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: const Text('Return to Login'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

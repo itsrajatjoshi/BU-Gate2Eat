@@ -84,7 +84,7 @@ class AppConfig {
   static const int maxSpecialInstructionsLength = 200;
 
   // App version
-  static const String appVersion = '1.0.4';
+  static const String appVersion = '1.0.7';
 }
 
 // ─── Auth Roles & Phone Mappings ──────────────────────────────

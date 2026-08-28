@@ -136,8 +136,11 @@ class _ShopkeeperProfileScreenState
     final localStorage = ref.watch(localStorageServiceProvider);
     final activeShopId = ref.watch(currentShopkeeperShopIdProvider);
     final shopsAsync = ref.watch(shopsProvider);
-    final currentShop = shopsAsync.valueOrNull?.where((s) => s.id == activeShopId).firstOrNull;
-    final shopName = currentShop?.name ?? 'Shop Manager';
+    final currentShop = shopsAsync.valueOrNull
+        ?.where((s) => s.id == activeShopId)
+        .firstOrNull;
+    final shopName = currentShop?.name ??
+        (activeShopId != null ? 'Shop Manager' : 'No Shop Assigned');
 
     final userName = localStorage.userName.isNotEmpty
         ? localStorage.userName
