@@ -185,6 +185,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       // 3. Create real Firestore order document
       await ref.read(orderServiceProvider).createOrder(newOrder);
 
+      // Non-blocking notification token sync safety net (failsafe)
+      try {
+        ref.read(notificationServiceProvider).syncCurrentSessionToken(localStorage: localStorage);
+      } catch (_) {}
+
       // 4. Temporary UI bridge: update local dummy state so existing screens reflect it
       ref.read(dummyOrdersProvider.notifier).addOrder(newOrder);
 

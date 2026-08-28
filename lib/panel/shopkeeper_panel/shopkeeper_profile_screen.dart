@@ -122,6 +122,11 @@ class _ShopkeeperProfileScreenState
 
     if (confirmed == true && mounted) {
       final localStorage = ref.read(localStorageServiceProvider);
+      final notificationService = ref.read(notificationServiceProvider);
+      final cachedToken = notificationService.cachedToken;
+      if (cachedToken != null && cachedToken.isNotEmpty) {
+        notificationService.deleteDeviceToken(cachedToken).catchError((_) {});
+      }
       await localStorage.logout();
 
       if (mounted) {

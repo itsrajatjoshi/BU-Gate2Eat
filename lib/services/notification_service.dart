@@ -1,13 +1,15 @@
 // BU Gate2Eat — Services
-// Firebase Cloud Messaging (FCM) & Device Token Registration Service (Part 2, 3, 7)
-// Centralized token lifecycle management, permission handling, session switching, and foreground/background/killed app listeners.
+// Firebase Cloud Messaging (FCM) & Device Token Registration Service (Part 2, 3, 7, 8.1)
+// Centralized token lifecycle management, permission handling, local notification channels, session switching, and foreground/background/killed app listeners.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../core/constants/app_constants.dart';
 import 'local_storage_service.dart';
@@ -83,11 +85,14 @@ class NotificationService {
   NotificationService({
     FirebaseMessaging? messaging,
     FirebaseFirestore? firestore,
+    FlutterLocalNotificationsPlugin? localNotifications,
   })  : _messaging = messaging,
-        _firestore = firestore;
+        _firestore = firestore,
+        _localNotifications = localNotifications ?? FlutterLocalNotificationsPlugin();
 
   final FirebaseMessaging? _messaging;
   final FirebaseFirestore? _firestore;
+  final FlutterLocalNotificationsPlugin _localNotifications;
 
   StreamSubscription<String>? _tokenRefreshSubscription;
   StreamSubscription<RemoteMessage>? _foregroundMessageSubscription;
@@ -103,6 +108,11 @@ class NotificationService {
   String? _lastRegisteredRole;
   String? _lastRegisteredShopId;
   PendingNotification? _pendingNotification;
+  bool _channelsCreated = false;
+
+  /// Channel ID constants matching Cloud Functions payload contract
+  static const String shopkeeperChannelId = 'yummbu_orders_channel';
+  static const String customerChannelId = 'yummbu_customer_orders_channel';
 
   /// Gets the active FirebaseMessaging instance if available.
   FirebaseMessaging? get _messagingInstance {
@@ -136,7 +146,7 @@ class NotificationService {
   Stream<PendingNotification> get onForegroundNotification =>
       _foregroundNotificationController.stream;
 
-  /// Stream of notification tap events when app is opened from background.
+  /// Stream of notification tap events when app is opened from background or local notification tap.
   Stream<PendingNotification> get onNotificationOpened =>
       _openedNotificationController.stream;
 
@@ -160,18 +170,22 @@ class NotificationService {
     return '${token.substring(0, 6)}...${token.substring(token.length - 6)} (${token.length} chars)';
   }
 
-  /// Initializes the notification service foundation and attaches all lifecycle listeners.
+  /// Initializes the notification service foundation, local notification channels, and attaches lifecycle listeners.
   /// Does NOT block app startup if FCM is unavailable or permission is pending.
   Future<void> initialize({LocalStorageService? localStorage}) async {
     try {
       debugPrint('🔔 [FCM] NotificationService initialization started...');
+      
+      // 1. Initialize Android local notification plugin & create notification channels
+      await _initializeLocalNotifications();
+
       final messaging = _messagingInstance;
       if (messaging == null) {
         debugPrint('⚠️ [FCM] Firebase not initialized; skipping FCM setup.');
         return;
       }
 
-      // 1. Retrieve initial token safely
+      // 2. Retrieve initial token safely
       final token = await getToken();
       _cachedToken = token;
 
@@ -179,16 +193,16 @@ class NotificationService {
         await syncCurrentSessionToken(localStorage: localStorage);
       }
 
-      // 2. Attach token refresh listener
+      // 3. Attach token refresh listener
       _listenToTokenRefresh(localStorage);
 
-      // 3. Attach foreground message listener
+      // 4. Attach foreground message listener (shows local notification + broadcasts)
       _listenToForegroundMessages();
 
-      // 4. Attach background app-opened listener
+      // 5. Attach background app-opened listener
       _listenToOpenedAppMessages();
 
-      // 5. Check if app was launched from a terminated/killed state by a notification
+      // 6. Check if app was launched from a terminated/killed state by a notification
       await _checkInitialMessage();
 
       debugPrint(
@@ -196,6 +210,134 @@ class NotificationService {
       );
     } catch (e, stack) {
       debugPrint('⚠️ [FCM] NotificationService init note (non-fatal): $e\n$stack');
+    }
+  }
+
+  /// Sets up FlutterLocalNotificationsPlugin and creates the two required Android channels.
+  Future<void> _initializeLocalNotifications() async {
+    if (kIsWeb) return;
+    try {
+      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const initSettings = InitializationSettings(android: androidInit);
+
+      await _localNotifications.initialize(
+        settings: initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          final payload = response.payload;
+          if (payload != null && payload.isNotEmpty) {
+            try {
+              final Map<String, dynamic> map =
+                  jsonDecode(payload) as Map<String, dynamic>;
+              final type = map['type']?.toString().trim() ?? 'unknown';
+              final orderId = map['orderId']?.toString().trim();
+              final shopId = map['shopId']?.toString().trim();
+              final recipientRole =
+                  (map['recipientRole'] ?? map['role'])?.toString().trim();
+
+              final pending = PendingNotification(
+                type: type.isEmpty ? 'unknown' : type,
+                receivedAt: DateTime.now(),
+                orderId: (orderId != null && orderId.isNotEmpty) ? orderId : null,
+                shopId: (shopId != null && shopId.isNotEmpty) ? shopId : null,
+                recipientRole:
+                    (recipientRole != null && recipientRole.isNotEmpty)
+                        ? recipientRole
+                        : null,
+                title: map['title']?.toString(),
+                body: map['body']?.toString(),
+                rawData: Map<String, dynamic>.unmodifiable(map),
+              );
+
+              debugPrint('📲 [LocalNotification Tap] Order #${pending.orderId}');
+              _pendingNotification = pending;
+              if (!_openedNotificationController.isClosed) {
+                _openedNotificationController.add(pending);
+              }
+            } catch (err) {
+              debugPrint('⚠️ [LocalNotification] Payload parse note: $err');
+            }
+          }
+        },
+      );
+
+      // Create Android Notification Channels
+      final androidPlatform = _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      if (androidPlatform != null && !_channelsCreated) {
+        const shopkeeperChannel = AndroidNotificationChannel(
+          shopkeeperChannelId,
+          'Shopkeeper New Orders',
+          description: 'Instant high-priority alerts for new incoming orders',
+          importance: Importance.max,
+        );
+
+        const customerChannel = AndroidNotificationChannel(
+          customerChannelId,
+          'Order Status Updates',
+          description: 'Real-time updates on your order acceptance, rejection, and delivery',
+          importance: Importance.max,
+        );
+
+        await androidPlatform.createNotificationChannel(shopkeeperChannel);
+        await androidPlatform.createNotificationChannel(customerChannel);
+        _channelsCreated = true;
+        debugPrint('📣 [FCM] Android Notification Channels created successfully.');
+      }
+    } catch (e) {
+      debugPrint('⚠️ [FCM] Local notifications init note: $e');
+    }
+  }
+
+  /// Displays a heads-up / system notification when message is received in FOREGROUND.
+  Future<void> _showForegroundLocalNotification(
+    PendingNotification pending,
+    RemoteMessage message,
+  ) async {
+    if (kIsWeb) return;
+    try {
+      final isShopkeeper = (pending.recipientRole == 'shopkeeper' ||
+          pending.type == 'new_order');
+
+      final title = pending.title ??
+          (isShopkeeper ? '🍔 New Order Received!' : '🔔 Order Update');
+      final body = pending.body ??
+          (pending.orderId != null ? 'Order #${pending.orderId}' : '');
+
+      final channelId = isShopkeeper ? shopkeeperChannelId : customerChannelId;
+      final channelName = isShopkeeper
+          ? 'Shopkeeper New Orders'
+          : 'Order Status Updates';
+
+      final androidDetails = AndroidNotificationDetails(
+        channelId,
+        channelName,
+        channelDescription: isShopkeeper
+            ? 'New incoming orders'
+            : 'Order status lifecycle updates',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      );
+
+      final details = NotificationDetails(android: androidDetails);
+      final rawJson = jsonEncode(message.data);
+
+      final notificationId = pending.orderId != null
+          ? (pending.orderId.hashCode.abs() % 100000)
+          : (DateTime.now().millisecondsSinceEpoch % 100000);
+
+      await _localNotifications.show(
+        id: notificationId,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: rawJson,
+      );
+      debugPrint('🔔 [FCM Foreground] Local Notification displayed for #${pending.orderId}');
+    } catch (e) {
+      debugPrint('⚠️ [FCM Foreground] Note presenting local notification: $e');
     }
   }
 
@@ -291,7 +433,7 @@ class NotificationService {
     try {
       _foregroundMessageSubscription?.cancel();
       _foregroundMessageSubscription = FirebaseMessaging.onMessage.listen(
-        (message) {
+        (message) async {
           final pending = PendingNotification.fromRemoteMessage(message);
           debugPrint(
             '📩 [FCM Foreground] Message received: type=${pending.type}, orderId=${pending.orderId ?? "none"}',
@@ -300,6 +442,9 @@ class NotificationService {
           if (!_foregroundNotificationController.isClosed) {
             _foregroundNotificationController.add(pending);
           }
+
+          // Present visible notification banner on Android in foreground
+          await _showForegroundLocalNotification(pending, message);
         },
         onError: (Object error) {
           debugPrint('⚠️ [FCM Foreground] Stream error: $error');
@@ -448,7 +593,7 @@ class NotificationService {
       _lastRegisteredShopId = shopId;
 
       debugPrint(
-        '📱 [FCM] Device token registered: role=$role, phone=${cleanPhone.isEmpty ? "anon" : cleanPhone}, shopId=${shopId ?? "none"}',
+        '📱 [FCM] Device token registered: role=$role, phone=${cleanPhone.isEmpty ? "anon" : cleanPhone}, customerId=${data["customerId"]}, shopId=${shopId ?? "none"}',
       );
     } catch (e, stack) {
       debugPrint(

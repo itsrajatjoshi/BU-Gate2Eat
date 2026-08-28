@@ -41,6 +41,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       phone: phone,
     );
 
+    // Non-blocking notification permission request & token registration
+    try {
+      final notificationService = ref.read(notificationServiceProvider);
+      await notificationService.requestPermission();
+      await notificationService.syncCurrentSessionToken(localStorage: localStorage);
+    } catch (e) {
+      debugPrint('⚠️ [Onboarding] Note during notification session sync: $e');
+    }
+
     if (!mounted) return;
     if (AppAuthRoles.isAdminPhone(phone)) {
       context.go(AppRoutes.admin);

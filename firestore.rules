@@ -142,7 +142,10 @@ service cloud.firestore {
     }
 
     match /deviceTokens/{tokenId} {
-      allow read: if true;
+      // Cloud Functions read via Admin SDK (bypasses rules).
+      // Client apps may read their single known token doc, but cannot query or list all tokens.
+      allow get: if true;
+      allow list: if false;
       allow create, update: if isValidDeviceTokenWrite(tokenId);
       allow delete: if true;
     }
