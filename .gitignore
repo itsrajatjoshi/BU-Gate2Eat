@@ -85,3 +85,4 @@ doc/api/
 Unwanted files/
 testsprite_tests/tmp/
 testsprite_tests/tmp/config.json
+functions/node_modules/
