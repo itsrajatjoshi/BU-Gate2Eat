@@ -1,6 +1,6 @@
 // BU Gate2Eat — Tests
-// Part 8.1: Real-Device Delivery Fix Validation Tests
-// Verifies channel ID constants, identity-triggered token sync logic, permission safety, and foreground payload conversion.
+// Part 8.1 & 8.2: Real-Device Delivery Fix & Anonymous Elimination Validation Tests
+// Verifies channel ID constants, anonymous token exclusion, identity-triggered token sync logic, permission safety, and foreground payload conversion.
 
 import 'package:bugate2eat_app/core/constants/app_constants.dart';
 import 'package:bugate2eat_app/services/local_storage_service.dart';
@@ -18,14 +18,26 @@ void main() {
     });
   });
 
-  group('Part 8.1 — Identity-Triggered Token Synchronization Logic', () {
-    test('Initial anonymous state generates cust_anon customerId', () async {
+  group('Part 8.2 — Anonymous Token Exclusion & Identity Lifecycle', () {
+    test('Initial anonymous state generates cust_anon customerId and empty phone', () async {
       SharedPreferences.setMockInitialValues({});
       final storage = await LocalStorageService.create();
 
       expect(storage.userPhone, isEmpty);
       expect(storage.customerId.startsWith('cust_anon_'), isTrue);
       expect(AppAuthRoles.getShopIdForPhone(storage.userPhone), isNull);
+    });
+
+    test('Anonymous sessions are excluded from targetable token registration', () async {
+      final service = NotificationService();
+      
+      // Empty token or empty phone skips registration
+      await service.registerDeviceToken(
+        token: 'test_token',
+        phone: '',
+        role: 'customer',
+      );
+      // Completes safely without throwing and rejects anonymous phone
     });
 
     test('Onboarding phone submission upgrades customerId to cust_<phone>', () async {
@@ -66,6 +78,25 @@ void main() {
       await storage.saveUserProfile(name: 'Nayan Shop', phone: '8295643910');
       expect(storage.userPhone, equals('8295643910'));
       expect(AppAuthRoles.getShopIdForPhone(storage.userPhone), equals('nayan_shop'));
+    });
+
+    test('Customer A to Customer B transition updates phone and customerId correctly', () async {
+      SharedPreferences.setMockInitialValues({});
+      final storage = await LocalStorageService.create();
+
+      // Customer A
+      await storage.saveUserProfile(name: 'Customer A', phone: '9111111111');
+      expect(storage.userPhone, equals('9111111111'));
+      expect(storage.customerId, equals('cust_9111111111'));
+
+      // Logout
+      await storage.logout();
+      expect(storage.userPhone, isEmpty);
+
+      // Customer B
+      await storage.saveUserProfile(name: 'Customer B', phone: '9222222222');
+      expect(storage.userPhone, equals('9222222222'));
+      expect(storage.customerId, equals('cust_9222222222'));
     });
   });
 

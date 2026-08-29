@@ -190,7 +190,13 @@ class NotificationService {
       _cachedToken = token;
 
       if (token != null && localStorage != null) {
-        await syncCurrentSessionToken(localStorage: localStorage);
+        final phone = localStorage.userPhone.trim();
+        if (phone.isNotEmpty) {
+          await syncCurrentSessionToken(localStorage: localStorage);
+        } else {
+          // Anonymous user session: purge token from Firestore so it is NEVER targetable
+          await deleteDeviceToken(token);
+        }
       }
 
       // 3. Attach token refresh listener
@@ -297,6 +303,12 @@ class NotificationService {
   ) async {
     if (kIsWeb) return;
     try {
+      // Guard: Do not pop local notification for non-order or anonymous dummy messages
+      if (!pending.isValidOrderNotification && (pending.title == null || pending.title!.trim().isEmpty)) {
+        debugPrint('ℹ️ [FCM Foreground] Skipping display for non-order message without title.');
+        return;
+      }
+
       final isShopkeeper = (pending.recipientRole == 'shopkeeper' ||
           pending.type == 'new_order');
 
@@ -509,6 +521,7 @@ class NotificationService {
   /// Synchronizes the current user session's device token with Firestore.
   /// Dynamically determines whether the user is a customer, shopkeeper, or admin.
   /// Completely re-registers token document to ensure session switches erase stale role/shop fields.
+  /// Anonymous sessions (empty phone) are NOT registered in Firestore and any existing token doc is purged.
   Future<void> syncCurrentSessionToken({
     required LocalStorageService localStorage,
     String? explicitRole,
@@ -521,6 +534,12 @@ class NotificationService {
     }
 
     final phone = localStorage.userPhone.trim();
+    if (phone.isEmpty) {
+      debugPrint('ℹ️ [FCM] Phone is empty (anonymous user). Skipping Firestore registration and purging stale doc.');
+      await deleteDeviceToken(token);
+      return;
+    }
+
     final customerId = localStorage.customerId;
 
     // Determine role and shopId
@@ -553,6 +572,7 @@ class NotificationService {
 
   /// Idempotently registers or updates the device token in Firestore under `deviceTokens/{token}`.
   /// Uses token as document ID to guarantee zero duplicates on repeated app launches.
+  /// Requires non-empty phone to prevent anonymous device registration.
   Future<void> registerDeviceToken({
     required String token,
     required String phone,
@@ -562,6 +582,12 @@ class NotificationService {
   }) async {
     if (token.isEmpty) return;
 
+    final cleanPhone = phone.trim();
+    if (cleanPhone.isEmpty) {
+      debugPrint('ℹ️ [FCM] Skipping device token registration: phone is empty.');
+      return;
+    }
+
     try {
       final firestore = _firestoreInstance;
       if (firestore == null) {
@@ -569,9 +595,9 @@ class NotificationService {
         return;
       }
 
-      final cleanPhone = phone.trim();
-      final effectiveCustomerId = customerId ??
-          (cleanPhone.isNotEmpty ? 'cust_$cleanPhone' : 'cust_anon');
+      final effectiveCustomerId = (customerId != null && customerId.isNotEmpty && !customerId.startsWith('cust_anon'))
+          ? customerId
+          : 'cust_$cleanPhone';
 
       final tokenDocRef = firestore.collection('deviceTokens').doc(token);
 
@@ -593,7 +619,7 @@ class NotificationService {
       _lastRegisteredShopId = shopId;
 
       debugPrint(
-        '📱 [FCM] Device token registered: role=$role, phone=${cleanPhone.isEmpty ? "anon" : cleanPhone}, customerId=${data["customerId"]}, shopId=${shopId ?? "none"}',
+        '📱 [FCM] Device token registered: role=$role, phone=$cleanPhone, customerId=${data["customerId"]}, shopId=${shopId ?? "none"}',
       );
     } catch (e, stack) {
       debugPrint(

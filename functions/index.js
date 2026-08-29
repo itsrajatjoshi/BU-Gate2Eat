@@ -6,13 +6,14 @@
  * 1. ZERO client-side credentials in Flutter client.
  * 2. Strict role-based isolation (shopkeepers receive shop orders; customers receive only their own order updates).
  * 3. Scoped exclusively to the target customer / target shop.
- * 4. Transition-aware: Only legitimate status changes trigger customer pushes (placed->accepted, placed->rejected, etc.).
- * 5. Metadata/timestamp updates do NOT generate notifications.
- * 6. Pre-accept cancellation deletes the document with ZERO notification.
- * 7. Multi-device support for customer and shopkeeper accounts.
- * 8. Automated cleanup of stale / invalid device tokens.
- * 9. Idempotency guards prevent duplicate dispatches on Cloud Function retries.
- * 10. Notification failure never mutates or reverts order state.
+ * 4. Anonymous tokens are NEVER targeted. Only verified, identified recipients receive notifications.
+ * 5. Transition-aware: Only legitimate status changes trigger customer pushes (placed->accepted, placed->rejected, etc.).
+ * 6. Metadata/timestamp updates do NOT generate notifications.
+ * 7. Pre-accept cancellation deletes the document with ZERO notification.
+ * 8. Multi-device support for customer and shopkeeper accounts.
+ * 9. Automated cleanup of stale / invalid device tokens.
+ * 10. Idempotency guards prevent duplicate dispatches on Cloud Function retries.
+ * 11. Notification failure never mutates or reverts order state.
  */
 
 const functions = require("firebase-functions/v1");
@@ -61,6 +62,7 @@ async function cleanStaleTokens(tokens, responses) {
 exports.onNewOrderCreated = functions.firestore
   .document("orders/{orderId}")
   .onCreate(async (snapshot, context) => {
+    const t2 = Date.now();
     const orderData = snapshot.data();
     if (!orderData) {
       console.log("⚠️ [FCM Dispatch] No snapshot data found for event.");
@@ -70,6 +72,9 @@ exports.onNewOrderCreated = functions.firestore
     const orderId = context.params.orderId || orderData.orderId;
     const shopId = orderData.shopId;
     const status = orderData.status;
+    const t1 = orderData.createdAt
+      ? (typeof orderData.createdAt.toMillis === "function" ? orderData.createdAt.toMillis() : Date.now())
+      : Date.now();
 
     if (!orderId || !shopId) {
       console.log(`⚠️ [FCM Dispatch] Malformed order document missing orderId or shopId: ${orderId}`);
@@ -95,15 +100,28 @@ exports.onNewOrderCreated = functions.firestore
         .where("shopId", "==", shopId)
         .get();
 
+      const t3 = Date.now();
+
       if (tokensSnapshot.empty) {
         console.log(`⚠️ [FCM Dispatch] No registered shopkeeper devices found for shop: ${shopId}`);
         return null;
       }
 
+      // Filter tokens strictly requiring non-anonymous verified shopkeeper identity
       const deviceTokens = [];
       tokensSnapshot.forEach((doc) => {
         const data = doc.data();
-        if (data && data.token && typeof data.token === "string" && data.token.trim().length > 0) {
+        if (
+          data &&
+          data.token &&
+          typeof data.token === "string" &&
+          data.token.trim().length > 0 &&
+          data.role === "shopkeeper" &&
+          data.shopId === shopId &&
+          data.phone &&
+          typeof data.phone === "string" &&
+          data.phone.trim().length > 0
+        ) {
           const cleanToken = data.token.trim();
           if (!deviceTokens.includes(cleanToken)) {
             deviceTokens.push(cleanToken);
@@ -112,7 +130,7 @@ exports.onNewOrderCreated = functions.firestore
       });
 
       if (deviceTokens.length === 0) {
-        console.log(`⚠️ [FCM Dispatch] No non-empty device tokens for shop: ${shopId}`);
+        console.log(`⚠️ [FCM Dispatch] No non-anonymous verified shopkeeper device tokens for shop: ${shopId}`);
         return null;
       }
 
@@ -133,12 +151,14 @@ exports.onNewOrderCreated = functions.firestore
         },
         android: {
           priority: "high",
+          ttl: 3600,
           notification: {
             channelId: "yummbu_orders_channel",
             sound: "default",
-            priority: "high",
+            priority: "max",
             defaultSound: true,
             defaultVibrateTimings: true,
+            visibility: "public",
           },
         },
         tokens: deviceTokens,
@@ -148,7 +168,13 @@ exports.onNewOrderCreated = functions.firestore
         `🚀 [FCM Shopkeeper] Sending New Order notification for #${orderId} to ${deviceTokens.length} device(s) [${shopId}]...`
       );
 
+      const t4 = Date.now();
       const response = await messaging.sendEachForMulticast(multicastMessage);
+      const t5 = Date.now();
+
+      console.log(
+        `⏱️ [FCM Shopkeeper Timeline] Order #${orderId} | T1(created)=${t1}, T2(funcStart)=${t2}, T3(tokensResolved)=${t3}, T4(sendReq)=${t4}, T5(fcmResp)=${t5} | TriggerLatency=${t2 - t1}ms, TokenLookup=${t3 - t2}ms, FcmSend=${t5 - t4}ms`
+      );
       console.log(
         `✅ [FCM Shopkeeper] Results for Order #${orderId}: ${response.successCount} succeeded, ${response.failureCount} failed.`
       );
@@ -181,6 +207,7 @@ exports.onNewOrderCreated = functions.firestore
 exports.onOrderStatusUpdated = functions.firestore
   .document("orders/{orderId}")
   .onUpdate(async (change, context) => {
+    const t2 = Date.now();
     const beforeData = change.before.data();
     const afterData = change.after.data();
 
@@ -209,6 +236,18 @@ exports.onOrderStatusUpdated = functions.firestore
     const customerPhone = afterData.customerPhone;
     const rejectionReason = afterData.rejectionReason;
 
+    // Invariant 4: Anonymous customer orders MUST NEVER receive customer push notifications
+    const isAnonymousCustomer =
+      (!customerId || customerId.trim() === "" || customerId.startsWith("cust_anon")) &&
+      (!customerPhone || customerPhone.trim() === "");
+
+    if (isAnonymousCustomer) {
+      console.log(
+        `ℹ️ [FCM Customer] Order #${orderId} belongs to anonymous customer (customerId: ${customerId}, phone: ${customerPhone}). Skipping notification.`
+      );
+      return null;
+    }
+
     // Invariant 2: Determine valid customer notification transition
     let notificationTitle = "";
     let notificationBody = "";
@@ -232,7 +271,7 @@ exports.onOrderStatusUpdated = functions.firestore
     } else if (oldStatus === "accepted" && newStatus === "rejected") {
       // Post-accept rejection (within 15-minute window)
       notificationType = "order_rejected";
-      notificationTitle = "❌ Order Update";
+      notificationTitle = "❌ Order Not Completed";
       notificationBody = rejectionReason && rejectionReason.trim().length > 0
         ? `Your order from ${shopName} could not be completed (${rejectionReason}).`
         : `Your order from ${shopName} could not be completed.`;
@@ -243,7 +282,7 @@ exports.onOrderStatusUpdated = functions.firestore
     } else if (oldStatus === "accepted" && newStatus === "delivery_expired") {
       // 90-minute delivery expiry
       notificationType = "order_expired";
-      notificationTitle = "⚠️ Order Update";
+      notificationTitle = "⚠️ Order Expired";
       notificationBody = `Your order from ${shopName} has expired.`;
     } else {
       // Unrecognized or non-notifiable transition (e.g. cancelled before accept)
@@ -252,11 +291,12 @@ exports.onOrderStatusUpdated = functions.firestore
     }
 
     // Invariant 3: Query target customer device tokens strictly matching customerId or customerPhone
+    // Explicitly reject anonymous tokens
     try {
       const customerTokens = new Set();
 
-      // Query by customerId if present
-      if (customerId && customerId.trim().length > 0) {
+      // Query by customerId ONLY if valid non-anonymous customerId
+      if (customerId && typeof customerId === "string" && !customerId.startsWith("cust_anon")) {
         const idSnap = await db
           .collection("deviceTokens")
           .where("role", "==", "customer")
@@ -265,14 +305,24 @@ exports.onOrderStatusUpdated = functions.firestore
 
         idSnap.forEach((doc) => {
           const d = doc.data();
-          if (d && d.token && typeof d.token === "string" && d.token.trim().length > 0) {
+          if (
+            d &&
+            d.token &&
+            typeof d.token === "string" &&
+            d.token.trim().length > 0 &&
+            d.role === "customer" &&
+            d.phone &&
+            typeof d.phone === "string" &&
+            d.phone.trim().length > 0 &&
+            (!d.customerId || !d.customerId.startsWith("cust_anon"))
+          ) {
             customerTokens.add(d.token.trim());
           }
         });
       }
 
-      // Query by phone if present
-      if (customerPhone && customerPhone.trim().length > 0) {
+      // Query by phone ONLY if valid non-empty phone
+      if (customerPhone && typeof customerPhone === "string" && customerPhone.trim().length > 0) {
         const phoneSnap = await db
           .collection("deviceTokens")
           .where("role", "==", "customer")
@@ -281,17 +331,28 @@ exports.onOrderStatusUpdated = functions.firestore
 
         phoneSnap.forEach((doc) => {
           const d = doc.data();
-          if (d && d.token && typeof d.token === "string" && d.token.trim().length > 0) {
+          if (
+            d &&
+            d.token &&
+            typeof d.token === "string" &&
+            d.token.trim().length > 0 &&
+            d.role === "customer" &&
+            d.phone &&
+            typeof d.phone === "string" &&
+            d.phone.trim().length > 0 &&
+            (!d.customerId || !d.customerId.startsWith("cust_anon"))
+          ) {
             customerTokens.add(d.token.trim());
           }
         });
       }
 
+      const t3 = Date.now();
       const targetTokens = Array.from(customerTokens);
 
       if (targetTokens.length === 0) {
         console.log(
-          `⚠️ [FCM Customer] No active customer device tokens found for order #${orderId} (customerId: ${customerId}, phone: ${customerPhone})`
+          `⚠️ [FCM Customer] No verified non-anonymous customer device tokens found for order #${orderId} (customerId: ${customerId}, phone: ${customerPhone})`
         );
         return null;
       }
@@ -310,12 +371,14 @@ exports.onOrderStatusUpdated = functions.firestore
         },
         android: {
           priority: "high",
+          ttl: 3600,
           notification: {
             channelId: "yummbu_customer_orders_channel",
             sound: "default",
-            priority: "high",
+            priority: "max",
             defaultSound: true,
             defaultVibrateTimings: true,
+            visibility: "public",
           },
         },
         tokens: targetTokens,
@@ -325,7 +388,17 @@ exports.onOrderStatusUpdated = functions.firestore
         `🚀 [FCM Customer] Dispatching '${notificationType}' for #${orderId} to ${targetTokens.length} device(s) [Customer: ${customerPhone || customerId}]...`
       );
 
+      const t4 = Date.now();
       const response = await messaging.sendEachForMulticast(multicastMessage);
+      const t5 = Date.now();
+
+      const t1 = beforeData.updatedAt
+        ? (typeof beforeData.updatedAt.toMillis === "function" ? beforeData.updatedAt.toMillis() : Date.now())
+        : Date.now();
+
+      console.log(
+        `⏱️ [FCM Customer Timeline] Order #${orderId} (${notificationType}) | T1(statusChanged)=${t1}, T2(funcStart)=${t2}, T3(tokensResolved)=${t3}, T4(sendReq)=${t4}, T5(fcmResp)=${t5} | TriggerLatency=${t2 - t1}ms, TokenLookup=${t3 - t2}ms, FcmSend=${t5 - t4}ms`
+      );
       console.log(
         `✅ [FCM Customer] Results for Order #${orderId} (${notificationType}): ${response.successCount} succeeded, ${response.failureCount} failed.`
       );
@@ -355,80 +428,3 @@ exports.onOrderStatusUpdated = functions.firestore
       return null;
     }
   });
-
-// ─── DIAGNOSTIC HTTP ENDPOINT ───────────────────────────────────────────────
-exports.testFcmDiagnostics = functions.https.onRequest(async (req, res) => {
-  try {
-    const tokensSnap = await db.collection("deviceTokens").get();
-    const tokens = [];
-    tokensSnap.forEach((doc) => {
-      const d = doc.data();
-      tokens.push({
-        id: doc.id.substring(0, 10) + "...",
-        fullToken: d.token,
-        role: d.role,
-        phone: d.phone,
-        customerId: d.customerId,
-        shopId: d.shopId,
-        platform: d.platform,
-        updatedAt: d.updatedAt ? d.updatedAt.toDate() : null,
-      });
-    });
-
-    const ordersSnap = await db.collection("orders").orderBy("createdAt", "desc").limit(3).get();
-    const orders = [];
-    ordersSnap.forEach((doc) => {
-      const d = doc.data();
-      orders.push({
-        orderId: d.orderId,
-        status: d.status,
-        shopId: d.shopId,
-        customerPhone: d.customerPhone,
-        customerId: d.customerId,
-        newOrderNotified: d.newOrderNotificationDispatched,
-        lastNotifiedStatus: d.lastNotifiedStatus,
-      });
-    });
-
-    // Optional: Trigger test push if requested
-    let testPushResult = null;
-    if (req.query.push === "true" && tokens.length > 0) {
-      const targetToken = tokens[0].fullToken;
-      try {
-        const msg = {
-          notification: {
-            title: "🧪 Test Push Notification",
-            body: "If you see this, Firebase FCM delivery is 100% working!",
-          },
-          data: {
-            type: "test_push",
-            timestamp: String(Date.now()),
-          },
-          android: {
-            priority: "high",
-            notification: {
-              channelId: "yummbu_customer_orders_channel",
-              sound: "default",
-            },
-          },
-          token: targetToken,
-        };
-        const fcmResp = await messaging.send(msg);
-        testPushResult = { success: true, messageId: fcmResp };
-      } catch (fcmErr) {
-        testPushResult = { success: false, error: fcmErr.message, code: fcmErr.code };
-      }
-    }
-
-    res.status(200).json({
-      timestamp: new Date().toISOString(),
-      totalRegisteredTokens: tokens.length,
-      registeredTokens: tokens.map(t => ({ role: t.role, phone: t.phone, customerId: t.customerId, shopId: t.shopId, platform: t.platform, updatedAt: t.updatedAt })),
-      recentOrders: orders,
-      testPushResult,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
