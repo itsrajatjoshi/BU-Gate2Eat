@@ -356,74 +356,31 @@ class FavouritesScreen extends ConsumerWidget {
                                     ),
                                   ),
                                   if (isAvailable)
-                                    (!item.hasOptions && quantityInCart > 0)
-                                        ? Container(
-                                            height: 28,
-                                            decoration: BoxDecoration(
-                                              color: AppColors.primary,
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                InkWell(
-                                                  onTap: () => ref
-                                                      .read(cartProvider.notifier)
-                                                      .removeItem(item.id, shop.id),
-                                                  child: const Padding(
-                                                    padding: EdgeInsets.symmetric(horizontal: 8),
-                                                    child: Icon(Icons.remove_rounded, size: 16, color: Colors.white),
-                                                  ),
-                                                ),
-                                                Text(
-                                                  '$quantityInCart',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
-                                                InkWell(
-                                                  onTap: () => tryAddToCart(
-                                                    context: context,
-                                                    ref: ref,
-                                                    item: item,
-                                                    shopId: shop.id,
-                                                    shopName: shop.name,
-                                                  ),
-                                                  child: const Padding(
-                                                    padding: EdgeInsets.symmetric(horizontal: 8),
-                                                    child: Icon(Icons.add_rounded, size: 16, color: Colors.white),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          )
-                                        : ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: AppColors.primary,
-                                              foregroundColor: Colors.white,
-                                              elevation: 0,
-                                              minimumSize: const Size(64, 28),
-                                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              textStyle: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            onPressed: () => handleCustomerAddToCart(
-                                              context: context,
-                                              ref: ref,
-                                              item: item,
-                                              shop: shop,
-                                              isAvailable: isAvailable,
-                                              displayImageUrl: imageUrl,
-                                            ),
-                                            child: const Text('ADD'),
-                                          ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        minimumSize: const Size(64, 28),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        textStyle: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      onPressed: () => handleCustomerAddToCart(
+                                        context: context,
+                                        ref: ref,
+                                        item: item,
+                                        shop: shop,
+                                        isAvailable: isAvailable,
+                                        displayImageUrl: imageUrl,
+                                      ),
+                                      child: const Text('ADD'),
+                                    ),
                                 ],
                               ),
                             ],

@@ -1166,74 +1166,6 @@ class _MenuItemCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildQuantityStepper({
-    required Key key,
-    required BuildContext context,
-    required WidgetRef ref,
-    required int quantity,
-    double width = 64,
-    double height = 30,
-  }) {
-    const primaryColor = AppColors.primary;
-    return Container(
-      key: key,
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: primaryColor,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: primaryColor.withValues(alpha: 0.3),
-            blurRadius: 4,
-            offset: const Offset(0, 1.5),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          InkWell(
-            onTap: () => _handleCartChange(ref, context, -1),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 3.0, vertical: 2.0),
-              child: Icon(Icons.remove_rounded, size: 14, color: Colors.white),
-            ),
-          ),
-          Text(
-            '$quantity',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-          InkWell(
-            onTap: () => _handleCartChange(ref, context, 1),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 3.0, vertical: 2.0),
-              child: Icon(Icons.add_rounded, size: 14, color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _handleCartChange(WidgetRef ref, BuildContext context, int delta) {
-    if (delta > 0) {
-      tryAddToCart(
-        context: context,
-        ref: ref,
-        item: item,
-        shopId: shop.id,
-        shopName: shop.name,
-      );
-    } else {
-      ref.read(cartProvider.notifier).removeItem(item.id);
-    }
-  }
-
   String _getEffectiveImageUrl(MenuItem item) {
     if (item.imageUrl.isNotEmpty) return item.imageUrl;
 
@@ -1273,9 +1205,6 @@ class _MenuItemCard extends ConsumerWidget {
     final displayImageUrl = _getEffectiveImageUrl(item);
     final favorites = ref.watch(favoritesProvider);
     final isFavorite = favorites.contains(FavoriteNotifier.buildFavoriteKey(shop.id, item.id));
-
-    final cartState = ref.watch(cartProvider);
-    final quantityInCart = cartState.getQuantityForShop(shop.id, item.id);
 
     void showItemDetail() {
       showItemDetailBottomSheet(
@@ -1479,27 +1408,16 @@ class _MenuItemCard extends ConsumerWidget {
                           ),
                           const SizedBox(width: 4),
 
-                          // Add Button / Stepper with responsive width
+                          // Add Button with responsive width
                           if (isAvailable)
-                            (!item.hasOptions && quantityInCart > 0)
-                                ? _buildQuantityStepper(
-                                    key: const ValueKey('stepper'),
-                                    context: context,
-                                    ref: ref,
-                                    quantity: quantityInCart,
-                                    width: isSmallScreen ? 58.0 : 64.0,
-                                    height: isSmallScreen ? 28.0 : 30.0,
-                                  )
-                                : _buildAddButton(
-                                    key: const ValueKey('add_btn'),
-                                    context: context,
-                                    ref: ref,
-                                    onAdd: item.hasOptions
-                                        ? showItemDetail
-                                        : () => _handleCartChange(ref, context, 1),
-                                    width: isSmallScreen ? 58.0 : 64.0,
-                                    height: isSmallScreen ? 28.0 : 30.0,
-                                  ),
+                            _buildAddButton(
+                              key: const ValueKey('add_btn'),
+                              context: context,
+                              ref: ref,
+                              onAdd: showItemDetail,
+                              width: isSmallScreen ? 58.0 : 64.0,
+                              height: isSmallScreen ? 28.0 : 30.0,
+                            ),
                         ],
                       ),
                     ],
@@ -1715,8 +1633,7 @@ void showItemDetailBottomSheet({
 }
 
 /// Universal routing helper for customer Add actions across Main Menu, Cart Suggestions, and Favourites.
-/// - If [item.hasOptions] is true: ALWAYS opens the item customization bottom sheet.
-/// - If [item.hasOptions] is false: Adds directly to cart (handling cross-shop dialog if needed).
+/// ALWAYS opens the item customization bottom sheet for both option-bearing and non-option items.
 void handleCustomerAddToCart({
   required BuildContext context,
   required WidgetRef ref,
@@ -1725,23 +1642,13 @@ void handleCustomerAddToCart({
   bool isAvailable = true,
   String displayImageUrl = '',
 }) {
-  if (item.hasOptions) {
-    showItemDetailBottomSheet(
-      context: context,
-      item: item,
-      shop: shop,
-      isAvailable: isAvailable,
-      displayImageUrl: displayImageUrl,
-    );
-  } else {
-    tryAddToCart(
-      context: context,
-      ref: ref,
-      item: item,
-      shopId: shop.id,
-      shopName: shop.name,
-    );
-  }
+  showItemDetailBottomSheet(
+    context: context,
+    item: item,
+    shop: shop,
+    isAvailable: isAvailable,
+    displayImageUrl: displayImageUrl,
+  );
 }
 
 /// Modern, premium bottom sheet displaying full item details matching top-tier food delivery apps (Swiggy/Zomato/Zepto).
