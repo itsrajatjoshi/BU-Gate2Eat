@@ -189,45 +189,22 @@ final forceUpdateServiceProvider = Provider<ForceUpdateService>((ref) {
   return ForceUpdateService(ref.read(firestoreServiceProvider));
 });
 
-/// Provider for the current theme mode.
-/// Reads initial value from local storage, can be updated from Settings.
+/// Provider for the current theme mode (Permanently locked to Light Mode).
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
   final localStorage = ref.read(localStorageServiceProvider);
   return ThemeModeNotifier(localStorage);
 });
 
-/// Manages the app's theme mode state.
+/// Manages the app's theme mode state (Light Mode only).
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  ThemeModeNotifier(this._localStorage) : super(_parseThemeMode(_localStorage.themeMode));
+  ThemeModeNotifier(this._localStorage) : super(ThemeMode.light);
 
   final LocalStorageService _localStorage;
 
-  /// Updates the theme mode and persists the choice.
+  /// Updates the theme mode (Permanently Light).
   Future<void> setThemeMode(ThemeMode mode) async {
-    state = mode;
-    await _localStorage.setThemeMode(_themeModeToString(mode));
-  }
-
-  static ThemeMode _parseThemeMode(String mode) {
-    switch (mode) {
-      case 'light':
-        return ThemeMode.light;
-      case 'dark':
-        return ThemeMode.dark;
-      default:
-        return ThemeMode.system;
-    }
-  }
-
-  static String _themeModeToString(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return 'light';
-      case ThemeMode.dark:
-        return 'dark';
-      case ThemeMode.system:
-        return 'system';
-    }
+    state = ThemeMode.light;
+    await _localStorage.setThemeMode('light');
   }
 }
 

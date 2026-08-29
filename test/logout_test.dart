@@ -9,13 +9,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('BU Gate2Eat — Logout Tests', () {
-    test('logout() clears user profile and onboarding state while preserving theme and favorites', () async {
+    test('logout() clears user profile and onboarding state while preserving light theme and favorites', () async {
       SharedPreferences.setMockInitialValues({
         'is_onboarded': true,
         'user_name': 'Rajat Joshi',
         'user_phone': '9876543210',
         'user_age': 21,
-        'theme_mode': 'dark',
+        'theme_mode': 'light',
         'favorite_item_ids': ['rajat_shop:veg_steam_momos'],
       });
 
@@ -26,7 +26,7 @@ void main() {
       expect(localStorage.userName, equals('Rajat Joshi'));
       expect(localStorage.userPhone, equals('9876543210'));
       expect(localStorage.userAge, equals(21));
-      expect(localStorage.themeMode, equals('dark'));
+      expect(localStorage.themeMode, equals('light'));
       expect(localStorage.favoriteItemIds, equals(['rajat_shop:veg_steam_momos']));
 
       // Perform Logout
@@ -38,8 +38,8 @@ void main() {
       expect(localStorage.userPhone, isEmpty);
       expect(localStorage.userAge, equals(0));
 
-      // Verify non-session preferences like theme are preserved
-      expect(localStorage.themeMode, equals('dark'));
+      // Verify non-session preferences like light theme are preserved
+      expect(localStorage.themeMode, equals('light'));
     });
   });
 }

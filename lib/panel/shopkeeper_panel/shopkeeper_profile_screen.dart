@@ -163,13 +163,6 @@ class _ShopkeeperProfileScreenState
           'Profile',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: () => context.push(AppRoutes.settings),
-          ),
-        ],
       ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
@@ -393,60 +386,79 @@ class _ShopkeeperProfileScreenState
 
           Container(
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.surface,
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadius.lg),
               border: Border.all(
-                color: isDark ? AppColors.darkDivider : AppColors.divider,
+                color: AppColors.divider,
                 width: 0.8,
               ),
             ),
-            child: Column(
-              children: [
-                const ListTile(
-                  leading: Icon(
-                    Icons.local_shipping_outlined,
-                    color: AppColors.primary,
-                  ),
-                  title: Text('Pickup Location'),
-                  subtitle: Text('Bennett University Gate No. 3'),
-                ),
-                Divider(
-                  height: 1,
-                  thickness: 0.6,
-                  color: isDark ? AppColors.darkDivider : AppColors.divider,
-                ),
-
-                ListTile(
-                  leading: const Icon(
-                    Icons.palette_outlined,
-                    color: AppColors.secondary,
-                  ),
-                  title: const Text('Appearance & App Settings'),
-                  subtitle: const Text('Theme, About, Legal'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push(AppRoutes.settings),
-                ),
-                Divider(
-                  height: 1,
-                  thickness: 0.6,
-                  color: isDark ? AppColors.darkDivider : AppColors.divider,
-                ),
-                ListTile(
-                  leading:
-                      const Icon(Icons.logout_rounded, color: AppColors.error),
-                  title: const Text(
-                    'Logout',
-                    style: TextStyle(
-                      color: AppColors.error,
-                      fontWeight: FontWeight.w600,
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.description_outlined,
+                      color: AppColors.primary,
                     ),
+                    title: const Text('Privacy Policy'),
+                    subtitle: const Text('Read our privacy practices'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {},
                   ),
-                  subtitle: const Text('Sign out from this device'),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: AppColors.error),
-                  onTap: _showLogoutDialog,
-                ),
-              ],
+                  const Divider(
+                    height: 1,
+                    thickness: 0.6,
+                    color: AppColors.divider,
+                  ),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.gavel_outlined,
+                      color: AppColors.secondary,
+                    ),
+                    title: const Text('Terms of Service'),
+                    subtitle: const Text('Terms & conditions of use'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {},
+                  ),
+                  const Divider(
+                    height: 1,
+                    thickness: 0.6,
+                    color: AppColors.divider,
+                  ),
+                  const ListTile(
+                    leading: Icon(
+                      Icons.info_outline_rounded,
+                      color: AppColors.info,
+                    ),
+                    title: Text('App Version'),
+                    subtitle: Text('${AppConfig.appVersion} (${AppConfig.appName})'),
+                  ),
+                  const Divider(
+                    height: 1,
+                    thickness: 0.6,
+                    color: AppColors.divider,
+                  ),
+                  ListTile(
+                    leading:
+                        const Icon(Icons.logout_rounded, color: AppColors.yummbuRed),
+                    title: const Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: AppColors.yummbuRed,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text('Sign out from this device'),
+                    trailing:
+                        const Icon(Icons.chevron_right, color: AppColors.yummbuRed),
+                    onTap: _showLogoutDialog,
+                  ),
+                ],
+              ),
             ),
           ),
         ],

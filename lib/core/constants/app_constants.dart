@@ -37,15 +37,18 @@ class AppColors {
   static const Color darkTextHint = Color(0xFF71717A);
   static const Color darkDivider = Color(0xFF27272A);
 
+  // Standardized Red Palette (#F93302)
+  static const Color yummbuRed = Color(0xFFF93302);
+
   // Semantic
   static const Color success = Color(0xFF22A06B);
   static const Color warning = Color(0xFFFF9800);
-  static const Color error = Color(0xFFE5484D);
+  static const Color error = yummbuRed;
   static const Color info = Color(0xFF3B82F6);
 
   // Food type indicators
   static const Color vegGreen = Color(0xFF22A06B);
-  static const Color nonVegRed = Color(0xFFE5484D);
+  static const Color nonVegRed = yummbuRed;
 }
 
 // ─── Spacing ───────────────────────────────────────────────────

@@ -11,7 +11,6 @@ import '../features/orders/active_orders_screen.dart';
 import '../features/orders/order_detail_screen.dart';
 import '../features/orders/order_history_screen.dart';
 import '../features/profile/profile_screen.dart';
-import '../features/settings/settings_screen.dart';
 import '../features/shop/shop_detail_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../models/order_model.dart';
@@ -36,7 +35,6 @@ class AppRoutes {
   static const String orderDetail = '/order/:orderId';
   static const String orderHistory = '/order-history';
   static const String profile = '/profile';
-  static const String settings = '/settings';
   static const String shopkeeper = '/shopkeeper';
   static const String shopkeeperProfile = '/shopkeeper/profile';
   static const String admin = '/admin';
@@ -160,10 +158,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.shopkeeperProfile,
       builder: (context, state) => const ShopkeeperProfileScreen(),
-    ),
-    GoRoute(
-      path: AppRoutes.settings,
-      builder: (context, state) => const SettingsScreen(),
     ),
   ],
 );

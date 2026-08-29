@@ -510,7 +510,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               child: Text(
                 'Clear',
                 style: TextStyle(
-                  color: Colors.red.shade400,
+                  color: AppColors.yummbuRed,
                   fontWeight: FontWeight.w600,
                 ),
               ),

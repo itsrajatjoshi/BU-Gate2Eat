@@ -3,7 +3,7 @@
 
 import 'package:bugate2eat_app/core/constants/app_constants.dart';
 import 'package:bugate2eat_app/core/providers.dart';
-import 'package:bugate2eat_app/features/settings/settings_screen.dart';
+import 'package:bugate2eat_app/features/profile/profile_screen.dart';
 import 'package:bugate2eat_app/panel/admin_panel/admin_profile_screen.dart';
 import 'package:bugate2eat_app/services/local_storage_service.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +19,7 @@ void main() {
       expect(AppConfig.appVersion, '1.0.7');
     });
 
-    testWidgets('2. Settings screen displays 1.0.7 app version', (tester) async {
+    testWidgets('2. Profile screen displays 1.0.7 app version', (tester) async {
       SharedPreferences.setMockInitialValues({
         'user_name': 'Rajat Joshi',
         'user_phone': '8078643910',
@@ -33,7 +33,7 @@ void main() {
             localStorageServiceProvider.overrideWithValue(localStorage),
           ],
           child: const MaterialApp(
-            home: SettingsScreen(),
+            home: ProfileScreen(),
           ),
         ),
       );
@@ -41,7 +41,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('App Version'), findsOneWidget);
-      expect(find.text('1.0.7'), findsOneWidget);
+      expect(find.text('1.0.7 (YummBU)'), findsOneWidget);
       expect(find.text('1.0.4'), findsNothing);
     });
   });

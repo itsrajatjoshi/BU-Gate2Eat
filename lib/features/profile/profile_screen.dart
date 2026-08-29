@@ -143,13 +143,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           'Profile',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: () => context.push(AppRoutes.settings),
-          ),
-        ],
       ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
@@ -163,15 +156,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.surface,
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadius.lg),
               border: Border.all(
-                color: isDark ? AppColors.darkDivider : AppColors.divider,
+                color: AppColors.divider,
                 width: 0.8,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -184,13 +177,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   height: 58,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.primary.withValues(
-                      alpha: isDark ? 0.20 : 0.12,
-                    ),
+                    color: AppColors.primary.withValues(alpha: 0.12),
                     border: Border.all(
-                      color: AppColors.primary.withValues(
-                        alpha: isDark ? 0.50 : 0.35,
-                      ),
+                      color: AppColors.primary.withValues(alpha: 0.35),
                       width: 1.5,
                     ),
                   ),
@@ -220,29 +209,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         const SizedBox(height: 2),
                         Text(
                           userPhone,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 13,
-                            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                            color: AppColors.textSecondary,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                       const SizedBox(height: 4),
-                      Row(
+                      const Row(
                         children: [
-                          const Icon(
-                            Icons.location_on_outlined,
+                          Icon(
+                            Icons.school_outlined,
                             size: 13,
                             color: AppColors.primary,
                           ),
-                          const SizedBox(width: 4),
+                          SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              'Bennett University • Gate 3',
+                              'Bennett University',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ),
@@ -283,24 +272,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             controller: _phoneController,
             readOnly: true,
             enableInteractiveSelection: false,
-            style: TextStyle(
-              color: isDark
-                  ? AppColors.darkTextSecondary
-                  : AppColors.textSecondary,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
               fontWeight: FontWeight.w600,
             ),
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Phone Number (Account Identity)',
-              prefixIcon: const Icon(Icons.phone_outlined),
+              prefixIcon: Icon(Icons.phone_outlined),
               prefixText: '+91 ',
               suffixIcon: Tooltip(
                 message: 'Phone number is permanently linked to your account',
                 child: Icon(
                   Icons.lock_outline_rounded,
                   size: 18,
-                  color: isDark
-                      ? AppColors.darkTextSecondary
-                      : AppColors.textHint,
+                  color: AppColors.textHint,
                 ),
               ),
             ),
@@ -328,9 +313,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
           const SizedBox(height: AppSpacing.xl),
 
-          // ─── 3. Account Information & Shortcuts ─────────
+          // ─── 3. Account Information & App Details ───────
           Text(
-            'Account Information',
+            'About & Legal',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                   fontSize: 16,
@@ -340,51 +325,60 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
           Container(
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.surface,
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadius.lg),
               border: Border.all(
-                color: isDark ? AppColors.darkDivider : AppColors.divider,
+                color: AppColors.divider,
                 width: 0.8,
               ),
             ),
-            child: Column(
-              children: [
-                const ListTile(
-                  leading: Icon(Icons.local_shipping_outlined, color: AppColors.primary),
-                  title: Text('Pickup Location'),
-                  subtitle: Text('Bennett University Gate No. 3'),
-                ),
-                Divider(
-                  height: 1,
-                  thickness: 0.6,
-                  color: isDark ? AppColors.darkDivider : AppColors.divider,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.palette_outlined, color: AppColors.secondary),
-                  title: const Text('Appearance & App Settings'),
-                  subtitle: const Text('Theme, About, Legal'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push(AppRoutes.settings),
-                ),
-                Divider(
-                  height: 1,
-                  thickness: 0.6,
-                  color: isDark ? AppColors.darkDivider : AppColors.divider,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.logout_rounded, color: AppColors.error),
-                  title: const Text(
-                    'Logout',
-                    style: TextStyle(
-                      color: AppColors.error,
-                      fontWeight: FontWeight.w600,
-                    ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.description_outlined, color: AppColors.primary),
+                    title: const Text('Privacy Policy'),
+                    subtitle: const Text('Read our privacy practices'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      // Open privacy policy URL
+                    },
                   ),
-                  subtitle: const Text('Sign out from this device'),
-                  trailing: const Icon(Icons.chevron_right, color: AppColors.error),
-                  onTap: _showLogoutDialog,
-                ),
-              ],
+                  const Divider(height: 1, thickness: 0.6, color: AppColors.divider),
+                  ListTile(
+                    leading: const Icon(Icons.gavel_outlined, color: AppColors.secondary),
+                    title: const Text('Terms of Service'),
+                    subtitle: const Text('Terms & conditions of use'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      // Open terms of service URL
+                    },
+                  ),
+                  const Divider(height: 1, thickness: 0.6, color: AppColors.divider),
+                  const ListTile(
+                    leading: Icon(Icons.info_outline_rounded, color: AppColors.info),
+                    title: Text('App Version'),
+                    subtitle: Text('${AppConfig.appVersion} (${AppConfig.appName})'),
+                  ),
+                  const Divider(height: 1, thickness: 0.6, color: AppColors.divider),
+                  ListTile(
+                    leading: const Icon(Icons.logout_rounded, color: AppColors.yummbuRed),
+                    title: const Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: AppColors.yummbuRed,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text('Sign out from this device'),
+                    trailing: const Icon(Icons.chevron_right, color: AppColors.yummbuRed),
+                    onTap: _showLogoutDialog,
+                  ),
+                ],
+              ),
             ),
           ),
         ],

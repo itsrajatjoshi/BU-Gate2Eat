@@ -108,12 +108,12 @@ class LocalStorageService {
 
   // ─── Theme ──────────────────────────────────────────────────
 
-  /// Gets the stored theme mode: 'light', 'dark', or 'system'.
-  String get themeMode => _prefs.getString(_keyThemeMode) ?? 'system';
+  /// Gets the stored theme mode: permanently 'light'.
+  String get themeMode => 'light';
 
-  /// Saves the selected theme mode.
+  /// Saves the selected theme mode (no-op; light mode locked).
   Future<void> setThemeMode(String mode) async {
-    await _prefs.setString(_keyThemeMode, mode);
+    await _prefs.setString(_keyThemeMode, 'light');
   }
 
   // ─── Favorites ──────────────────────────────────────────────

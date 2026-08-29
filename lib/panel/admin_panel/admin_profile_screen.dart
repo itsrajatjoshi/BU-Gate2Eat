@@ -181,13 +181,6 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
           'Profile',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: () => context.push(AppRoutes.settings),
-          ),
-        ],
       ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
@@ -436,13 +429,39 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                 children: [
                   ListTile(
                     leading: const Icon(
-                      Icons.settings_outlined,
+                      Icons.description_outlined,
                       color: AppColors.primary,
                     ),
-                    title: const Text('Settings'),
-                    subtitle: const Text('Theme, notifications, preferences'),
+                    title: const Text('Privacy Policy'),
+                    subtitle: const Text('Read our privacy practices'),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => context.push(AppRoutes.settings),
+                    onTap: () {},
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? AppColors.darkDivider : AppColors.divider,
+                  ),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.gavel_outlined,
+                      color: AppColors.secondary,
+                    ),
+                    title: const Text('Terms of Service'),
+                    subtitle: const Text('Terms & conditions of use'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () {},
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? AppColors.darkDivider : AppColors.divider,
+                  ),
+                  const ListTile(
+                    leading: Icon(
+                      Icons.info_outline_rounded,
+                      color: AppColors.info,
+                    ),
+                    title: Text('App Version'),
+                    subtitle: Text('${AppConfig.appVersion} (${AppConfig.appName})'),
                   ),
                   Divider(
                     height: 1,
@@ -451,16 +470,16 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                   ListTile(
                     leading: const Icon(
                       Icons.logout_rounded,
-                      color: AppColors.error,
+                      color: AppColors.yummbuRed,
                     ),
                     title: const Text(
                       'Logout',
-                      style: TextStyle(color: AppColors.error),
+                      style: TextStyle(color: AppColors.yummbuRed),
                     ),
                     subtitle: const Text('Sign out from this device'),
                     trailing: const Icon(
                       Icons.chevron_right_rounded,
-                      color: AppColors.error,
+                      color: AppColors.yummbuRed,
                     ),
                     onTap: _showLogoutDialog,
                   ),
