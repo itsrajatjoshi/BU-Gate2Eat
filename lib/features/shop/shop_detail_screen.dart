@@ -20,6 +20,7 @@ import '../../models/shop_model.dart';
 import '../cart/cart_dialog_helper.dart';
 import '../cart/cart_provider.dart';
 import '../cart/widgets/minimum_order_progress_bar.dart';
+import 'widgets/shop_detail_bottom_sheet.dart';
 
 /// Provider that fetches shop details by ID, reusing cached shops list to eliminate redundant Firestore reads.
 final shopDetailProvider =
@@ -410,6 +411,26 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                     ),
                   ),
                 ),
+                actions: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: CircleAvatar(
+                      backgroundColor: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.black.withValues(alpha: 0.5)
+                          : Colors.white.withValues(alpha: 0.85),
+                      child: IconButton(
+                        icon: const Icon(Icons.info_outline_rounded),
+                        color: Theme.of(context).iconTheme.color,
+                        tooltip: 'Shop Details',
+                        onPressed: () => showShopDetailBottomSheet(
+                          context: context,
+                          shop: shop,
+                          menuItems: menuItemsAsync.value,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 flexibleSpace: LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints constraints) {
                     final double top = constraints.biggest.height;
@@ -505,8 +526,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Shop info section
+                      children: [                        // Shop info section
                         Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: horizontalPadding,
@@ -516,20 +536,52 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (shop.description.isNotEmpty) ...[
-                                Text(
-                                  shop.description,
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => showShopDetailBottomSheet(
+                                    context: context,
+                                    shop: shop,
+                                    menuItems: menuItemsAsync.value,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        shop.description,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              color: isDark
+                                                  ? AppColors.darkTextSecondary
+                                                  : AppColors.textSecondary,
+                                              height: 1.35,
+                                            ),
                                       ),
-                                ),
-                                const SizedBox(height: AppSpacing.xs),
-                              ],
-                              if (shop.contactNumber.isNotEmpty) ...[
-                                Text(
-                                  'Contact: ${shop.contactNumber}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
+                                      const SizedBox(height: 3),
+                                      const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'View details',
+                                            style: TextStyle(
+                                              color: AppColors.primary,
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          SizedBox(width: 2),
+                                          Icon(
+                                            Icons.chevron_right_rounded,
+                                            size: 15,
+                                            color: AppColors.primary,
+                                          ),
+                                        ],
                                       ),
+                                    ],
+                                  ),
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
                               ],
