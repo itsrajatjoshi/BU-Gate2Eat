@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
@@ -792,15 +793,12 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     final extraTextHeight = (textScale > 1.0) ? (textScale - 1.0) * 36.0 : 0.0;
 
-    // Dynamic Body Height Allocation:
-    // - Title (up to 2 lines): ~34px
-    // - Spacing: 4px
-    // - Description (up to 2 lines): ~28px
+    // Dynamic Body Height Allocation (without description):
+    // - Title Row (up to 2 lines with Veg icon): ~34px
     // - Bottom Row (Price + Add Button): ~30px
-    // - Padding: 14px (7 top + 7 bottom)
-    // - Internal spacing: ~6px
-    final bodyHeight = 116.0 + extraTextHeight;
-    final cardHeight = (cardWidth / 1.3) + bodyHeight;
+    // - Padding: 16px (8 top + 8 bottom)
+    final bodyHeight = 82.0 + extraTextHeight;
+    final cardHeight = (cardWidth / 1.25) + bodyHeight;
     final childAspectRatio = cardWidth / cardHeight;
 
     return SliverGridDelegateWithFixedCrossAxisCount(
@@ -1278,7 +1276,7 @@ class _MenuItemCard extends ConsumerWidget {
             children: [
               // 1. Food Image Container
               AspectRatio(
-                aspectRatio: 1.3,
+                aspectRatio: 1.25,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -1343,98 +1341,78 @@ class _MenuItemCard extends ConsumerWidget {
                 ),
               ),
 
-              // 2. Card Content Body
+              // 2. Card Content Body (Compact, description removed)
               Expanded(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
                     isSmallScreen ? 8 : 10,
-                    7,
+                    8,
                     isSmallScreen ? 8 : 10,
-                    7,
+                    8,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Item Title with Veg/Non-Veg icon (Supports 2 lines to avoid aggressive ellipsis)
-                      Column(
+                      // Item Title with Veg/Non-Veg icon (Supports up to 2 lines)
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
-                              ),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  item.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: isSmallScreen ? 13.0 : 13.8,
-                                        height: 1.2,
-                                      ),
-                                ),
-                              ),
-                            ],
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2.5),
+                            child: item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
                           ),
-                          const SizedBox(height: 3),
-
-                          // Description with clean "... more"
-                          Builder(
-                            builder: (context) {
-                              final rawDetails = item.details.isNotEmpty
-                                  ? item.details
-                                  : '${item.name} prepared fresh with authentic spices';
-                              final cleanDetails = rawDetails.replaceAll(RegExp(r'\.+$'), '').trim();
-                              return Text.rich(
-                                TextSpan(
-                                  style: TextStyle(
-                                    color: isDark ? AppColors.darkTextSecondary : Colors.grey.shade600,
-                                    fontSize: isSmallScreen ? 10.8 : 11.5,
-                                    height: 1.28,
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              item.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.gideonRoman(
+                                fontWeight: FontWeight.w900,
+                                fontSize: isSmallScreen ? 14.8 : 15.8,
+                                height: 1.16,
+                                letterSpacing: 0.1,
+                                color: isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.textPrimary,
+                                shadows: [
+                                  Shadow(
+                                    color: (isDark
+                                            ? AppColors.darkTextPrimary
+                                            : AppColors.textPrimary)
+                                        .withValues(alpha: 0.65),
+                                    offset: const Offset(0.35, 0.25),
+                                    blurRadius: 0.3,
                                   ),
-                                  children: [
-                                    TextSpan(text: '$cleanDetails '),
-                                    const TextSpan(
-                                      text: 'more',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              );
-                            },
+                                  Shadow(
+                                    color: (isDark
+                                            ? AppColors.darkTextPrimary
+                                            : AppColors.textPrimary)
+                                        .withValues(alpha: 0.65),
+                                    offset: const Offset(-0.25, -0.15),
+                                    blurRadius: 0.3,
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
 
-                      // Bottom Row: Clean Price + Add Button / Stepper
+                      // Bottom Row: Clean Price + Add Button
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Flexible(
                             child: Text(
                               item.formattedStartingPrice,
-                              style: TextStyle(
+                              style: GoogleFonts.notoSansJp(
                                 fontWeight: FontWeight.w800,
                                 fontSize: isSmallScreen ? 14.5 : 15.5,
-                                color: Theme.of(context)
-                                    .textTheme
-                                    .bodyLarge
-                                    ?.color,
+                                color: isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.textPrimary,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
