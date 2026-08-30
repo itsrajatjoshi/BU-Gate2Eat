@@ -1,32 +1,108 @@
 // BU Gate2Eat — Shop Card Widget
-// Exact pixel match to reference screenshots (Light & Dark modes)
+// Combines YummBU status & contact, Zomato typography & timing, EatClub circular logo,
+// and auto-sliding + swipeable category food images slideshow.
+
+import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import '../../../core/constants/app_constants.dart';
+import '../../../core/providers.dart';
 import '../../../models/shop_model.dart';
 
-class ShopCard extends StatelessWidget {
+class ShopCard extends ConsumerStatefulWidget {
   const ShopCard({
     required this.shop,
     required this.onTap,
+    this.slideshowImages,
+    this.autoSlideInterval = const Duration(seconds: 4),
     super.key,
   });
 
   final Shop shop;
   final VoidCallback onTap;
+  final List<String>? slideshowImages;
+  final Duration autoSlideInterval;
+
+  @override
+  ConsumerState<ShopCard> createState() => _ShopCardState();
+}
+
+class _ShopCardState extends ConsumerState<ShopCard> {
+  late final PageController _pageController;
+  Timer? _autoSlideTimer;
+  int _currentPage = 0;
+  int _lastResolvedImageCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _autoSlideTimer?.cancel();
+    _autoSlideTimer = null;
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _syncAutoSlide(int imageCount) {
+    if (imageCount == _lastResolvedImageCount &&
+        _autoSlideTimer != null &&
+        _autoSlideTimer!.isActive) {
+      return;
+    }
+    _lastResolvedImageCount = imageCount;
+    _startAutoSlide(imageCount);
+  }
+
+  void _startAutoSlide(int imageCount) {
+    _autoSlideTimer?.cancel();
+    _autoSlideTimer = null;
+    if (imageCount <= 1 || !mounted) return;
+
+    _autoSlideTimer = Timer.periodic(widget.autoSlideInterval, (timer) {
+      if (!mounted || !_pageController.hasClients) return;
+      final nextPage = (_currentPage + 1) % imageCount;
+      _pageController.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
 
   /// Converts time string to 12hr AM/PM format.
   String _formatTime12hr(String time) => Shop.format12hr(time);
 
   @override
   Widget build(BuildContext context) {
+    final shop = widget.shop;
     final isOpen = shop.isOpen;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
+    final isSmallScreen = screenWidth < 380;
     final horizontalPadding = isSmallScreen ? 11.0 : 14.0;
+    final circleSize = isSmallScreen ? 76.0 : 84.0;
+    final circleRight = isSmallScreen ? 14.0 : 18.0;
+    final textRightPadding = circleRight + circleSize + 8.0;
+
+    // Resolve slideshow images from explicit override or Riverpod provider
+    final List<String> images = widget.slideshowImages ??
+        ref.watch(shopSlideshowImagesProvider(shop.id));
+
+    // Post-frame check to manage auto-sliding timer safely
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _syncAutoSlide(images.length);
+      }
+    });
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -43,268 +119,356 @@ class ShopCard extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Banner Image (2.4:1 ratio) with Compact Two-Line Glass Badge
-            Stack(
-              children: [
-                AspectRatio(
-                  aspectRatio: 2.4 / 1,
-                  child: shop.bannerUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: shop.bannerUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) =>
-                              _buildPlaceholder(isDark),
-                          errorWidget: (context, url, error) =>
-                              _buildPlaceholder(isDark),
-                        )
-                      : _buildPlaceholder(isDark),
-                ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final cardWidth = constraints.maxWidth;
+            final bannerHeight = cardWidth / 2.4;
+            final circleTop = bannerHeight - (circleSize / 2);
 
-                // Glassmorphic Status Badge (Top-Left, matching reference screenshots)
-                Positioned(
-                  top: 10,
-                  left: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isOpen
-                          ? Colors.black.withValues(alpha: 0.65)
-                          : AppColors.nonVegRed.withValues(alpha: 0.88),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        width: 0.8,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+            return Stack(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. Banner Image Area (2.4:1 ratio) with Slideshow & Status Badge
+                    Stack(
+                      children: [
+                        AspectRatio(
+                          aspectRatio: 2.4 / 1,
+                          child: _buildBannerSlideshow(images, isDark),
+                        ),
+
+                        // Glassmorphic Status Badge (Top-Left)
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isOpen
+                                  ? Colors.black.withValues(alpha: 0.65)
+                                  : AppColors.nonVegRed.withValues(alpha: 0.88),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                width: 0.8,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: isOpen
+                                            ? AppColors.vegGreen
+                                            : Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      isOpen ? 'OPEN' : 'CLOSED',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  isOpen
+                                      ? 'Till ${_formatTime12hr(shop.closeTime)}'
+                                      : 'Opens ${_formatTime12hr(shop.openTime)}',
+                                  style: GoogleFonts.inter(
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: -0.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: isOpen ? AppColors.vegGreen : Colors.white,
-                                shape: BoxShape.circle,
-                              ),
+
+                    // 2. Main Content Area
+                    Padding(
+                      padding: EdgeInsets.only(
+                        left: horizontalPadding,
+                        right: textRightPadding,
+                        top: 12,
+                        bottom: 8,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Shop Name (Bold, modern geometric header matching Okra-Bold feel)
+                          Text(
+                            shop.name,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppColors.darkTextPrimary
+                                  : AppColors.textPrimary,
+                              fontSize: isSmallScreen ? 16.5 : 18.0,
+                              letterSpacing: -0.3,
+                              height: 1.2,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              isOpen ? 'OPEN' : 'CLOSED',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+
+                          // Clock Timings Badge (Icon + Text) underneath Shop Name
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.schedule_rounded,
+                                size: 13.5,
+                                color: isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 4.5),
+                              Flexible(
+                                child: Text(
+                                  '${_formatTime12hr(shop.openTime)} – ${_formatTime12hr(shop.closeTime)}',
+                                  style: GoogleFonts.inter(
+                                    color: isDark
+                                        ? AppColors.darkTextSecondary
+                                        : AppColors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: isSmallScreen ? 11.0 : 12.0,
+                                    letterSpacing: -0.1,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // 3. Footer Container (Contact chip container)
+                    if (shop.contactNumber.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          left: horizontalPadding,
+                          right: horizontalPadding,
+                          bottom: 10,
+                          top: 2,
+                        ),
+                        child: Row(
+                          children: [
+                            // Contact Chip Container
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.darkSurfaceVariant
+                                    : AppColors.surfaceVariant,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.phone_outlined,
+                                    size: 12,
+                                    color: isDark
+                                        ? AppColors.darkTextSecondary
+                                        : AppColors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    shop.contactNumber,
+                                    style: GoogleFonts.inter(
+                                      color: isDark
+                                          ? AppColors.darkTextSecondary
+                                          : AppColors.textSecondary,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          isOpen
-                              ? 'Till ${_formatTime12hr(shop.closeTime)}'
-                              : 'Opens ${_formatTime12hr(shop.openTime)}',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                  ],
+                ),
+
+                // 4. EatClub-style Prominent Circular Shop Logo (50-50 Boundary Overlap)
+                Positioned(
+                  top: circleTop,
+                  right: circleRight,
+                  child: _buildCircularShopLogo(
+                    size: circleSize,
+                    isDark: isDark,
                   ),
                 ),
               ],
-            ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 
-            // 2. Main Content Area (Matching screenshot layout)
-            Padding(
-              padding: EdgeInsets.only(
-                left: horizontalPadding,
-                right: horizontalPadding,
-                top: 12,
-                bottom: 8,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title Row: Shop Name + Clock Operating Hours
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          shop.name,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? AppColors.darkTextPrimary
-                                    : AppColors.textPrimary,
-                                fontSize: isSmallScreen ? 15 : 16,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
+  /// Builds the main banner image area supporting multi-image auto & manual swipe slideshow.
+  Widget _buildBannerSlideshow(List<String> images, bool isDark) {
+    if (images.isEmpty) {
+      return _buildPlaceholder(isDark);
+    }
 
-                      // Clock Timings Badge (Icon + Text)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.schedule_rounded,
-                            size: 13,
-                            color: isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_formatTime12hr(shop.openTime)} – ${_formatTime12hr(shop.closeTime)}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: isDark
-                                      ? AppColors.darkTextSecondary
-                                      : AppColors.textSecondary,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: isSmallScreen ? 10.5 : 11.5,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+    if (images.length == 1) {
+      return CachedNetworkImage(
+        imageUrl: images.first,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => _buildPlaceholder(isDark),
+        errorWidget: (context, url, error) => _buildPlaceholder(isDark),
+      );
+    }
 
-                  // One-line Description
-                  if (shop.description.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      shop.description,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.textSecondary,
-                            fontSize: isSmallScreen ? 12 : 12.5,
-                          ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+    return Stack(
+      children: [
+        PageView.builder(
+          key: const ValueKey('shop_card_slideshow_pageview'),
+          controller: _pageController,
+          itemCount: images.length,
+          onPageChanged: (index) {
+            _currentPage = index;
+            _startAutoSlide(images.length);
+            setState(() {});
+          },
+          itemBuilder: (context, index) {
+            return CachedNetworkImage(
+              imageUrl: images[index],
+              fit: BoxFit.cover,
+              placeholder: (context, url) => _buildPlaceholder(isDark),
+              errorWidget: (context, url, error) => _buildPlaceholder(isDark),
+            );
+          },
+        ),
+
+        // Subtle Page Indicator Dots (Bottom-Center of banner)
+        Positioned(
+          bottom: 7,
+          left: 0,
+          right: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(images.length, (index) {
+              final isSelected = index == _currentPage;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                width: isSelected ? 14 : 5,
+                height: 4.5,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
                     ),
                   ],
-                ],
-              ),
-            ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
 
-            // 3. Footer Container (Matching rounded chip pills in reference screenshots)
-            Padding(
-              padding: EdgeInsets.only(
-                left: horizontalPadding,
-                right: horizontalPadding,
-                bottom: 10,
-                top: 2,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Contact Chip Container
-                  if (shop.contactNumber.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.phone_outlined,
-                            size: 12,
-                            color: isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            shop.contactNumber,
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: isDark
-                                          ? AppColors.darkTextSecondary
-                                          : AppColors.textSecondary,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                          ),
-                        ],
-                      ),
-                    ),
+  /// Builds the EatClub-style circular shop image overlapping the boundary.
+  Widget _buildCircularShopLogo({
+    required double size,
+    required bool isDark,
+  }) {
+    return Container(
+      key: const ValueKey('shop_card_circular_logo'),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isDark ? AppColors.darkSurfaceVariant : Colors.white,
+        border: Border.all(
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
+            blurRadius: 10,
+            spreadRadius: 0.5,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: widget.shop.bannerUrl.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: widget.shop.bannerUrl,
+                fit: BoxFit.cover,
+                placeholder: (context, url) =>
+                    _buildLogoPlaceholder(isDark, size),
+                errorWidget: (context, url, error) =>
+                    _buildLogoPlaceholder(isDark, size),
+              )
+            : _buildLogoPlaceholder(isDark, size),
+      ),
+    );
+  }
 
-                  // Pickup Note Chip Container
-                  if (shop.deliveryNote.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.primary.withValues(alpha: 0.2)
-                            : AppColors.primaryLight,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.storefront_outlined,
-                            size: 12,
-                            color: AppColors.primary,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            shop.deliveryNote,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: AppColors.primary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
+  Widget _buildLogoPlaceholder(bool isDark, double size) {
+    return Container(
+      color: isDark ? AppColors.darkSurfaceVariant : const Color(0xFFF5F5F5),
+      child: Center(
+        child: Icon(
+          Icons.storefront_rounded,
+          size: size * 0.42,
+          color: isDark ? AppColors.darkTextSecondary : AppColors.textHint,
         ),
       ),
     );

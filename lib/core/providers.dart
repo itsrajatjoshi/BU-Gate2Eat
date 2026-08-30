@@ -137,6 +137,78 @@ final allShopCategoriesProvider = FutureProvider<Map<String, List<Category>>>((r
   return result;
 });
 
+/// Resolves the deterministic list of slideshow images for a shop's main banner.
+/// Follows 3.6/3.7 rule: Category first-item images in category sortOrder,
+/// followed by other menu item images, deduplicated.
+final shopSlideshowImagesProvider =
+    Provider.family<List<String>, String>((ref, shopId) {
+  final catsAsync = ref.watch(shopCategoriesProvider(shopId));
+  final itemsAsync = ref.watch(shopMenuItemsProvider(shopId));
+
+  final categories = catsAsync.value ?? [];
+  final menuItems = itemsAsync.value ?? [];
+
+  return resolveShopSlideshowImages(
+    categories: categories,
+    menuItems: menuItems,
+  );
+});
+
+/// Pure helper function to resolve deterministic slideshow images from categories and menu items.
+List<String> resolveShopSlideshowImages({
+  required List<Category> categories,
+  required List<MenuItem> menuItems,
+  String? fallbackShopBannerUrl,
+}) {
+  final List<String> images = [];
+  final Set<String> seenUrls = {};
+
+  void addImage(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isNotEmpty && !seenUrls.contains(trimmed)) {
+      seenUrls.add(trimmed);
+      images.add(trimmed);
+    }
+  }
+
+  // 1. Sort categories by sortOrder
+  final sortedCats = List<Category>.from(categories)
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+  // 2. Sort menu items by sortOrder
+  final sortedItems = List<MenuItem>.from(menuItems)
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+  // 3. For each category, resolve the first menu item's image
+  for (final cat in sortedCats) {
+    final catItems = sortedItems.where((item) => item.categoryId == cat.id);
+    final firstItemWithImg = catItems.cast<MenuItem?>().firstWhere(
+      (item) => item != null && item.imageUrl.trim().isNotEmpty,
+      orElse: () => null,
+    );
+
+    if (firstItemWithImg != null && firstItemWithImg.imageUrl.trim().isNotEmpty) {
+      addImage(firstItemWithImg.imageUrl);
+    } else if (cat.imageUrl.trim().isNotEmpty) {
+      addImage(cat.imageUrl);
+    }
+  }
+
+  // 4. If any other menu items have images not yet included, add them
+  for (final item in sortedItems) {
+    if (item.imageUrl.trim().isNotEmpty) {
+      addImage(item.imageUrl);
+    }
+  }
+
+  // 5. If no category/menu images exist, fallback to shop banner if available
+  if (images.isEmpty && fallbackShopBannerUrl != null && fallbackShopBannerUrl.trim().isNotEmpty) {
+    addImage(fallbackShopBannerUrl);
+  }
+
+  return images;
+}
+
 /// Cached provider for fetching recommended items for Cart "You may also like".
 final recommendedMenuItemsProvider =
     FutureProvider.family<List<MenuItem>, String>((ref, shopId) async {
