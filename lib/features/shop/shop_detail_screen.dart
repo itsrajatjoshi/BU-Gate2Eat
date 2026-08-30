@@ -237,18 +237,52 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     }
   }
 
+  /// Helper to resolve effective image URL for a menu item
+  static String _getItemEffectiveImageUrl(MenuItem item) {
+    if (item.imageUrl.isNotEmpty) return item.imageUrl;
+
+    final nameLower = item.name.toLowerCase();
+    if (nameLower.contains('momo') || nameLower.contains('dumpling')) {
+      if (nameLower.contains('fried')) {
+        return 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=500&auto=format&fit=crop&q=80';
+      }
+      return 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('noodle') || nameLower.contains('chow') || nameLower.contains('maggi')) {
+      return 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('burger')) {
+      return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('paneer') || nameLower.contains('curry')) {
+      return 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('roll') || nameLower.contains('wrap') || nameLower.contains('frankie')) {
+      return 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('pizza')) {
+      return 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&auto=format&fit=crop&q=80';
+    } else if (nameLower.contains('shake') || nameLower.contains('drink') || nameLower.contains('tea') || nameLower.contains('coffee')) {
+      return 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&auto=format&fit=crop&q=80';
+    }
+
+    return '';
+  }
+
   /// Generates clean data-driven shop categories fetching dynamically from Firestore.
+  /// Sets every category thumbnail to the FIRST menu item belonging to that category (Checkpoint 3.6).
   /// Shows ONLY categories that contain at least one available menu item.
-  List<Category> _getEffectiveCategories(
+  static List<Category> _getEffectiveCategories(
     String shopId,
     List<Category>? fetched, [
     List<MenuItem>? menuItems,
   ]) {
-    const allCat = Category(
+    // 1. "All" Category Thumbnail: First item in the current shop's menu
+    final firstShopItem = menuItems?.where((item) => item.isAvailable).firstOrNull ?? menuItems?.firstOrNull;
+    final allCatImg = firstShopItem != null
+        ? _getItemEffectiveImageUrl(firstShopItem)
+        : '';
+
+    final allCat = Category(
       id: 'all',
       name: 'All',
       sortOrder: 0,
-      imageUrl: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=300&auto=format&fit=crop&q=80',
+      imageUrl: allCatImg,
     );
 
     final List<Category> list = [allCat];
@@ -257,41 +291,41 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
       for (final c in fetched) {
         if (c.id == 'all' || !c.isActive) continue;
 
-        // If menuItems list is provided, category must contain at least 1 available item
         if (menuItems != null) {
-          final hasAvailableItem = menuItems.any(
-            (item) => item.isAvailable && _itemBelongsToCategory(item, c),
-          );
-          if (!hasAvailableItem) continue;
-        }
+          // Filter items belonging to this category in current menu ordering
+          final categoryItems = menuItems.where(
+            (item) => _itemBelongsToCategory(item, c),
+          ).toList();
 
-        String img = c.imageUrl;
-        if (img.isEmpty) {
-          final nameL = c.name.toLowerCase();
-          if (nameL.contains('momo')) {
-            img = 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=300&auto=format&fit=crop&q=80';
-          } else if (nameL.contains('pizza')) {
-            img = 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&auto=format&fit=crop&q=80';
-          } else if (nameL.contains('burger')) {
-            img = 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80';
-          } else if (nameL.contains('biryani')) {
-            img = 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=300&auto=format&fit=crop&q=80';
-          } else if (nameL.contains('thali')) {
-            img = 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80';
-          } else if (nameL.contains('roll')) {
-            img = 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=300&auto=format&fit=crop&q=80';
-          } else {
-            img = 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&auto=format&fit=crop&q=80';
-          }
+          final availableCategoryItems = categoryItems.where((item) => item.isAvailable).toList();
+          if (availableCategoryItems.isEmpty) continue;
+
+          // Checkpoint 3.6: Derive category thumbnail from the FIRST item in existing menu ordering
+          final firstCategoryItem = availableCategoryItems.first;
+          final categoryImg = _getItemEffectiveImageUrl(firstCategoryItem);
+
+          list.add(
+            Category(
+              id: c.id,
+              name: c.name,
+              sortOrder: c.sortOrder,
+              imageUrl: categoryImg,
+              isActive: c.isActive,
+              shopId: shopId,
+            ),
+          );
+        } else {
+          list.add(
+            Category(
+              id: c.id,
+              name: c.name,
+              sortOrder: c.sortOrder,
+              imageUrl: c.imageUrl,
+              isActive: c.isActive,
+              shopId: shopId,
+            ),
+          );
         }
-        list.add(Category(
-          id: c.id,
-          name: c.name,
-          sortOrder: c.sortOrder,
-          imageUrl: img,
-          isActive: c.isActive,
-          shopId: shopId,
-        ),);
       }
     }
 
@@ -1538,20 +1572,27 @@ class _CategoryNavWidget extends StatelessWidget {
                           ),
                         ),
                         child: ClipOval(
-                          child: CachedNetworkImage(
-                            imageUrl: cat.imageUrl,
-                            width: imageSize,
-                            height: imageSize,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(
-                              color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
-                              child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
-                              child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
-                            ),
-                          ),
+                          child: cat.imageUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: cat.imageUrl,
+                                  width: imageSize,
+                                  height: imageSize,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Container(
+                                    color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
+                                    child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
+                                  ),
+                                  errorWidget: (context, url, error) => Container(
+                                    color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
+                                    child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
+                                  ),
+                                )
+                              : Container(
+                                  width: imageSize,
+                                  height: imageSize,
+                                  color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
+                                  child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
+                                ),
                         ),
                       ),
 
@@ -2955,3 +2996,14 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
   }
 }
 
+/// Helper exposed for unit and widget testing
+@visibleForTesting
+class ShopDetailScreenTestHelper {
+  static List<Category> getEffectiveCategories(
+    String shopId,
+    List<Category>? fetched, [
+    List<MenuItem>? menuItems,
+  ]) {
+    return _ShopDetailScreenState._getEffectiveCategories(shopId, fetched, menuItems);
+  }
+}
