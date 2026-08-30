@@ -56,7 +56,7 @@ void main() {
           reason: 'Circular logo must be on the right side');
 
       // Verify 50/50 boundary overlap:
-      final bannerHeight = 360 / 2.4;
+      final bannerHeight = 360 / 1.85;
       final expectedCircleTop = cardRect.top + bannerHeight - (logoRect.height / 2);
       expect((logoRect.top - expectedCircleTop).abs(), lessThan(2.0),
           reason: 'Circle center must align at banner boundary (50% upper, 50% lower)');

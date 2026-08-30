@@ -138,26 +138,28 @@ final allShopCategoriesProvider = FutureProvider<Map<String, List<Category>>>((r
 });
 
 /// Resolves the deterministic list of slideshow images for a shop's main banner.
-/// Follows 3.6/3.7 rule: Category first-item images in category sortOrder,
-/// followed by other menu item images, deduplicated.
+/// Follows 3.7.7 rule: Shop Banner is always index 0, followed by
+/// Category first-item images in category sortOrder, then other menu item images, deduplicated.
 final shopSlideshowImagesProvider =
-    Provider.family<List<String>, String>((ref, shopId) {
-  final catsAsync = ref.watch(shopCategoriesProvider(shopId));
-  final itemsAsync = ref.watch(shopMenuItemsProvider(shopId));
+    Provider.family<List<String>, Shop>((ref, shop) {
+  final catsAsync = ref.watch(shopCategoriesProvider(shop.id));
+  final itemsAsync = ref.watch(shopMenuItemsProvider(shop.id));
 
   final categories = catsAsync.value ?? [];
   final menuItems = itemsAsync.value ?? [];
 
   return resolveShopSlideshowImages(
+    shopBannerUrl: shop.bannerUrl,
     categories: categories,
     menuItems: menuItems,
   );
 });
 
-/// Pure helper function to resolve deterministic slideshow images from categories and menu items.
+/// Pure helper function to resolve deterministic slideshow images starting with shop banner at index 0.
 List<String> resolveShopSlideshowImages({
   required List<Category> categories,
   required List<MenuItem> menuItems,
+  String? shopBannerUrl,
   String? fallbackShopBannerUrl,
 }) {
   final List<String> images = [];
@@ -171,15 +173,21 @@ List<String> resolveShopSlideshowImages({
     }
   }
 
-  // 1. Sort categories by sortOrder
+  // 1. ALWAYS place Shop Banner at index 0 if available
+  final primaryBanner = shopBannerUrl ?? fallbackShopBannerUrl;
+  if (primaryBanner != null && primaryBanner.trim().isNotEmpty) {
+    addImage(primaryBanner);
+  }
+
+  // 2. Sort categories by sortOrder
   final sortedCats = List<Category>.from(categories)
     ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
-  // 2. Sort menu items by sortOrder
+  // 3. Sort menu items by sortOrder
   final sortedItems = List<MenuItem>.from(menuItems)
     ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
-  // 3. For each category, resolve the first menu item's image
+  // 4. For each category, resolve the first menu item's image
   for (final cat in sortedCats) {
     final catItems = sortedItems.where((item) => item.categoryId == cat.id);
     final firstItemWithImg = catItems.cast<MenuItem?>().firstWhere(
@@ -194,16 +202,11 @@ List<String> resolveShopSlideshowImages({
     }
   }
 
-  // 4. If any other menu items have images not yet included, add them
+  // 5. If any other menu items have images not yet included, add them
   for (final item in sortedItems) {
     if (item.imageUrl.trim().isNotEmpty) {
       addImage(item.imageUrl);
     }
-  }
-
-  // 5. If no category/menu images exist, fallback to shop banner if available
-  if (images.isEmpty && fallbackShopBannerUrl != null && fallbackShopBannerUrl.trim().isNotEmpty) {
-    addImage(fallbackShopBannerUrl);
   }
 
   return images;

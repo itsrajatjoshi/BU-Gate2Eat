@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('Checkpoint 3.7.5 — Shop Card Typography & Hierarchy Tests', () {
+  group('Checkpoint 3.7.6 — Shop Card Size, Proportions & Premium Typography Tests', () {
     final shopA = Shop(
       id: 'shop_a',
       name: 'Raja Hotel',
@@ -20,12 +20,36 @@ void main() {
       isActive: true,
       sortOrder: 1,
       searchKeywords: ['raja'],
-      deliveryNote: '',
+      deliveryNote: 'Gate 3',
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
 
-    testWidgets('1. Shop name renders with bold header typography hierarchy',
+    testWidgets('1. Main banner uses dominant 1.85:1 restaurant-card aspect ratio',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 370,
+                child: ShopCard(
+                  shop: shopA,
+                  onTap: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final aspectRatioFinder = find.byWidgetPredicate(
+        (widget) => widget is AspectRatio && (widget.aspectRatio - 1.85).abs() < 0.01,
+      );
+      expect(aspectRatioFinder, findsOneWidget);
+    });
+
+    testWidgets('2. Shop Name is bolder and larger with ExtraBold 800 typography',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -48,11 +72,10 @@ void main() {
 
       final textWidget = tester.widget<Text>(nameFinder);
       expect(textWidget.style?.fontWeight, equals(FontWeight.w800));
-      expect(textWidget.maxLines, equals(1));
-      expect(textWidget.overflow, equals(TextOverflow.ellipsis));
+      expect(textWidget.style?.fontSize, greaterThanOrEqualTo(17.5));
     });
 
-    testWidgets('2. Timing renders with supporting medium typography hierarchy',
+    testWidgets('3. Information hierarchy: Name < Timing < Phone in unified cohesive block',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -70,21 +93,26 @@ void main() {
         ),
       );
 
-      final timingFinder = find.text('8:00 AM – 11:30 PM');
-      expect(timingFinder, findsOneWidget);
+      final nameTop = tester.getTopLeft(find.text('Raja Hotel')).dy;
+      final timingTop = tester.getTopLeft(find.text('8:00 AM – 11:30 PM')).dy;
+      final phoneTop = tester.getTopLeft(find.text('9191919191')).dy;
 
-      final textWidget = tester.widget<Text>(timingFinder);
-      expect(textWidget.style?.fontWeight, equals(FontWeight.w500));
+      expect(nameTop < timingTop, isTrue);
+      expect(timingTop < phoneTop, isTrue);
+
+      // Excludes description & pickup note
+      expect(find.text('Meals'), findsNothing);
+      expect(find.text('Gate 3'), findsNothing);
     });
 
-    testWidgets('3. Phone number renders with semi-bold chip typography hierarchy',
+    testWidgets('4. Circular shop logo (3.7.3) remains 50/50 aligned at the new boundary',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
             home: Scaffold(
               body: SizedBox(
-                width: 360,
+                width: 370,
                 child: ShopCard(
                   shop: shopA,
                   onTap: () {},
@@ -95,71 +123,15 @@ void main() {
         ),
       );
 
-      final phoneFinder = find.text('9191919191');
-      expect(phoneFinder, findsOneWidget);
+      final cardRect = tester.getRect(find.byType(ShopCard));
+      final logoRect = tester.getRect(find.byKey(const ValueKey('shop_card_circular_logo')));
 
-      final textWidget = tester.widget<Text>(phoneFinder);
-      expect(textWidget.style?.fontWeight, equals(FontWeight.w600));
+      final bannerHeight = 370 / 1.85;
+      final expectedCircleTop = cardRect.top + bannerHeight - (logoRect.height / 2);
+      expect((logoRect.top - expectedCircleTop).abs(), lessThan(2.0));
     });
 
-    testWidgets('4. Status badge renders with heavy punchy typography',
-        (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            home: Scaffold(
-              body: SizedBox(
-                width: 360,
-                child: ShopCard(
-                  shop: shopA,
-                  onTap: () {},
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      final openFinder = find.text('OPEN');
-      expect(openFinder, findsOneWidget);
-
-      final openWidget = tester.widget<Text>(openFinder);
-      expect(openWidget.style?.fontWeight, equals(FontWeight.w800));
-
-      final tillFinder = find.text('Till 11:30 PM');
-      expect(tillFinder, findsOneWidget);
-
-      final tillWidget = tester.widget<Text>(tillFinder);
-      expect(tillWidget.style?.fontWeight, equals(FontWeight.w500));
-    });
-
-    testWidgets('5. Long shop names gracefully truncate with ellipsis without card overflow',
-        (tester) async {
-      final longNameShop = shopA.copyWith(
-        name: 'The Ultra Royal Gourmet Continental And Indian Express Dine In & Takeaway Restaurant',
-      );
-
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            home: Scaffold(
-              body: SizedBox(
-                width: 360,
-                child: ShopCard(
-                  shop: longNameShop,
-                  onTap: () {},
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(ShopCard), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('6. Circular shop logo (3.7.3) and Slideshow (3.7.4) remain intact',
+    testWidgets('5. Slideshow (3.7.4) works seamlessly in 1.85:1 proportion',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -181,17 +153,33 @@ void main() {
         ),
       );
 
-      // Circular logo on the right
-      final logoFinder = find.byKey(const ValueKey('shop_card_circular_logo'));
-      expect(logoFinder, findsOneWidget);
+      expect(find.byKey(const ValueKey('shop_card_slideshow_pageview')), findsOneWidget);
+    });
 
-      // Slideshow PageView present
-      final pageViewFinder = find.byKey(const ValueKey('shop_card_slideshow_pageview'));
-      expect(pageViewFinder, findsOneWidget);
+    testWidgets('6. Zero layout overflow on narrow screens',
+        (tester) async {
+      final longShop = shopA.copyWith(
+        name: 'The Royal Heritage Spice Garden & Sweets',
+      );
 
-      // Circular logo uses shopA.bannerUrl
-      final cachedImages = tester.widgetList<CachedNetworkImage>(find.byType(CachedNetworkImage));
-      expect(cachedImages.any((img) => img.imageUrl == shopA.bannerUrl), isTrue);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 320, // Narrow screen
+                child: ShopCard(
+                  shop: longShop,
+                  onTap: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(ShopCard), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -88,14 +88,14 @@ class _ShopCardState extends ConsumerState<ShopCard> {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 380;
-    final horizontalPadding = isSmallScreen ? 11.0 : 14.0;
+    final horizontalPadding = isSmallScreen ? 12.0 : 14.0;
     final circleSize = isSmallScreen ? 76.0 : 84.0;
     final circleRight = isSmallScreen ? 14.0 : 18.0;
     final textRightPadding = circleRight + circleSize + 8.0;
 
     // Resolve slideshow images from explicit override or Riverpod provider
     final List<String> images = widget.slideshowImages ??
-        ref.watch(shopSlideshowImagesProvider(shop.id));
+        ref.watch(shopSlideshowImagesProvider(shop));
 
     // Post-frame check to manage auto-sliding timer safely
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -105,13 +105,13 @@ class _ShopCardState extends ConsumerState<ShopCard> {
     });
 
     return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -120,11 +120,12 @@ class _ShopCardState extends ConsumerState<ShopCard> {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+        borderRadius: BorderRadius.circular(16),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final cardWidth = constraints.maxWidth;
-            final bannerHeight = cardWidth / 2.4;
+            // Premium food card aspect ratio matching modern restaurant listings (1.85:1)
+            final bannerHeight = cardWidth / 1.85;
             final circleTop = bannerHeight - (circleSize / 2);
 
             return Stack(
@@ -132,11 +133,11 @@ class _ShopCardState extends ConsumerState<ShopCard> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 1. Banner Image Area (2.4:1 ratio) with Slideshow & Status Badge
+                    // 1. Banner Image Area (1.85:1 ratio) with Slideshow & Status Badge
                     Stack(
                       children: [
                         AspectRatio(
-                          aspectRatio: 2.4 / 1,
+                          aspectRatio: 1.85 / 1,
                           child: _buildBannerSlideshow(images, isDark),
                         ),
 
@@ -214,27 +215,27 @@ class _ShopCardState extends ConsumerState<ShopCard> {
                       ],
                     ),
 
-                    // 2. Main Content Area
+                    // 2. Main Information Section (Zomato-aligned visual hierarchy)
                     Padding(
                       padding: EdgeInsets.only(
                         left: horizontalPadding,
                         right: textRightPadding,
-                        top: 12,
-                        bottom: 8,
+                        top: 10,
+                        bottom: 12,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Shop Name (Bold, modern geometric header matching Okra-Bold feel)
+                          // Shop Name (Bold, prominent header matching Zomato title density)
                           Text(
                             shop.name,
                             style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w800,
                               color: isDark
                                   ? AppColors.darkTextPrimary
-                                  : AppColors.textPrimary,
-                              fontSize: isSmallScreen ? 16.5 : 18.0,
-                              letterSpacing: -0.3,
+                                  : const Color(0xFF1C1C1C),
+                              fontSize: isSmallScreen ? 17.5 : 19.5,
+                              letterSpacing: -0.4,
                               height: 1.2,
                             ),
                             maxLines: 1,
@@ -251,7 +252,7 @@ class _ShopCardState extends ConsumerState<ShopCard> {
                                 size: 13.5,
                                 color: isDark
                                     ? AppColors.darkTextSecondary
-                                    : AppColors.textSecondary,
+                                    : const Color(0xFF686B78),
                               ),
                               const SizedBox(width: 4.5),
                               Flexible(
@@ -260,9 +261,9 @@ class _ShopCardState extends ConsumerState<ShopCard> {
                                   style: GoogleFonts.inter(
                                     color: isDark
                                         ? AppColors.darkTextSecondary
-                                        : AppColors.textSecondary,
+                                        : const Color(0xFF686B78),
                                     fontWeight: FontWeight.w500,
-                                    fontSize: isSmallScreen ? 11.0 : 12.0,
+                                    fontSize: isSmallScreen ? 11.5 : 12.5,
                                     letterSpacing: -0.1,
                                   ),
                                   maxLines: 1,
@@ -271,50 +272,39 @@ class _ShopCardState extends ConsumerState<ShopCard> {
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
 
-                    // 3. Footer Container (Contact chip container)
-                    if (shop.contactNumber.isNotEmpty)
-                      Padding(
-                        padding: EdgeInsets.only(
-                          left: horizontalPadding,
-                          right: horizontalPadding,
-                          bottom: 10,
-                          top: 2,
-                        ),
-                        child: Row(
-                          children: [
-                            // Contact Chip Container
+                          // Contact Chip Pill (Compact tertiary supporting element)
+                          if (shop.contactNumber.isNotEmpty) ...[
+                            const SizedBox(height: 7),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
+                                horizontal: 8.5,
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? AppColors.darkSurfaceVariant
-                                    : AppColors.surfaceVariant,
-                                borderRadius: BorderRadius.circular(8),
+                                    : const Color(0xFFF1F3F6),
+                                borderRadius: BorderRadius.circular(7),
                               ),
                               child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
                                     Icons.phone_outlined,
-                                    size: 12,
+                                    size: 11.5,
                                     color: isDark
                                         ? AppColors.darkTextSecondary
-                                        : AppColors.textSecondary,
+                                        : const Color(0xFF52575C),
                                   ),
-                                  const SizedBox(width: 5),
+                                  const SizedBox(width: 4.5),
                                   Text(
                                     shop.contactNumber,
                                     style: GoogleFonts.inter(
                                       color: isDark
                                           ? AppColors.darkTextSecondary
-                                          : AppColors.textSecondary,
-                                      fontSize: 11.5,
+                                          : const Color(0xFF52575C),
+                                      fontSize: 11.0,
                                       fontWeight: FontWeight.w600,
                                       letterSpacing: 0.2,
                                     ),
@@ -323,12 +313,13 @@ class _ShopCardState extends ConsumerState<ShopCard> {
                               ),
                             ),
                           ],
-                        ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
 
-                // 4. EatClub-style Prominent Circular Shop Logo (50-50 Boundary Overlap)
+                // 3. EatClub-style Prominent Circular Shop Logo (50-50 Boundary Overlap — 🔒 FROZEN)
                 Positioned(
                   top: circleTop,
                   right: circleRight,
@@ -416,7 +407,7 @@ class _ShopCardState extends ConsumerState<ShopCard> {
     );
   }
 
-  /// Builds the EatClub-style circular shop image overlapping the boundary.
+  /// Builds the EatClub-style circular shop image overlapping the boundary (🔒 FROZEN).
   Widget _buildCircularShopLogo({
     required double size,
     required bool isDark,

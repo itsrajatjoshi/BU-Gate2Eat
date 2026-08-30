@@ -111,15 +111,16 @@ void main() {
 
     test('1. Deterministic slideshow images resolution order for a shop', () {
       final images = resolveShopSlideshowImages(
+        shopBannerUrl: shopA.bannerUrl,
         categories: [catA2, catA1], // Out of order input
         menuItems: [itemA2, itemA1],
-        fallbackShopBannerUrl: shopA.bannerUrl,
       );
 
-      // Must be sorted by category sortOrder (catA1: thali -> catA2: biryani)
-      expect(images.length, equals(2));
-      expect(images[0], equals('https://cdn.yummbu.com/images/veg_thali.jpg'));
-      expect(images[1], equals('https://cdn.yummbu.com/images/dum_biryani.jpg'));
+      // Must have shop banner at index 0, followed by category sortOrder (catA1: thali -> catA2: biryani)
+      expect(images.length, equals(3));
+      expect(images[0], equals(shopA.bannerUrl));
+      expect(images[1], equals('https://cdn.yummbu.com/images/veg_thali.jpg'));
+      expect(images[2], equals('https://cdn.yummbu.com/images/dum_biryani.jpg'));
     });
 
     test('2. Strict shop boundary separation — No cross-shop image leakage', () {
