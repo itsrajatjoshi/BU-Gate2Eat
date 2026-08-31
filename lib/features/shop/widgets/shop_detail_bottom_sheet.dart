@@ -98,9 +98,13 @@ class _ShopDetailBottomSheet extends ConsumerWidget {
         borderRadius: BorderRadius.circular(3.5),
       ),
       child: Center(
-        child: CustomPaint(
-          size: const Size(7, 7),
-          painter: _TrianglePainter(color: AppColors.yummbuRed),
+        child: Container(
+          width: 6.5,
+          height: 6.5,
+          decoration: const BoxDecoration(
+            color: AppColors.yummbuRed,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );

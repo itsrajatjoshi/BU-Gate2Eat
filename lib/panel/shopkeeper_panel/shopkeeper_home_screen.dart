@@ -1013,10 +1013,14 @@ class _ShopkeeperMenuItemCard extends ConsumerWidget {
         border: Border.all(color: AppColors.nonVegRed, width: 1.3),
         borderRadius: BorderRadius.circular(2.5),
       ),
-      child: const Center(
-        child: CustomPaint(
-          size: Size(6, 6),
-          painter: _TrianglePainter(color: AppColors.nonVegRed),
+      child: Center(
+        child: Container(
+          width: 6,
+          height: 6,
+          decoration: const BoxDecoration(
+            color: AppColors.nonVegRed,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );

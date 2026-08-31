@@ -1096,16 +1096,16 @@ class _MenuItemCard extends ConsumerWidget {
 
   Widget _buildVegIcon() {
     return Container(
-      width: 15,
-      height: 15,
+      width: 14,
+      height: 14,
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.vegGreen, width: 1.3),
+        border: Border.all(color: AppColors.vegGreen, width: 1.2),
         borderRadius: BorderRadius.circular(2.5),
       ),
       child: Center(
         child: Container(
-          width: 6,
-          height: 6,
+          width: 5.5,
+          height: 5.5,
           decoration: const BoxDecoration(
             color: AppColors.vegGreen,
             shape: BoxShape.circle,
@@ -1117,16 +1117,20 @@ class _MenuItemCard extends ConsumerWidget {
 
   Widget _buildNonVegIcon() {
     return Container(
-      width: 15,
-      height: 15,
+      width: 14,
+      height: 14,
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.nonVegRed, width: 1.3),
+        border: Border.all(color: AppColors.nonVegRed, width: 1.2),
         borderRadius: BorderRadius.circular(2.5),
       ),
-      child: const Center(
-        child: CustomPaint(
-          size: Size(6, 6),
-          painter: _TrianglePainter(color: AppColors.nonVegRed),
+      child: Center(
+        child: Container(
+          width: 5.5,
+          height: 5.5,
+          decoration: const BoxDecoration(
+            color: AppColors.nonVegRed,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );
@@ -1181,16 +1185,17 @@ class _MenuItemCard extends ConsumerWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: primaryColor,
-            width: 1.3,
+            width: 1.2,
           ),
         ),
-        child: const Center(
+        child: Center(
           child: Text(
             'Add',
-            style: TextStyle(
+            style: GoogleFonts.outfit(
               color: primaryColor,
               fontWeight: FontWeight.w700,
               fontSize: 13,
+              letterSpacing: 0.15,
             ),
           ),
         ),
@@ -1258,16 +1263,23 @@ class _MenuItemCard extends ConsumerWidget {
         child: Container(
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
+              color: Theme.of(context).dividerColor.withValues(alpha: isDark ? 0.12 : 0.06),
               width: 0.8,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2.5),
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.035),
+                blurRadius: 10,
+                spreadRadius: 0,
+                offset: const Offset(0, 3),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.015),
+                blurRadius: 3,
+                spreadRadius: 0,
+                offset: const Offset(0, 1),
               ),
             ],
           ),
@@ -1283,7 +1295,7 @@ class _MenuItemCard extends ConsumerWidget {
                     Positioned.fill(
                       child: ClipRRect(
                         borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(18),
+                          top: Radius.circular(16),
                         ),
                         child: displayImageUrl.isNotEmpty
                             ? CachedNetworkImage(
@@ -1345,10 +1357,10 @@ class _MenuItemCard extends ConsumerWidget {
               Expanded(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
-                    isSmallScreen ? 8 : 10,
+                    isSmallScreen ? 9 : 11,
                     8,
-                    isSmallScreen ? 8 : 10,
-                    8,
+                    isSmallScreen ? 9 : 11,
+                    9,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1359,10 +1371,10 @@ class _MenuItemCard extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.only(top: 2.5),
+                            padding: const EdgeInsets.only(top: 3.0),
                             child: item.isVeg ? _buildVegIcon() : _buildNonVegIcon(),
                           ),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: 5.5),
                           Expanded(
                             child: Text(
                               item.name,
@@ -2251,10 +2263,14 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
         border: Border.all(color: AppColors.nonVegRed, width: 1.5),
         borderRadius: BorderRadius.circular(3.5),
       ),
-      child: const Center(
-        child: CustomPaint(
-          size: Size(8, 8),
-          painter: _TrianglePainter(color: AppColors.nonVegRed),
+      child: Center(
+        child: Container(
+          width: 7,
+          height: 7,
+          decoration: const BoxDecoration(
+            color: AppColors.nonVegRed,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );
