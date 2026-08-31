@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
+import '../../features/orders/widgets/universal_order_card.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import 'widgets/admin_order_details_modal.dart';
@@ -151,9 +152,9 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final order = filteredOrders[index];
-                          return _AdminOrderCard(
+                          return UniversalOrderCard(
                             order: order,
-                            isDark: isDark,
+                            perspective: OrderCardPerspective.shopkeeper,
                             onTap: () => AdminOrderDetailsModal.show(context, order),
                           );
                         },
@@ -272,7 +273,6 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
         border: Border(
           bottom: BorderSide(
             color: isDark ? AppColors.darkDivider : AppColors.divider,
-            width: 1,
           ),
         ),
       ),
@@ -408,199 +408,3 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
   }
 }
 
-class _AdminOrderCard extends StatelessWidget {
-  const _AdminOrderCard({
-    required this.order,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  final AppOrder order;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? AppColors.darkDivider : AppColors.divider,
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Row: Order ID & Status Badge
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '#${order.orderId}',
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                    _buildCardBadge(order.status),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // Customer Name
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.person_outline_rounded,
-                      size: 15,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        order.customerName.isNotEmpty ? order.customerName : 'Guest Customer',
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-
-                // Item count & Total Price
-                Row(
-                  children: [
-                    Text(
-                      '${order.items.length} ${order.items.length == 1 ? 'item' : 'items'} • ₹${order.totalAmount.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Divider(height: 1, thickness: 0.6),
-                const SizedBox(height: 8),
-
-                // Date & View Details Link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _formatDate(order.createdAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Text(
-                          'View Details',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 3),
-                        const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 11,
-                          color: AppColors.primary,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCardBadge(String status) {
-    Color bg;
-    Color fg;
-    String label = status.toUpperCase().replaceAll('_', ' ');
-
-    switch (status.toLowerCase()) {
-      case 'placed':
-        bg = Colors.blue.withValues(alpha: 0.12);
-        fg = Colors.blue.shade700;
-        break;
-      case 'accepted':
-        bg = Colors.amber.withValues(alpha: 0.12);
-        fg = Colors.amber.shade900;
-        break;
-      case 'delivered':
-        bg = AppColors.success.withValues(alpha: 0.12);
-        fg = AppColors.success;
-        label = 'DELIVERED';
-        break;
-      case 'rejected':
-        bg = AppColors.error.withValues(alpha: 0.12);
-        fg = AppColors.error;
-        break;
-      case 'delivery_expired':
-        bg = Colors.deepPurple.withValues(alpha: 0.12);
-        fg = Colors.deepPurple;
-        label = 'EXPIRED';
-        break;
-      default:
-        bg = Colors.grey.withValues(alpha: 0.12);
-        fg = Colors.grey.shade700;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-          color: fg,
-        ),
-      ),
-    );
-  }
-
-  String _formatDate(DateTime dt) {
-    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-    final period = dt.hour >= 12 ? 'PM' : 'AM';
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final month = months[dt.month - 1];
-    return '${dt.day} $month • $hour:$minute $period';
-  }
-}

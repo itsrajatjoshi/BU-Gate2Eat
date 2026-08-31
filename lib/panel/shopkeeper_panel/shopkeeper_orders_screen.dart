@@ -11,6 +11,7 @@ import '../../../core/providers.dart';
 import '../../../core/router.dart';
 import '../../../core/utils/order_timer_helper.dart';
 import '../../../models/order_model.dart';
+import '../../features/orders/widgets/universal_order_card.dart';
 import 'widgets/shopkeeper_order_details_modal.dart';
 
 class ShopkeeperOrdersScreen extends ConsumerStatefulWidget {
@@ -60,6 +61,7 @@ class _ShopkeeperOrdersScreenState
 
     final activeOrdersAsync =
         ref.watch(shopActiveOrdersStreamProvider(effectiveShopId));
+    final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
 
     return Scaffold(
       appBar: AppBar(
@@ -118,6 +120,19 @@ class _ShopkeeperOrdersScreenState
           final activeOrders = allActiveOrders
               .where((o) => _matchesOrderSearch(o, _searchQuery))
               .toList();
+
+          // Auto-reconciliation check on live boundary
+          for (final order in activeOrders) {
+            if (order.isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+              });
+            } else if (order.isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+              });
+            }
+          }
 
           return ListView(
             physics: const BouncingScrollPhysics(),
@@ -206,7 +221,6 @@ class _ShopkeeperOrdersScreenState
                         color: AppColors.primary.withValues(
                           alpha: isDark ? 0.50 : 0.30,
                         ),
-                        width: 1,
                       ),
                     ),
                     child: Text(
@@ -246,9 +260,14 @@ class _ShopkeeperOrdersScreenState
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final order = activeOrders[index];
-                    return _CompactShopkeeperOrderCard(
+                    return UniversalOrderCard(
                       order: order,
-                      isDark: isDark,
+                      perspective: OrderCardPerspective.shopkeeper,
+                      customNow: now,
+                      onTap: () => ShopkeeperOrderDetailsModal.show(
+                        context,
+                        order: order,
+                      ),
                     );
                   },
                 ),
@@ -307,242 +326,6 @@ class _ShopkeeperOrdersScreenState
         ),
       ),
     );
-  }
-}
-
-class _CompactShopkeeperOrderCard extends ConsumerWidget {
-  const _CompactShopkeeperOrderCard({
-    required this.order,
-    required this.isDark,
-  });
-
-  final AppOrder order;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
-
-    final isAccepted = order.status == 'accepted';
-    final isPlaced = order.status == 'placed';
-
-    // Auto-reconciliation trigger on live zero boundary
-    if (isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
-      });
-    } else if (isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
-      });
-    }
-
-    final displayName = order.customerName.trim().isNotEmpty
-        ? order.customerName.trim()
-        : 'Customer';
-
-    final Color statusColor =
-        isAccepted ? AppColors.success : AppColors.warning;
-
-    String countdownBadgeText = '';
-    if (isPlaced) {
-      final rem = OrderTimerHelper.getRemainingAcceptDuration(order, now);
-      countdownBadgeText = OrderTimerHelper.formatCountdown(rem);
-    } else if (isAccepted) {
-      final rem = OrderTimerHelper.getRemainingDeliveryDuration(order, now);
-      countdownBadgeText = OrderTimerHelper.formatCountdown(rem);
-    }
-
-    final String statusText = isAccepted ? 'ACCEPTED' : 'PLACED';
-    final IconData statusIcon = isAccepted
-        ? Icons.delivery_dining_rounded
-        : Icons.schedule_rounded;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppColors.darkDivider : AppColors.divider,
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => ShopkeeperOrderDetailsModal.show(context, order: order),
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Row: Customer Name & Status Badge (PLACED or ACCEPTED)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(
-                                alpha: isDark ? 0.20 : 0.10,
-                              ),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.person_outline_rounded,
-                              size: 16,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              displayName,
-                              style: TextStyle(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.w800,
-                                color: isDark
-                                    ? AppColors.darkTextPrimary
-                                    : AppColors.textPrimary,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(
-                          alpha: isDark ? 0.20 : 0.12,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: statusColor.withValues(
-                            alpha: isDark ? 0.45 : 0.35,
-                          ),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            statusIcon,
-                            size: 14,
-                            color: statusColor,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            statusText,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              color: statusColor,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          if (countdownBadgeText.isNotEmpty) ...[
-                            const SizedBox(width: 3),
-                            Text(
-                              '($countdownBadgeText)',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: statusColor,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // Middle Row: Order ID
-                Text(
-                  'Order #${order.orderId}',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'monospace',
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Divider(height: 1, thickness: 0.8),
-                const SizedBox(height: 10),
-
-                // Bottom Row: Item Count, Total Amount & Time
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${order.totalItemCount} item${order.totalItemCount > 1 ? 's' : ''} • ${order.formattedTotal}',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                        color: isDark
-                            ? AppColors.darkTextPrimary
-                            : AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      _formatTimeAgo(order.createdAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? AppColors.darkTextSecondary
-                            : AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatTimeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 45) {
-      return 'Just now';
-    } else if (diff.inMinutes < 60) {
-      final mins = diff.inMinutes;
-      return '$mins min${mins > 1 ? 's' : ''} ago';
-    } else if (diff.inHours < 24) {
-      final hrs = diff.inHours;
-      return '$hrs hour${hrs > 1 ? 's' : ''} ago';
-    } else {
-      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-      final minute = dt.minute.toString().padLeft(2, '0');
-      final period = dt.hour >= 12 ? 'PM' : 'AM';
-      return '$hour:$minute $period';
-    }
   }
 }
 

@@ -166,13 +166,13 @@ void main() {
       expect(find.text('Completed Orders: 2'), findsOneWidget);
 
       // Verify Raja Hotel orders are listed
-      expect(find.text('#YB-RAJAT-002'), findsOneWidget);
-      expect(find.text('#YB-RAJAT-001'), findsOneWidget);
+      expect(find.text('Order #YB-RAJAT-002'), findsOneWidget);
+      expect(find.text('Order #YB-RAJAT-001'), findsOneWidget);
       expect(find.text('Priya Verma'), findsOneWidget);
       expect(find.text('Aarav Sharma'), findsOneWidget);
 
       // Verify Nayan orders NEVER appear
-      expect(find.text('#YB-NAYAN-001'), findsNothing);
+      expect(find.text('Order #YB-NAYAN-001'), findsNothing);
       expect(find.text('Karan Patel'), findsNothing);
     });
 
@@ -204,12 +204,12 @@ void main() {
       expect(find.text('Completed Orders: 1'), findsOneWidget);
 
       // Verify Nayan orders are present
-      expect(find.text('#YB-NAYAN-001'), findsOneWidget);
+      expect(find.text('Order #YB-NAYAN-001'), findsOneWidget);
       expect(find.text('Karan Patel'), findsOneWidget);
 
       // Verify Raja orders NEVER appear
-      expect(find.text('#YB-RAJAT-001'), findsNothing);
-      expect(find.text('#YB-RAJAT-002'), findsNothing);
+      expect(find.text('Order #YB-RAJAT-001'), findsNothing);
+      expect(find.text('Order #YB-RAJAT-002'), findsNothing);
     });
 
     testWidgets('2b. Active placed and accepted orders NEVER appear in Admin Shop Orders view', (tester) async {
@@ -263,8 +263,8 @@ void main() {
 
       // Screen shows empty state since active orders are filtered out for Admin
       expect(find.text('No app orders yet'), findsOneWidget);
-      expect(find.text('#YB-ACTIVE-PLACED'), findsNothing);
-      expect(find.text('#YB-ACTIVE-ACCEPTED'), findsNothing);
+      expect(find.text('Order #YB-ACTIVE-PLACED'), findsNothing);
+      expect(find.text('Order #YB-ACTIVE-ACCEPTED'), findsNothing);
     });
 
     testWidgets('3. Empty shop renders clean empty state without dummy data', (tester) async {
@@ -321,15 +321,15 @@ void main() {
       await tester.tap(find.text('Delivered (1)'));
       await tester.pumpAndSettle();
 
-      expect(find.text('#YB-RAJAT-001'), findsOneWidget);
-      expect(find.text('#YB-RAJAT-002'), findsNothing);
+      expect(find.text('Order #YB-RAJAT-001'), findsOneWidget);
+      expect(find.text('Order #YB-RAJAT-002'), findsNothing);
 
       // Tap "Rejected" filter
       await tester.tap(find.text('Rejected (1)'));
       await tester.pumpAndSettle();
 
-      expect(find.text('#YB-RAJAT-002'), findsOneWidget);
-      expect(find.text('#YB-RAJAT-001'), findsNothing);
+      expect(find.text('Order #YB-RAJAT-002'), findsOneWidget);
+      expect(find.text('Order #YB-RAJAT-001'), findsNothing);
     });
 
     testWidgets('5. Tapping order card opens AdminOrderDetailsModal in READ-ONLY mode with delivery person details', (tester) async {
@@ -356,7 +356,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the order card
-      await tester.tap(find.text('#YB-RAJAT-001'));
+      await tester.tap(find.text('Order #YB-RAJAT-001'));
       await tester.pumpAndSettle();
 
       // Modal is opened
@@ -409,7 +409,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the order card
-      await tester.tap(find.text('#YB-RAJAT-002'));
+      await tester.tap(find.text('Order #YB-RAJAT-002'));
       await tester.pumpAndSettle();
 
       // Modal is opened

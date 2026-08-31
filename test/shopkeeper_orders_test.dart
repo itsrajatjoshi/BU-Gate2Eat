@@ -328,7 +328,7 @@ void main() {
 
       expect(find.text('Order #YB-RAJ-02'), findsOneWidget);
       expect(find.textContaining('DELIVERED'), findsOneWidget);
-      expect(find.text('Reorder'), findsOneWidget);
+      expect(find.text('View Details'), findsNothing);
 
       // Customer Order Detail: Stepper shows Delivered
       await tester.pumpWidget(

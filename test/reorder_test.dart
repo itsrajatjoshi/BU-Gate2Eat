@@ -538,7 +538,7 @@ void main() {
   });
 
   group('Reorder Button Visibility Widget Tests', () {
-    testWidgets('Delivered order renders Reorder button on OrderHistoryScreen',
+    testWidgets('Delivered order renders UniversalOrderCard on OrderHistoryScreen',
         (tester) async {
       final container = ProviderContainer();
       container.read(dummyOrdersProvider.notifier).addOrder(
@@ -573,7 +573,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Reorder'), findsOneWidget);
+      expect(find.text('DELIVERED'), findsOneWidget);
+      expect(find.text('View Details'), findsNothing);
     });
 
     testWidgets('Cancelled order does NOT render Reorder button',

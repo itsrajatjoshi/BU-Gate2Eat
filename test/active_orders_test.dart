@@ -303,18 +303,18 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check status badges
-      expect(find.text('DELIVERED ✓'), findsOneWidget);
+      expect(find.text('DELIVERED'), findsOneWidget);
       expect(find.text('REJECTED'), findsOneWidget);
       expect(find.text('CANCELLED'), findsOneWidget);
 
       // Check rejection reason
       expect(find.text('Reason: Kitchen closed for dinner'), findsOneWidget);
 
-      // Check order totals and View Details
+      // Check order totals and View Details absence
       expect(find.text('2 items • ₹40'), findsOneWidget);
       expect(find.text('1 item • ₹150'), findsOneWidget);
       expect(find.text('1 item • ₹80'), findsOneWidget);
-      expect(find.text('View Details'), findsNWidgets(3));
+      expect(find.text('View Details'), findsNothing);
     });
   });
 
@@ -402,10 +402,10 @@ void main() {
       expect(find.text('PLACED'), findsOneWidget);
       expect(find.text('ACCEPTED'), findsOneWidget);
 
-      // Check order totals and View Details
+      // Check order totals and View Details absence
       expect(find.text('2 items • ₹120'), findsOneWidget);
       expect(find.text('1 item • ₹90'), findsOneWidget);
-      expect(find.text('View Details'), findsNWidgets(2));
+      expect(find.text('View Details'), findsNothing);
     });
   });
 

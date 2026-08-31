@@ -9,7 +9,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
 import '../../core/utils/order_timer_helper.dart';
-import '../../models/order_model.dart';
+import 'widgets/universal_order_card.dart';
 
 class ActiveOrdersScreen extends ConsumerWidget {
   const ActiveOrdersScreen({super.key});
@@ -18,6 +18,7 @@ class ActiveOrdersScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final activeOrdersAsync = ref.watch(customerActiveOrdersStreamProvider);
+    final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
 
     return Scaffold(
       appBar: AppBar(
@@ -41,6 +42,19 @@ class ActiveOrdersScreen extends ConsumerWidget {
             return _EmptyActiveOrdersView(isDark: isDark);
           }
 
+          // Auto-reconciliation check on live boundary
+          for (final order in filtered) {
+            if (order.isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+              });
+            } else if (order.isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
+              });
+            }
+          }
+
           return ListView.separated(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -48,7 +62,13 @@ class ActiveOrdersScreen extends ConsumerWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 14),
             itemBuilder: (context, index) {
               final order = filtered[index];
-              return _ActiveOrderCard(order: order, isDark: isDark);
+              return UniversalOrderCard(
+                order: order,
+                customNow: now,
+                onTap: () {
+                  context.push('/order/${order.orderId}', extra: order);
+                },
+              );
             },
           );
         },
@@ -107,313 +127,6 @@ class ActiveOrdersScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-class _ActiveOrderCard extends ConsumerWidget {
-  const _ActiveOrderCard({
-    required this.order,
-    required this.isDark,
-  });
-
-  final AppOrder order;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
-
-    final isAccepted = order.status == 'accepted';
-    final isPlaced = order.status == 'placed';
-
-    // Auto-reconciliation trigger on live zero boundary
-    if (isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
-      });
-    } else if (isAccepted && OrderTimerHelper.isDeliveryExpired(order, now)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
-      });
-    }
-
-    // Status & Countdown styling
-    final statusColor = isAccepted ? AppColors.success : const Color(0xFFE58500);
-    final statusBgColor = statusColor.withValues(alpha: isDark ? 0.20 : 0.12);
-    final statusBorderColor = statusColor.withValues(alpha: isDark ? 0.45 : 0.30);
-    final statusText = isAccepted ? 'ACCEPTED' : 'PLACED';
-
-    String countdownBadgeText = '';
-    if (isPlaced) {
-      final rem = OrderTimerHelper.getRemainingAcceptDuration(order, now);
-      countdownBadgeText = OrderTimerHelper.formatCountdown(rem);
-    } else if (isAccepted) {
-      final rem = OrderTimerHelper.getRemainingDeliveryDuration(order, now);
-      countdownBadgeText = OrderTimerHelper.formatCountdown(rem);
-    }
-
-    final statusSubtext = isAccepted
-        ? 'Accepted • Delivery due in $countdownBadgeText'
-        : 'Placed • Accept within $countdownBadgeText';
-
-    final itemsSummary = order.items
-        .map((i) => i.hasOptions
-            ? '${i.name} (${i.optionsDescription}) (x${i.quantity})'
-            : '${i.name} (x${i.quantity})')
-        .join(', ');
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppColors.darkDivider : AppColors.divider,
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            context.push('/order/${order.orderId}', extra: order);
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Header Row: Shop Name & Status Badge with Countdown
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(7),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(
-                                alpha: isDark ? 0.20 : 0.10,
-                              ),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.storefront_rounded,
-                              size: 18,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              order.shopName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusBgColor,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: statusBorderColor,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isAccepted
-                                ? Icons.delivery_dining_rounded
-                                : Icons.schedule_rounded,
-                            size: 13,
-                            color: statusColor,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            statusText,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              color: statusColor,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          if (countdownBadgeText.isNotEmpty) ...[
-                            const SizedBox(width: 3),
-                            Text(
-                              '($countdownBadgeText)',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: statusColor,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Divider(height: 1, thickness: 0.8),
-                const SizedBox(height: 12),
-
-                // 2. Order ID & Time
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Order #${order.orderId}',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'monospace',
-                        color: isDark
-                            ? AppColors.darkTextSecondary
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      _formatOrderTime(order.createdAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? AppColors.darkTextSecondary
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // 3. Items Preview
-                if (itemsSummary.isNotEmpty) ...[
-                  Text(
-                    itemsSummary,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      color: isDark
-                          ? AppColors.darkTextPrimary
-                          : AppColors.textPrimary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
-                // 4. Status Subtext & Total / View Details
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF222624)
-                        : const Color(0xFFF6F8F7),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline_rounded,
-                            size: 14,
-                            color: isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            statusSubtext,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w500,
-                              color: isDark
-                                  ? AppColors.darkTextSecondary
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        '${order.totalItemCount} item${order.totalItemCount > 1 ? 's' : ''} • ${order.formattedTotal}',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // 5. Track / View Details Action Row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'View Details',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 12,
-                          color: AppColors.primary,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatOrderTime(DateTime dt) {
-    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $period';
   }
 }
 

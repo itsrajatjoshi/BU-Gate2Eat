@@ -10,10 +10,11 @@ import 'package:intl/intl.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
-import '../../models/order_model.dart';
+import '../../features/orders/widgets/universal_order_card.dart';
 import '../../models/shop_model.dart';
 import '../../models/shop_stats_model.dart';
 import '../../services/report_service.dart';
+import 'widgets/admin_order_details_modal.dart';
 
 class AdminMonthlyReportsScreen extends ConsumerStatefulWidget {
   const AdminMonthlyReportsScreen({
@@ -138,7 +139,7 @@ class _AdminMonthlyReportsScreenState
               statementStart: statementStart,
               statementEnd: _exportTimestamp,
               fallbackCreatedAt: selectedShop.createdAt,
-            )),
+            ),),
           );
 
           return Column(
@@ -444,7 +445,11 @@ class _AdminMonthlyReportsScreenState
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final order = data.orders[index];
-                return _buildOrderPreviewCard(order, isDark);
+                return UniversalOrderCard(
+                  order: order,
+                  perspective: OrderCardPerspective.shopkeeper,
+                  onTap: () => AdminOrderDetailsModal.show(context, order),
+                );
               },
             ),
         ],
@@ -598,80 +603,6 @@ class _AdminMonthlyReportsScreenState
     );
   }
 
-  Widget _buildOrderPreviewCard(AppOrder order, bool isDark) {
-    final statusColor = switch (order.status.toLowerCase()) {
-      'delivered' => AppColors.success,
-      'rejected' => AppColors.error,
-      'cancelled' => AppColors.error,
-      'delivery_expired' => Colors.orange,
-      _ => AppColors.primary,
-    };
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDark ? AppColors.darkDivider : AppColors.divider,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '#${order.orderId.length > 8 ? order.orderId.substring(order.orderId.length - 8).toUpperCase() : order.orderId.toUpperCase()}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  order.status.toString().toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: statusColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${order.customerName} • ${order.customerPhone}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                ),
-              ),
-              Text(
-                '₹${order.totalAmount.toStringAsFixed(0)}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            DateFormat('dd MMM yyyy, hh:mm a').format(order.createdAt),
-            style: TextStyle(
-              fontSize: 10.5,
-              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildEmptyOrdersState(bool isDark) {
     return Container(

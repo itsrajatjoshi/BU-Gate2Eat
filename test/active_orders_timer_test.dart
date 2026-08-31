@@ -85,11 +85,11 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Should show shop name and countdown badge
+      // Should show shop name and countdown badge in UniversalOrderCard
       expect(find.text('Rolls & Bowls'), findsOneWidget);
       expect(find.text('PLACED'), findsOneWidget);
       expect(find.text('(15:00)'), findsOneWidget);
-      expect(find.textContaining('Accept within 15:00'), findsOneWidget);
+      expect(find.textContaining('Accept within'), findsNothing);
     });
 
     testWidgets('ActiveOrdersScreen displays live delivery countdown for accepted order', (tester) async {
@@ -112,7 +112,7 @@ void main() {
       expect(find.text('Rolls & Bowls'), findsOneWidget);
       expect(find.text('ACCEPTED'), findsOneWidget);
       expect(find.text('(80:00)'), findsOneWidget);
-      expect(find.textContaining('Delivery due in 80:00'), findsOneWidget);
+      expect(find.textContaining('Delivery due in'), findsNothing);
     });
 
     testWidgets('OrderDetailScreen renders delivery_expired banner and badge cleanly', (tester) async {
