@@ -1351,6 +1351,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             const SizedBox(height: 6),
             TextField(
               controller: _detailsController,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              minLines: 2,
+              maxLines: 4,
               decoration: const InputDecoration(
                 hintText: 'e.g. 8 Pieces / Served fresh with spicy schezwan',
                 prefixIcon: Icon(Icons.info_outline_rounded),

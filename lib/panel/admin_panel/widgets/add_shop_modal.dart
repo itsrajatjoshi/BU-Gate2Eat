@@ -524,7 +524,10 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
                     // ─── 3. Description ─────────────────────────────────
                     TextField(
                       controller: _descController,
-                      maxLines: 2,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
+                      minLines: 2,
+                      maxLines: 4,
                       decoration: const InputDecoration(
                         labelText: 'Description / Food Highlights',
                         hintText: 'e.g. North Indian Thalis, Parathas & Lassi',

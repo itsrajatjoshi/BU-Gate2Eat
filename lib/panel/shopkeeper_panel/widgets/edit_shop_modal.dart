@@ -635,6 +635,10 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             const SizedBox(height: 6),
             TextField(
               controller: _descController,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              minLines: 2,
+              maxLines: 4,
               decoration: const InputDecoration(
                 hintText: 'e.g. Chinese, Fast Food, Snacks & Special Thalis',
                 prefixIcon: Icon(Icons.description_outlined),
