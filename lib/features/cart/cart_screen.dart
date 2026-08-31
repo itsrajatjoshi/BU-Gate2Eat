@@ -507,7 +507,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           if (cartItems.isNotEmpty)
             TextButton(
               onPressed: () => cartNotifier.clearCart(),
-              child: Text(
+              child: const Text(
                 'Clear',
                 style: TextStyle(
                   color: AppColors.yummbuRed,
@@ -1278,7 +1278,7 @@ class _CartSuggestionsSection extends StatelessWidget {
             const Icon(
               Icons.stars_rounded,
               size: 20,
-              color: AppColors.primary,
+              color: Color(0xFF39DF02),
             ),
             const SizedBox(width: 6),
             Text(

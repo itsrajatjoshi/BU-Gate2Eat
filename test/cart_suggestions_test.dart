@@ -286,5 +286,36 @@ void main() {
       expect(find.text('Rajat Burger'), findsOneWidget);
       expect(find.text('Rajat Fries'), findsOneWidget);
     });
+
+    testWidgets('Checkpoint 3.13 — Cart Suggestion star icon uses exact color #39DF02', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            shopMenuItemsProvider(rajatShopId).overrideWith((ref) async => [rajatMomos, rajatBurger]),
+          ],
+          child: Consumer(
+            builder: (context, ref, child) {
+              return const MaterialApp(
+                home: CartScreen(),
+              );
+            },
+          ),
+        ),
+      );
+
+      final element = tester.element(find.byType(MaterialApp));
+      final container = ProviderScope.containerOf(element);
+      container.read(cartProvider.notifier).addItem(rajatMomos, rajatShopId, rajatShopName);
+
+      await tester.pumpAndSettle();
+
+      final starFinder = find.byIcon(Icons.stars_rounded);
+      expect(starFinder, findsOneWidget);
+
+      final Icon starIcon = tester.widget(starFinder);
+      expect(starIcon.color, equals(const Color(0xFF39DF02)));
+      expect(starIcon.size, equals(20));
+      expect(find.text('Complete your order with'), findsOneWidget);
+    });
   });
 }

@@ -15,9 +15,9 @@ import '../../../core/router.dart';
 import '../../../models/category_model.dart';
 import '../../../models/menu_item_model.dart';
 import '../../../models/shop_model.dart';
+import '../../features/shop/widgets/universal_menu_item_card.dart';
 import '../admin_panel/widgets/delete_shop_dialog.dart';
 import 'widgets/add_content_modal.dart';
-import 'widgets/edit_menu_item_modal.dart';
 import 'widgets/edit_shop_modal.dart';
 
 /// Filter state for veg/non-veg.
@@ -826,11 +826,14 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
               sliver: SliverGrid(
                 gridDelegate: gridDelegate,
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _ShopkeeperMenuItemCard(
+                  (context, index) => UniversalMenuItemCard(
                     key: ValueKey('${shop.id}_${filtered[index].id}'),
                     item: filtered[index],
                     shop: shop,
                     categories: rawCategories,
+                    perspective: widget.isAdmin
+                        ? ItemCardPerspective.admin
+                        : ItemCardPerspective.shopkeeper,
                   ),
                   childCount: filtered.length,
                 ),
@@ -923,11 +926,14 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
               sliver: SliverGrid(
                 gridDelegate: gridDelegate,
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _ShopkeeperMenuItemCard(
+                  (context, index) => UniversalMenuItemCard(
                     key: ValueKey('${shop.id}_${categoryItems[index].id}'),
                     item: categoryItems[index],
                     shop: shop,
                     categories: rawCategories,
+                    perspective: widget.isAdmin
+                        ? ItemCardPerspective.admin
+                        : ItemCardPerspective.shopkeeper,
                   ),
                   childCount: categoryItems.length,
                 ),
@@ -943,11 +949,14 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
               sliver: SliverGrid(
                 gridDelegate: gridDelegate,
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _ShopkeeperMenuItemCard(
+                  (context, index) => UniversalMenuItemCard(
                     key: ValueKey('${shop.id}_${filtered[index].id}'),
                     item: filtered[index],
                     shop: shop,
                     categories: rawCategories,
+                    perspective: widget.isAdmin
+                        ? ItemCardPerspective.admin
+                        : ItemCardPerspective.shopkeeper,
                   ),
                   childCount: filtered.length,
                 ),
@@ -967,362 +976,6 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
         );
         return slivers;
       },
-    );
-  }
-}
-
-/// 2-column Grid Menu Card matching User App _MenuItemCard exactly + Edit Button
-class _ShopkeeperMenuItemCard extends ConsumerWidget {
-  const _ShopkeeperMenuItemCard({
-    required this.item,
-    required this.shop,
-    required this.categories,
-    super.key,
-  });
-
-  final MenuItem item;
-  final Shop shop;
-  final List<Category> categories;
-
-  Widget _buildVegIcon() {
-    return Container(
-      width: 15,
-      height: 15,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.vegGreen, width: 1.3),
-        borderRadius: BorderRadius.circular(2.5),
-      ),
-      child: Center(
-        child: Container(
-          width: 6,
-          height: 6,
-          decoration: const BoxDecoration(
-            color: AppColors.vegGreen,
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNonVegIcon() {
-    return Container(
-      width: 15,
-      height: 15,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.nonVegRed, width: 1.3),
-        borderRadius: BorderRadius.circular(2.5),
-      ),
-      child: Center(
-        child: Container(
-          width: 6,
-          height: 6,
-          decoration: const BoxDecoration(
-            color: AppColors.nonVegRed,
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildImagePlaceholder(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [
-                  Colors.grey.shade900,
-                  Colors.grey.shade800.withValues(alpha: 0.6),
-                ]
-              : [
-                  AppColors.surfaceVariant,
-                  AppColors.surfaceVariant.withValues(alpha: 0.5),
-                ],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.restaurant_menu_rounded,
-          size: 24,
-          color: AppColors.textHint.withValues(alpha: 0.35),
-        ),
-      ),
-    );
-  }
-
-  String _getEffectiveImageUrl(MenuItem item) {
-    if (item.imageUrl.isNotEmpty) return item.imageUrl;
-
-    final nameLower = item.name.toLowerCase();
-    if (nameLower.contains('momo') || nameLower.contains('dumpling')) {
-      if (nameLower.contains('fried')) {
-        return 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=500&auto=format&fit=crop&q=80';
-      }
-      return 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&auto=format&fit=crop&q=80';
-    } else if (nameLower.contains('noodle') ||
-        nameLower.contains('chow') ||
-        nameLower.contains('maggi')) {
-      return 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=500&auto=format&fit=crop&q=80';
-    } else if (nameLower.contains('burger')) {
-      return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop&q=80';
-    } else if (nameLower.contains('paneer') || nameLower.contains('curry')) {
-      return 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=500&auto=format&fit=crop&q=80';
-    } else if (nameLower.contains('roll') ||
-        nameLower.contains('wrap') ||
-        nameLower.contains('frankie')) {
-      return 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=500&auto=format&fit=crop&q=80';
-    } else if (nameLower.contains('pizza')) {
-      return 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&auto=format&fit=crop&q=80';
-    }
-
-    final fallbacks = [
-      'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=500&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=500&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=500&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=500&auto=format&fit=crop&q=80',
-    ];
-    return fallbacks[item.id.hashCode.abs() % fallbacks.length];
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final displayImageUrl = _getEffectiveImageUrl(item);
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
-
-    void showEditSheet() {
-      EditMenuItemModal.show(
-        context,
-        item: item,
-        categories: categories,
-        shopId: shop.id,
-      );
-    }
-
-    return Opacity(
-      opacity: item.isAvailable ? 1.0 : 0.65,
-      child: GestureDetector(
-        onTap: showEditSheet,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: item.isAvailable
-                  ? Theme.of(context).dividerColor.withValues(alpha: 0.08)
-                  : AppColors.error.withValues(alpha: 0.3),
-              width: 0.8,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2.5),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Food Image Container (aspectRatio 1.3 matching User App)
-              AspectRatio(
-                aspectRatio: 1.3,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned.fill(
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(18),
-                        ),
-                        child: displayImageUrl.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: displayImageUrl,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) =>
-                                    _buildImagePlaceholder(context),
-                                errorWidget: (_, __, ___) =>
-                                    _buildImagePlaceholder(context),
-                              )
-                            : _buildImagePlaceholder(context),
-                      ),
-                    ),
-
-                    // Out of Stock Badge
-                    if (!item.isAvailable)
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.error,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text(
-                            'OUT OF STOCK',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-
-              // 2. Card Content Body
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    isSmallScreen ? 8 : 10,
-                    7,
-                    isSmallScreen ? 8 : 10,
-                    7,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Item Title with Veg/Non-Veg icon (2 lines matching User App)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: item.isVeg
-                                    ? _buildVegIcon()
-                                    : _buildNonVegIcon(),
-                              ),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  item.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: isSmallScreen ? 13.0 : 13.8,
-                                        height: 1.2,
-                                      ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-
-                          // Description with clean "... more" (Matching User App)
-                          Builder(
-                            builder: (context) {
-                              final rawDetails = item.details.isNotEmpty
-                                  ? item.details
-                                  : '${item.name} prepared fresh with authentic spices';
-                              final cleanDetails = rawDetails
-                                  .replaceAll(RegExp(r'\.+$'), '')
-                                  .trim();
-                              return Text.rich(
-                                TextSpan(
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? AppColors.darkTextSecondary
-                                        : Colors.grey.shade600,
-                                    fontSize: isSmallScreen ? 10.8 : 11.5,
-                                    height: 1.28,
-                                  ),
-                                  children: [
-                                    TextSpan(text: '$cleanDetails '),
-                                    const TextSpan(
-                                      text: 'more',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-
-                      // Bottom Row: Price + Edit Button (Matching User App Add button size)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              item.formattedPrice,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: isSmallScreen ? 14.5 : 15.5,
-                                color: Theme.of(context)
-                                    .textTheme
-                                    .bodyLarge
-                                    ?.color,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-
-                          // Edit Button styled cleanly like User App Add button
-                          InkWell(
-                            onTap: showEditSheet,
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              width: isSmallScreen ? 58.0 : 64.0,
-                              height: isSmallScreen ? 28.0 : 30.0,
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).cardColor,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: AppColors.primary,
-                                  width: 1.3,
-                                ),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'Edit',
-                                  style: TextStyle(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1525,30 +1178,6 @@ class _FilterChip extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Painter for drawing the Non-Veg Red Triangle symbol
-class _TrianglePainter extends CustomPainter {
-  const _TrianglePainter({required this.color});
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final path = Path()
-      ..moveTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// Delegate for pinning Category Navigation Header
