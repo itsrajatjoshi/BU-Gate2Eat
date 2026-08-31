@@ -338,10 +338,11 @@ class ReportService {
 
     pdf.addPage(
       pw.MultiPage(
+        maxPages: 200,
         pageTheme: pw.PageTheme(
           theme: theme,
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(32),
+          margin: const pw.EdgeInsets.symmetric(horizontal: 22, vertical: 20),
         ),
         header: (pw.Context context) => _buildPdfHeader(
           data: data,
@@ -357,9 +358,9 @@ class ReportService {
           textMuted: textMuted,
         ),
         build: (pw.Context context) => [
-          pw.SizedBox(height: 12),
+          pw.SizedBox(height: 8),
 
-          // ── Executive Summary Box ──
+          // ── Executive Summary Box (Page 1 Top) ──
           _buildPdfSummaryCard(
             data: data,
             subtleBg: subtleBg,
@@ -373,35 +374,35 @@ class ReportService {
             fontSemiBold: fontSemiBold,
           ),
 
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 12),
 
           // ── Detailed Order Breakdown Header ──
           pw.Text(
-            'DETAILED ORDERS BREAKDOWN',
+            'DETAILED ORDERS BREAKDOWN (${data.orders.length} orders)',
             style: pw.TextStyle(
               font: fontBold,
-              fontSize: 12,
-              letterSpacing: 0.8,
+              fontSize: 10.5,
+              letterSpacing: 0.5,
               color: darkHeader,
             ),
           ),
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: 6),
 
-          // ── Orders Table ──
+          // ── Compact Scalable Orders Table (Repeat Header on Page Break) ──
           if (data.orders.isEmpty)
             pw.Container(
-              padding: const pw.EdgeInsets.all(24),
+              padding: const pw.EdgeInsets.all(20),
               alignment: pw.Alignment.center,
               decoration: pw.BoxDecoration(
                 color: subtleBg,
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
                 border: pw.Border.all(color: borderColor),
               ),
               child: pw.Text(
                 'No orders recorded for this shop in the statement period.',
                 style: pw.TextStyle(
                   color: textMuted,
-                  fontSize: 11,
+                  fontSize: 10,
                   fontStyle: pw.FontStyle.italic,
                 ),
               ),
@@ -409,21 +410,22 @@ class ReportService {
           else
             pw.Table(
               border: pw.TableBorder(
-                horizontalInside: pw.BorderSide(color: borderColor, width: 0.5),
-                bottom: pw.BorderSide(color: borderColor),
+                horizontalInside: pw.BorderSide(color: borderColor, width: 0.4),
+                bottom: pw.BorderSide(color: borderColor, width: 0.6),
               ),
               columnWidths: const {
                 0: pw.FlexColumnWidth(1.2), // Order ID
-                1: pw.FlexColumnWidth(1.3), // Date/Time
-                2: pw.FlexColumnWidth(1.6), // Customer
-                3: pw.FlexColumnWidth(2.8), // Items + Variants
-                4: pw.FlexColumnWidth(1.1), // Total
+                1: pw.FlexColumnWidth(1.4), // Date & Time
+                2: pw.FlexColumnWidth(1.5), // Customer
+                3: pw.FlexColumnWidth(2.8), // Items Summary
+                4: pw.FlexColumnWidth(), // Total (INR)
                 5: pw.FlexColumnWidth(1.1), // Status
               },
               children: [
-                // Table Header Row
+                // Table Header Row (Repeats across pages automatically)
                 pw.TableRow(
                   decoration: pw.BoxDecoration(color: subtleBg),
+                  repeat: true,
                   children: [
                     _buildTableCell('Order ID', isHeader: true, fontBold: fontBold),
                     _buildTableCell('Date & Time', isHeader: true, fontBold: fontBold),
@@ -433,98 +435,60 @@ class ReportService {
                     _buildTableCell('Status', isHeader: true, fontBold: fontBold, align: pw.TextAlign.center),
                   ],
                 ),
-                // Table Rows
+                // Table Rows (Ultra-compact, scalable to 1000+ orders)
                 ...data.orders.map((order) {
+                  final itemsSummary = _formatCompactItemsSummary(order);
+
                   return pw.TableRow(
                     children: [
                       // Order ID
                       pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 4),
                         child: pw.Text(
                           order.orderId.length > 8
                               ? '#${order.orderId.substring(order.orderId.length - 8).toUpperCase()}'
                               : '#${order.orderId.toUpperCase()}',
-                          style: pw.TextStyle(font: fontSemiBold, fontSize: 8.5),
+                          style: pw.TextStyle(font: fontSemiBold, fontSize: 8),
                         ),
                       ),
                       // Date & Time
                       pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Text(
-                              DateFormat('dd MMM yyyy').format(order.createdAt),
-                              style: const pw.TextStyle(fontSize: 8),
-                            ),
-                            pw.Text(
-                              DateFormat('hh:mm a').format(order.createdAt),
-                              style: pw.TextStyle(fontSize: 7.5, color: textMuted),
-                            ),
-                          ],
+                        padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 4),
+                        child: pw.Text(
+                          DateFormat('dd MMM, h:mm a').format(order.createdAt),
+                          style: const pw.TextStyle(fontSize: 7.5),
                         ),
                       ),
                       // Customer
                       pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Text(
-                              order.customerName.isNotEmpty ? order.customerName : 'Customer',
-                              style: pw.TextStyle(font: fontSemiBold, fontSize: 8.5),
-                            ),
-                            pw.Text(
-                              order.customerPhone.isNotEmpty ? order.customerPhone : '-',
-                              style: pw.TextStyle(fontSize: 7.5, color: textMuted),
-                            ),
-                          ],
+                        padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 4),
+                        child: pw.Text(
+                          order.customerName.isNotEmpty ? order.customerName : 'Customer',
+                          style: pw.TextStyle(font: fontSemiBold, fontSize: 8),
+                          maxLines: 1,
                         ),
                       ),
                       // Items & Options
                       pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: order.items.map((item) {
-                            final hasOpt = item.optionsDescription.isNotEmpty;
-                            return pw.Padding(
-                              padding: const pw.EdgeInsets.only(bottom: 2),
-                              child: pw.RichText(
-                                text: pw.TextSpan(
-                                  children: [
-                                    pw.TextSpan(
-                                      text: '${item.name} ',
-                                      style: pw.TextStyle(font: fontSemiBold, fontSize: 8),
-                                    ),
-                                    if (hasOpt)
-                                      pw.TextSpan(
-                                        text: '(${item.optionsDescription}) ',
-                                        style: pw.TextStyle(fontSize: 7.5, color: textMuted),
-                                      ),
-                                    pw.TextSpan(
-                                      text: 'x${item.quantity} [Rs.${item.price}]',
-                                      style: const pw.TextStyle(fontSize: 7.5),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
+                        padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 4),
+                        child: pw.Text(
+                          itemsSummary,
+                          style: const pw.TextStyle(fontSize: 7.5),
+                          maxLines: 2,
                         ),
                       ),
                       // Total
                       pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 4),
                         child: pw.Text(
                           'Rs.${order.totalAmount.toStringAsFixed(0)}',
                           textAlign: pw.TextAlign.right,
-                          style: pw.TextStyle(font: fontBold, fontSize: 9),
+                          style: pw.TextStyle(font: fontBold, fontSize: 8),
                         ),
                       ),
                       // Status Badge
                       pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 4),
                         child: _buildPdfStatusBadge(
                           order.status,
                           successColor: successColor,
@@ -540,11 +504,11 @@ class ReportService {
               ],
             ),
 
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 14),
 
-          // ── Final Statement Totals Box (Standardized Closed Order Value, No Cancelled) ──
+          // ── Final Statement Totals Box ──
           pw.Container(
-            padding: const pw.EdgeInsets.all(12),
+            padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
               color: subtleBg,
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
@@ -558,11 +522,12 @@ class ReportService {
                   children: [
                     pw.Text(
                       'STATEMENT TOTALS',
-                      style: pw.TextStyle(font: fontBold, fontSize: 10, color: darkHeader),
+                      style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: darkHeader),
                     ),
+                    pw.SizedBox(height: 2),
                     pw.Text(
                       'Total Closed: ${data.totalOrdersCount}  |  Delivered: ${data.deliveredOrdersCount}  |  Rejected: ${data.rejectedOrdersCount}  |  Expired: ${data.expiredOrdersCount}  |  WhatsApp: ${data.whatsappOrdersCount}',
-                      style: pw.TextStyle(fontSize: 8, color: textMuted),
+                      style: pw.TextStyle(fontSize: 7.5, color: textMuted),
                     ),
                   ],
                 ),
@@ -571,11 +536,12 @@ class ReportService {
                   children: [
                     pw.Text(
                       'Delivered Revenue: Rs.${data.deliveredSalesValue.toStringAsFixed(0)}',
-                      style: pw.TextStyle(font: fontBold, fontSize: 11, color: successColor),
+                      style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: successColor),
                     ),
+                    pw.SizedBox(height: 1.5),
                     pw.Text(
                       'Closed Order Value: Rs.${data.closedOrderValue.toStringAsFixed(0)}',
-                      style: pw.TextStyle(fontSize: 8.5, color: textMuted),
+                      style: pw.TextStyle(fontSize: 8, color: textMuted),
                     ),
                   ],
                 ),
@@ -874,6 +840,18 @@ class ReportService {
         ),
       ),
     );
+  }
+
+  /// Formats items and option choices into a single compact line for high-density 1000-order PDF tables.
+  static String _formatCompactItemsSummary(AppOrder order) {
+    if (order.items.isEmpty) return '-';
+    final parts = order.items.map((item) {
+      final opt = item.optionsDescription.trim();
+      final optStr = opt.isNotEmpty ? ' ($opt)' : '';
+      return '${item.name}$optStr x${item.quantity}';
+    }).join(', ');
+    final totalCount = order.totalItemCount;
+    return '$totalCount ${totalCount == 1 ? 'item' : 'items'}: $parts';
   }
 
   // ════════════════════════════════════════════════════════════════════════════
