@@ -430,18 +430,20 @@ class _ShopDetailBottomSheet extends ConsumerWidget {
                       const SizedBox(height: 10),
 
                       // Location / Area
-                      const Row(
+                      Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.location_on_outlined,
                             size: 16,
                             color: AppColors.textSecondary,
                           ),
-                          SizedBox(width: 7),
+                          const SizedBox(width: 7),
                           Expanded(
                             child: Text(
-                              'Near Bennett University, Dabra',
-                              style: TextStyle(
+                              shop.address.isNotEmpty
+                                  ? shop.address
+                                  : 'Address not specified',
+                              style: const TextStyle(
                                 color: AppColors.textSecondary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,

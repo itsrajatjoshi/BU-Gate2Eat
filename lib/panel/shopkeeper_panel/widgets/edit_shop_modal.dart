@@ -34,6 +34,7 @@ class EditShopModal extends ConsumerStatefulWidget {
 class _EditShopModalState extends ConsumerState<EditShopModal> {
   late TextEditingController _nameController;
   late TextEditingController _descController;
+  late TextEditingController _addressController;
   late TextEditingController _openTimeController;
   late TextEditingController _closeTimeController;
   late TextEditingController _pickupNoteController;
@@ -54,6 +55,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     super.initState();
     _nameController = TextEditingController(text: widget.shop.name);
     _descController = TextEditingController(text: widget.shop.description);
+    _addressController = TextEditingController(text: widget.shop.address);
     _openTimeController =
         TextEditingController(text: widget.shop.formattedOpenTime);
     _closeTimeController =
@@ -75,6 +77,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
   void dispose() {
     _nameController.dispose();
     _descController.dispose();
+    _addressController.dispose();
     _openTimeController.dispose();
     _closeTimeController.dispose();
     _pickupNoteController.dispose();
@@ -192,6 +195,20 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       return;
     }
 
+    final address = _addressController.text.trim();
+    if (address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Shop Address cannot be empty.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -228,6 +245,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       await firestoreService.updateShop(widget.shop.id, {
         'name': name,
         'description': _descController.text.trim(),
+        'address': address,
         'openTime': formattedOpen,
         'closeTime': formattedClose,
         'deliveryNote': _pickupNoteController.text.trim(),
@@ -647,7 +665,32 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             ),
             const SizedBox(height: 14),
 
-            // ─── 4. Timings: 12-Hour AM/PM Native Clock Pickers ──────────
+            // ─── 4. Shop Address (Compulsory) ────────────────────────────
+            Text(
+              'Shop Address *',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _addressController,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              minLines: 2,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Near Bennett University, Dabra',
+                prefixIcon: Icon(Icons.location_on_outlined),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 5. Timings: 12-Hour AM/PM Native Clock Pickers ──────────
             Text(
               'Shop Timings (12-Hour AM/PM) *',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(

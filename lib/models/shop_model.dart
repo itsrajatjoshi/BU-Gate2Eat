@@ -41,6 +41,7 @@ class Shop {
     required this.deliveryNote,
     required this.createdAt,
     required this.updatedAt,
+    this.address = '',
     this.orderMethod = ShopOrderMethod.whatsapp,
     this.minimumOrderAmount = 0,
   });
@@ -56,6 +57,7 @@ class Shop {
       id: doc.id,
       name: (data['name'] as String?) ?? '',
       description: (data['description'] as String?) ?? '',
+      address: (data['address'] as String?) ?? '',
       bannerUrl: (data['bannerUrl'] as String?) ?? (data['imageUrl'] as String?) ?? '',
       contactNumber: (data['contactNumber'] as String?) ?? (data['phoneNumber'] as String?) ?? '',
       orderNumber: (data['orderNumber'] as String?) ?? (data['whatsappNumber'] as String?) ?? '',
@@ -76,6 +78,7 @@ class Shop {
   final String id;
   final String name;
   final String description;
+  final String address;
   final String bannerUrl;
   final String contactNumber;
   final String orderNumber;
@@ -95,6 +98,7 @@ class Shop {
     String? id,
     String? name,
     String? description,
+    String? address,
     String? bannerUrl,
     String? contactNumber,
     String? orderNumber,
@@ -114,6 +118,7 @@ class Shop {
       id: id ?? this.id,
       name: name ?? this.name,
       description: description ?? this.description,
+      address: address ?? this.address,
       bannerUrl: bannerUrl ?? this.bannerUrl,
       contactNumber: contactNumber ?? this.contactNumber,
       orderNumber: orderNumber ?? this.orderNumber,
@@ -181,6 +186,7 @@ class Shop {
     return {
       'name': name,
       'description': description,
+      'address': address,
       'bannerUrl': bannerUrl,
       'contactNumber': contactNumber,
       'orderNumber': orderNumber,

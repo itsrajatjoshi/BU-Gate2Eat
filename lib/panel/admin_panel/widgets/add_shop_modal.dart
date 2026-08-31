@@ -31,6 +31,7 @@ class AddShopModal extends ConsumerStatefulWidget {
 class _AddShopModalState extends ConsumerState<AddShopModal> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
   final TextEditingController _openTimeController =
       TextEditingController(text: '8:00 AM');
   final TextEditingController _closeTimeController =
@@ -51,6 +52,7 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
   void dispose() {
     _nameController.dispose();
     _descController.dispose();
+    _addressController.dispose();
     _openTimeController.dispose();
     _closeTimeController.dispose();
     _pickupNoteController.dispose();
@@ -156,6 +158,20 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
       return;
     }
 
+    final address = _addressController.text.trim();
+    if (address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Shop Address cannot be empty.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -179,6 +195,7 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
         id: shopId,
         name: name,
         description: _descController.text.trim(),
+        address: address,
         bannerUrl: '',
         contactNumber: _contactController.text.trim(),
         orderNumber: _contactController.text.trim(),
@@ -538,7 +555,24 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
                     ),
                     const SizedBox(height: 12),
 
-                    // ─── 4. Operating Hours Row (12hr AM/PM) ───────────
+                    // ─── 4. Shop Address (Mandatory) ────────────────────
+                    TextField(
+                      controller: _addressController,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
+                      minLines: 2,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Shop Address *',
+                        hintText: 'e.g. Near Bennett University, Dabra',
+                        prefixIcon: Icon(Icons.location_on_outlined),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ─── 5. Operating Hours Row (12hr AM/PM) ───────────
                     Row(
                       children: [
                         Expanded(

@@ -71,6 +71,7 @@ class SeedDataService {
       await shopRef.set({
         'name': 'Rajat Shop',
         'description': 'Chinese, Fast Food, Snacks & Special Thalis',
+        'address': 'Near Gate 2, Outside Bennett University, Dabra',
         'bannerUrl': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500',
         'contactNumber': '8295643910',
         'orderNumber': '8295643910',
@@ -157,6 +158,7 @@ class SeedDataService {
       await shopRef.set({
         'name': 'Nayan Shop',
         'description': 'Momos, Chinese, Fast Food & Value Thalis',
+        'address': 'Near Gate 2, Outside Bennett University, Dabra',
         'bannerUrl': 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=500',
         'contactNumber': '8295643910',
         'orderNumber': '8295643910',
@@ -243,6 +245,7 @@ class SeedDataService {
       await shopRef.set({
         'name': 'Kivisha Shop',
         'description': 'Fresh Food, Snacks & Fast Food',
+        'address': 'Outside Gate 2, Bennett University, Dabra',
         'bannerUrl': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=500',
         'contactNumber': '8295643910',
         'orderNumber': '8295643910',
@@ -281,6 +284,7 @@ class SeedDataService {
       await shopRef.set({
         'name': 'UP 16 Junction Fast Food',
         'description': 'Rolls, Momos, Chinese Starters, Noodles, Fries, Biryani, Rice & Indian Breads',
+        'address': 'Vill. Dabra, Near Bennett University',
         'bannerUrl': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500',
         'contactNumber': '8295643910',
         'orderNumber': '8295643910',
@@ -454,6 +458,7 @@ class SeedDataService {
       await shopRef.set({
         'name': 'Rajat Hotel',
         'description': 'North Indian, Tandoor, Mughlai & Dining',
+        'address': 'Near Gate 2, Outside Bennett University, Dabra',
         'bannerUrl': 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500',
         'contactNumber': '8295643910',
         'orderNumber': '8295643910',
@@ -491,6 +496,7 @@ class SeedDataService {
       await shopRef.set({
         'name': 'UP16 Queens',
         'description': 'Special Fast Food, Desserts & Beverages',
+        'address': 'Outside Gate 2, Bennett University, Dabra',
         'bannerUrl': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500',
         'contactNumber': '8295643910',
         'orderNumber': '8295643910',
