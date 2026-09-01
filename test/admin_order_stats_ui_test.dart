@@ -23,7 +23,7 @@ void main() {
 
   final shop1 = Shop(
     id: 'rajat_shop',
-    name: 'Rajat Hotel',
+    name: 'Rajat Shop',
     description: 'Fresh & Fast',
     bannerUrl: '',
     contactNumber: '8295643910',
@@ -59,7 +59,7 @@ void main() {
 
   const stats1 = ShopStats(
     shopId: 'rajat_shop',
-    shopName: 'Rajat Hotel',
+    shopName: 'Rajat Shop',
     appOrders: 125,
     accepted: 90,
     delivered: 75,
@@ -102,7 +102,7 @@ void main() {
       expect(find.text('Order Statistics'), findsOneWidget);
 
       // Verify both shops render separately
-      expect(find.text('Rajat Hotel'), findsOneWidget);
+      expect(find.text('Rajat Shop'), findsOneWidget);
       expect(find.text('Nayan Cafe'), findsOneWidget);
 
       // Verify Shop 1 isolated metrics
@@ -133,7 +133,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Rajat Hotel'), findsOneWidget);
+      expect(find.text('Rajat Shop'), findsOneWidget);
       // Counters should safely be 0
       expect(find.text('0'), findsNWidgets(2)); // appOrders: 0, whatsappOrders: 0
     });
@@ -162,7 +162,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Header summary
-      expect(find.text('Rajat Hotel'), findsNWidgets(2)); // AppBar + Header
+      expect(find.text('Rajat Shop'), findsNWidgets(2)); // AppBar + Header
       expect(find.text('Shop ID: rajat_shop'), findsOneWidget);
       expect(find.text('198'), findsOneWidget); // Total orders: 125 + 73
 
@@ -216,7 +216,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify confirmation dialog
-      expect(find.text('Reset Rajat Hotel?'), findsOneWidget);
+      expect(find.text('Reset Rajat Shop?'), findsOneWidget);
       expect(find.text('Cancel'), findsOneWidget);
       expect(find.widgetWithText(ElevatedButton, 'Reset'), findsOneWidget);
     });

@@ -74,7 +74,7 @@ void main() {
 
   final shop1 = Shop(
     id: 'rajat_shop',
-    name: 'Rajat Hotel',
+    name: 'Rajat Shop',
     description: 'Fresh & Fast',
     bannerUrl: '',
     contactNumber: '8295643910',
@@ -110,7 +110,7 @@ void main() {
 
   const stats1 = ShopStats(
     shopId: 'rajat_shop',
-    shopName: 'Rajat Hotel',
+    shopName: 'Rajat Shop',
     appOrders: 125,
     accepted: 90,
     delivered: 75,
@@ -138,7 +138,7 @@ void main() {
     customerName: 'Aarav Sharma',
     customerPhone: '9876543210',
     shopId: 'rajat_shop',
-    shopName: 'Rajat Hotel',
+    shopName: 'Rajat Shop',
     status: 'delivered',
     totalAmount: 240,
     items: const [
@@ -173,7 +173,7 @@ void main() {
         customerName: 'Live User 1',
         customerPhone: '9876543219',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 100,
         items: const [OrderItem(menuItemId: 'm1', name: 'Roti', price: 100, quantity: 1)],
@@ -186,7 +186,7 @@ void main() {
         customerName: 'Live User 2',
         customerPhone: '9876543218',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'accepted',
         totalAmount: 200,
         items: const [OrderItem(menuItemId: 'm2', name: 'Paneer', price: 200, quantity: 1)],
@@ -290,7 +290,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify confirmation dialog
-      expect(find.text('Reset Rajat Hotel?'), findsOneWidget);
+      expect(find.text('Reset Rajat Shop?'), findsOneWidget);
       expect(
         find.text(
           "This will permanently delete this shop's current app order records and reset all order statistics. This action cannot be undone.",
@@ -303,7 +303,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Dialog dismissed, reset was NOT called
-      expect(find.text('Reset Rajat Hotel?'), findsNothing);
+      expect(find.text('Reset Rajat Shop?'), findsNothing);
       expect(fakeService.resetCallCount, equals(0));
     });
 
@@ -347,7 +347,7 @@ void main() {
       // Verify reset was called and success snackbar displayed
       expect(fakeService.resetCallCount, equals(1));
       expect(
-        find.text('Rajat Hotel data reset successfully.'),
+        find.text('Rajat Shop data reset successfully.'),
         findsOneWidget,
       );
     });
@@ -390,7 +390,7 @@ void main() {
 
       // Error snackbar shown
       expect(
-        find.textContaining('Failed to reset Rajat Hotel data'),
+        find.textContaining('Failed to reset Rajat Shop data'),
         findsOneWidget,
       );
     });

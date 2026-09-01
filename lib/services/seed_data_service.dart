@@ -45,11 +45,11 @@ class SeedDataService {
       debugPrint('Error checking/seeding UP16 Shop: $e');
     }
 
-    // 5. Rajat Hotel
+    // 5. Raja Hotel
     try {
-      await _seedRajatHotel(firestore);
+      await _seedRajaHotel(firestore);
     } catch (e) {
-      debugPrint('Error checking/seeding Rajat Hotel: $e');
+      debugPrint('Error checking/seeding Raja Hotel: $e');
     }
 
     // 6. UP16 Queens
@@ -447,16 +447,16 @@ class SeedDataService {
     }
   }
 
-  // ─── Shop 5: Rajat Hotel ──────────────────────────────────────────────
-  static Future<void> _seedRajatHotel(FirebaseFirestore firestore) async {
-    const shopId = 'rajat_hotel';
+  // ─── Shop 5: Raja Hotel ───────────────────────────────────────────────
+  static Future<void> _seedRajaHotel(FirebaseFirestore firestore) async {
+    const shopId = 'raja_hotel';
     final shopRef = firestore.collection('shops').doc(shopId);
     final doc = await shopRef.get();
 
     if (!doc.exists) {
       debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
       await shopRef.set({
-        'name': 'Rajat Hotel',
+        'name': 'Raja Hotel',
         'description': 'North Indian, Tandoor, Mughlai & Dining',
         'address': 'Near Gate 2, Outside Bennett University, Dabra',
         'bannerUrl': 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500',
@@ -467,7 +467,7 @@ class SeedDataService {
         'isClosedOverride': false,
         'isActive': true,
         'sortOrder': 5,
-        'searchKeywords': ['rajat', 'hotel', 'dining', 'north indian', 'thali', 'paneer'],
+        'searchKeywords': ['raja', 'hotel', 'dining', 'north indian', 'thali', 'paneer'],
         'deliveryNote': 'Pickup from Gate 3',
         'orderMethod': 'whatsapp',
         'minimumOrderAmount': 0,
@@ -480,7 +480,7 @@ class SeedDataService {
         doc,
         defaultOrderMethod: 'whatsapp',
         defaultMinOrderAmount: 0,
-        fallbackName: 'Rajat Hotel',
+        fallbackName: 'Raja Hotel',
       );
     }
   }

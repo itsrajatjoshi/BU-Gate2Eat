@@ -27,7 +27,7 @@ void main() {
 
   final shopA = Shop(
     id: 'rajat_shop',
-    name: 'Rajat Hotel',
+    name: 'Rajat Shop',
     description: 'Fresh & Fast',
     bannerUrl: '',
     contactNumber: '8295643910',
@@ -68,7 +68,7 @@ void main() {
   group('Phase F: QA Matrix — Order Lifecycle & Business Counting Rules', () {
     test('1. Customer pre-accept cancellation rule: modifies 0 stats and document is deleted', () {
       // Setup initial stats
-      final initialStats = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Hotel');
+      final initialStats = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Shop');
 
       // Place order
       final placedOrder = AppOrder(
@@ -77,7 +77,7 @@ void main() {
         customerName: 'User A',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 150,
         items: const [
@@ -101,7 +101,7 @@ void main() {
     });
 
     test('2. Placed → Accepted: increments appOrders +1, accepted +1, sets reject/delivery deadlines', () {
-      var stats = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Hotel');
+      var stats = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Shop');
       final placedAt = DateTime(2026, 8, 24, 10, 0);
 
       final placedOrder = AppOrder(
@@ -110,7 +110,7 @@ void main() {
         customerName: 'User A',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 150,
         items: const [
@@ -146,7 +146,7 @@ void main() {
     });
 
     test('3. 20-minute accept timer: auto-rejects order, increments notAccepted +1 and appOrders +1', () {
-      var stats = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Hotel');
+      var stats = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Shop');
       final placedAt = DateTime(2026, 8, 24, 10, 0);
       final acceptDeadline = placedAt.add(const Duration(minutes: 20));
 
@@ -156,7 +156,7 @@ void main() {
         customerName: 'User A',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 150,
         items: const [
@@ -189,7 +189,7 @@ void main() {
     });
 
     test('4. Placed → Manual Reject before accept: increments notAccepted +1 and appOrders +1', () {
-      var stats = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Hotel');
+      var stats = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Shop');
       final placedAt = DateTime(2026, 8, 24, 10, 0);
 
       final placedOrder = AppOrder(
@@ -198,7 +198,7 @@ void main() {
         customerName: 'User A',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 150,
         items: const [
@@ -229,7 +229,7 @@ void main() {
     test('5. Accepted → Rejected: within 15 mins increments rejectedAfterAccept +1; blocked after 15 mins', () {
       var stats = const ShopStats(
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         appOrders: 1,
         accepted: 1,
         delivered: 0,
@@ -248,7 +248,7 @@ void main() {
         customerName: 'User A',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'accepted',
         totalAmount: 200,
         items: const [
@@ -286,7 +286,7 @@ void main() {
     test('6. Accepted → Delivered: delivered +1, persists deliveryPersonId & Name, customer/admin visibility', () {
       var stats = const ShopStats(
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         appOrders: 1,
         accepted: 1,
         delivered: 0,
@@ -302,7 +302,7 @@ void main() {
         customerName: 'User A',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'accepted',
         totalAmount: 250,
         items: const [
@@ -336,7 +336,7 @@ void main() {
     test('7. 90-minute delivery expiry: increments deliveryExpired +1 and transitions to delivery_expired', () {
       var stats = const ShopStats(
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         appOrders: 1,
         accepted: 1,
         delivered: 0,
@@ -355,7 +355,7 @@ void main() {
         customerName: 'User A',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'accepted',
         totalAmount: 300,
         items: const [
@@ -384,7 +384,7 @@ void main() {
     });
 
     test('8. WhatsApp counter +1 is completely independent and creates zero AppOrder docs', () {
-      var statsA = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Hotel');
+      var statsA = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Shop');
       var statsB = ShopStats.zero(shopId: 'nayan_shop', shopName: 'Nayan Cafe');
 
       // Click WhatsApp for Shop A
@@ -399,7 +399,7 @@ void main() {
     test('9. Admin Shop Isolation: Shop A operations never bleed into Shop B', () {
       var statsA = const ShopStats(
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         appOrders: 10,
         accepted: 8,
         delivered: 7,
@@ -442,7 +442,7 @@ void main() {
     test('10. Admin Reset Shop A zeroes all counters for Shop A and leaves Shop B intact', () {
       var statsA = const ShopStats(
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         appOrders: 125,
         accepted: 90,
         delivered: 75,
@@ -465,7 +465,7 @@ void main() {
       );
 
       // Reset Shop A
-      statsA = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Hotel').copyWith(
+      statsA = ShopStats.zero(shopId: 'rajat_shop', shopName: 'Rajat Shop').copyWith(
         lastResetAt: DateTime(2026, 8, 24, 18, 0),
       );
 
@@ -523,7 +523,7 @@ void main() {
         customerName: 'User 1',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 100,
         items: const [OrderItem(menuItemId: 'm1', name: 'Item 1', price: 100, quantity: 1)],
@@ -536,7 +536,7 @@ void main() {
         customerName: 'User 2',
         customerPhone: '9876543211',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 200,
         items: const [OrderItem(menuItemId: 'm2', name: 'Item 2', price: 200, quantity: 1)],
@@ -562,7 +562,7 @@ void main() {
         customerName: 'Live Placed Customer',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 120,
         items: const [OrderItem(menuItemId: 'm1', name: 'Dal Tadka', price: 120, quantity: 1)],
@@ -576,7 +576,7 @@ void main() {
         customerName: 'Live Accepted Customer',
         customerPhone: '9876543211',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'accepted',
         totalAmount: 250,
         items: const [OrderItem(menuItemId: 'm2', name: 'Paneer Biryani', price: 250, quantity: 1)],
@@ -592,7 +592,7 @@ void main() {
         customerName: 'Past Customer',
         customerPhone: '9876543212',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'delivered',
         totalAmount: 300,
         items: const [OrderItem(menuItemId: 'm3', name: 'Thali', price: 300, quantity: 1)],

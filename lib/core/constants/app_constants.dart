@@ -104,7 +104,7 @@ class AppAuthRoles {
     '8079065843': 'up16_junction_fast_food',
     '8745007244': 'up16_junction_fast_food',
     '8745950335': 'up16_junction_fast_food',
-    '8888822222': 'rajat_hotel',
+    '8888822222': 'raja_hotel',
     '9999922222': 'up16_queens',
   };
 

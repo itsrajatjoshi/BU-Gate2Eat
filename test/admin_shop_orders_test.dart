@@ -29,7 +29,7 @@ void main() {
 
   final shop1 = Shop(
     id: 'rajat_shop',
-    name: 'Rajat Hotel',
+    name: 'Rajat Shop',
     description: 'Fresh & Fast',
     bannerUrl: '',
     contactNumber: '8295643910',
@@ -69,7 +69,7 @@ void main() {
     customerName: 'Aarav Sharma',
     customerPhone: '9876543210',
     shopId: 'rajat_shop',
-    shopName: 'Rajat Hotel',
+    shopName: 'Rajat Shop',
     status: 'delivered',
     totalAmount: 240,
     items: [
@@ -99,7 +99,7 @@ void main() {
     customerName: 'Priya Verma',
     customerPhone: '9876543211',
     shopId: 'rajat_shop',
-    shopName: 'Rajat Hotel',
+    shopName: 'Rajat Shop',
     status: 'rejected',
     rejectionReason: 'Items out of stock',
     totalAmount: 150,
@@ -162,7 +162,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Screen title and shop header
-      expect(find.text('Rajat Hotel App Orders'), findsOneWidget);
+      expect(find.text('Rajat Shop App Orders'), findsOneWidget);
       expect(find.text('Completed Orders: 2'), findsOneWidget);
 
       // Verify Raja Hotel orders are listed
@@ -226,7 +226,7 @@ void main() {
         customerName: 'Active User 1',
         customerPhone: '9876543210',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'placed',
         totalAmount: 100,
         items: const [OrderItem(menuItemId: 'm1', name: 'Tea', price: 100, quantity: 1)],
@@ -239,7 +239,7 @@ void main() {
         customerName: 'Active User 2',
         customerPhone: '9876543211',
         shopId: 'rajat_shop',
-        shopName: 'Rajat Hotel',
+        shopName: 'Rajat Shop',
         status: 'accepted',
         totalAmount: 150,
         items: const [OrderItem(menuItemId: 'm2', name: 'Coffee', price: 150, quantity: 1)],

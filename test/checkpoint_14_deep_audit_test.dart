@@ -99,9 +99,9 @@ void main() {
       expect(AppAuthRoles.isShopkeeperPhone('8079065843'), isTrue);
       expect(AppAuthRoles.getShopIdForPhone('8079065843'), 'up16_junction_fast_food');
 
-      // Rajat Hotel & UP16 Queens
+      // Raja Hotel & UP16 Queens
       expect(AppAuthRoles.isShopkeeperPhone('8888822222'), isTrue);
-      expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'rajat_hotel');
+      expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'raja_hotel');
       expect(AppAuthRoles.isShopkeeperPhone('9999922222'), isTrue);
       expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_queens');
 

@@ -31,7 +31,7 @@ void main() {
       expect(AppAuthRoles.getShopIdForPhone('8745007244'), 'up16_junction_fast_food');
       expect(AppAuthRoles.getShopIdForPhone('8745950335'), 'up16_junction_fast_food');
 
-      expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'rajat_hotel');
+      expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'raja_hotel');
       expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_queens');
     });
 
