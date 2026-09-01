@@ -346,6 +346,7 @@ class _ShopCardState extends ConsumerState<ShopCard> {
       return CachedNetworkImage(
         imageUrl: images.first,
         fit: BoxFit.cover,
+        memCacheWidth: 800,
         placeholder: (context, url) => _buildPlaceholder(isDark),
         errorWidget: (context, url, error) => _buildPlaceholder(isDark),
       );
@@ -366,6 +367,7 @@ class _ShopCardState extends ConsumerState<ShopCard> {
             return CachedNetworkImage(
               imageUrl: images[index],
               fit: BoxFit.cover,
+              memCacheWidth: 800,
               placeholder: (context, url) => _buildPlaceholder(isDark),
               errorWidget: (context, url, error) => _buildPlaceholder(isDark),
             );
@@ -442,6 +444,8 @@ class _ShopCardState extends ConsumerState<ShopCard> {
             ? CachedNetworkImage(
                 imageUrl: widget.shop.bannerUrl,
                 fit: BoxFit.cover,
+                memCacheWidth: 160,
+                memCacheHeight: 160,
                 placeholder: (context, url) =>
                     _buildLogoPlaceholder(isDark, size),
                 errorWidget: (context, url, error) =>

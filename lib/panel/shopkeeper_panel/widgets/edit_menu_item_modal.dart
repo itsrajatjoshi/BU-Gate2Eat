@@ -862,6 +862,8 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                         width: 54,
                         height: 54,
                         fit: BoxFit.cover,
+                        memCacheWidth: 140,
+                        memCacheHeight: 140,
                         placeholder: (context, url) => Container(
                           color: Colors.grey.shade300,
                           child: const Icon(Icons.image, color: Colors.grey),

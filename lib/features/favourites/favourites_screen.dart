@@ -233,6 +233,8 @@ class FavouritesScreen extends ConsumerWidget {
                                 width: 88,
                                 height: 88,
                                 fit: BoxFit.cover,
+                                memCacheWidth: 200,
+                                memCacheHeight: 200,
                                 placeholder: (context, url) => Container(
                                   width: 88,
                                   height: 88,

@@ -9,6 +9,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
+import '../../models/category_model.dart';
+import '../../models/menu_item_model.dart';
 import '../../models/shop_model.dart';
 import '../cart/cart_provider.dart';
 import '../cart/cart_screen.dart';
@@ -25,6 +27,16 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
+  final Set<int> _visitedIndices = {0};
+
+  void _onTabTapped(int index) {
+    if (_currentIndex != index) {
+      setState(() {
+        _currentIndex = index;
+        _visitedIndices.add(index);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,16 +46,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: const [
-          HomeTabContent(),
-          FavouritesScreen(),
-          CartScreen(),
-          OrderHistoryScreen(),
+        children: [
+          const HomeTabContent(),
+          _visitedIndices.contains(1)
+              ? const FavouritesScreen()
+              : const SizedBox.shrink(),
+          _visitedIndices.contains(2)
+              ? const CartScreen()
+              : const SizedBox.shrink(),
+          _visitedIndices.contains(3)
+              ? const OrderHistoryScreen()
+              : const SizedBox.shrink(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: _onTabTapped,
         items: [
           const BottomNavigationBarItem(
             icon: Icon(Icons.home_rounded),
@@ -114,6 +132,12 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedFilter = 'All';
+  bool _isSearchActive = false;
+
+  bool get _needsGlobalCatalog =>
+      _isSearchActive ||
+      _searchQuery.isNotEmpty ||
+      (_selectedFilter != 'All' && _selectedFilter != 'Open Now');
 
   static const List<String> _filters = [
     'All',
@@ -135,10 +159,15 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
   @override
   Widget build(BuildContext context) {
     final shopsAsync = ref.watch(shopsProvider);
-    final allMenuItemsMap =
-        ref.watch(allShopMenuItemsProvider).valueOrNull ?? const {};
-    final allCategoriesMap =
-        ref.watch(allShopCategoriesProvider).valueOrNull ?? const {};
+    final Map<String, List<MenuItem>> allMenuItemsMap = _needsGlobalCatalog
+        ? (ref.watch(allShopMenuItemsProvider).valueOrNull ?? const {})
+        : const {};
+    final Map<String, List<Category>> allCategoriesMap = _needsGlobalCatalog
+        ? (ref.watch(allShopCategoriesProvider).valueOrNull ?? const {})
+        : const {};
+    final isCatalogLoading = _needsGlobalCatalog &&
+        ((ref.watch(allShopMenuItemsProvider).isLoading) ||
+            (ref.watch(allShopCategoriesProvider).isLoading));
     final activeOrders =
         ref.watch(customerActiveOrdersStreamProvider).valueOrNull ?? [];
 
@@ -240,6 +269,11 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
                   fontSize: 14,
                   color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
                 ),
+                onTap: () {
+                  if (!_isSearchActive) {
+                    setState(() => _isSearchActive = true);
+                  }
+                },
                 decoration: InputDecoration(
                   hintText: 'Search shops or food (e.g. momos)...',
                   hintStyle: TextStyle(
@@ -267,9 +301,10 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
                         )
                       : null,
                 ),
-                onChanged: (value) => setState(
-                  () => _searchQuery = value.trim().toLowerCase(),
-                ),
+                onChanged: (value) => setState(() {
+                  _searchQuery = value.trim().toLowerCase();
+                  if (!_isSearchActive) _isSearchActive = true;
+                }),
               ),
             ),
           ),
@@ -292,6 +327,9 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
                     onTap: () {
                       setState(() {
                         _selectedFilter = filter;
+                        if (filter != 'All' && filter != 'Open Now') {
+                          _isSearchActive = true;
+                        }
                       });
                     },
                     borderRadius: BorderRadius.circular(20),
@@ -477,6 +515,11 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
                 }).toList();
 
                 if (filteredShops.isEmpty) {
+                  if (isCatalogLoading) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  }
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,

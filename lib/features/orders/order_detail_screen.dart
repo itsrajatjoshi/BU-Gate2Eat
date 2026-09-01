@@ -459,6 +459,8 @@ class OrderDetailScreen extends ConsumerWidget {
                                     width: 44,
                                     height: 44,
                                     fit: BoxFit.cover,
+                                    memCacheWidth: 120,
+                                    memCacheHeight: 120,
                                     errorWidget: (_, __, ___) => Container(
                                       width: 44,
                                       height: 44,

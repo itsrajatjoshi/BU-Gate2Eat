@@ -541,6 +541,8 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                         width: 72,
                         height: 52,
                         fit: BoxFit.cover,
+                        memCacheWidth: 180,
+                        memCacheHeight: 140,
                         errorWidget: (_, __, ___) => const Icon(
                           Icons.store_rounded,
                           color: AppColors.textHint,

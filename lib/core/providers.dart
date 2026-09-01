@@ -111,11 +111,10 @@ final shopMenuItemsProvider =
 /// Used by Homepage search and filter for instant, efficient in-memory filtering.
 final allShopMenuItemsProvider = FutureProvider<Map<String, List<MenuItem>>>((ref) async {
   final shops = await ref.watch(shopsProvider.future);
-  final firestoreService = ref.watch(firestoreServiceProvider);
   final Map<String, List<MenuItem>> result = {};
   await Future.wait(
     shops.map((shop) async {
-      final items = await firestoreService.getMenuItems(shop.id);
+      final items = await ref.watch(shopMenuItemsProvider(shop.id).future);
       result[shop.id] = items;
     }),
   );
@@ -126,11 +125,10 @@ final allShopMenuItemsProvider = FutureProvider<Map<String, List<MenuItem>>>((re
 /// Used by Homepage category filters for instant in-memory matching.
 final allShopCategoriesProvider = FutureProvider<Map<String, List<Category>>>((ref) async {
   final shops = await ref.watch(shopsProvider.future);
-  final firestoreService = ref.watch(firestoreServiceProvider);
   final Map<String, List<Category>> result = {};
   await Future.wait(
     shops.map((shop) async {
-      final cats = await firestoreService.getCategories(shop.id);
+      final cats = await ref.watch(shopCategoriesProvider(shop.id).future);
       result[shop.id] = cats;
     }),
   );
@@ -342,17 +340,36 @@ class FavoriteItemData {
 }
 
 /// Provider for fetching all favorited menu items paired with their parent shops.
+/// Deduplicates reads by reusing shopMenuItemsProvider cached futures.
 final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async {
   final favoriteKeys = ref.watch(favoritesProvider);
   if (favoriteKeys.isEmpty) return [];
 
   final shops = await ref.watch(shopsProvider.future);
-  final firestoreService = ref.watch(firestoreServiceProvider);
-
   final List<FavoriteItemData> results = [];
 
-  for (final shop in shops) {
-    final menuItems = await firestoreService.getMenuItems(shop.id);
+  // Identify target shop IDs if keys contain "shopId:itemId" or legacy "shopId_itemId"
+  final Set<String> targetShopIds = {};
+  bool hasLegacyBareKeys = false;
+  for (final key in favoriteKeys) {
+    if (key.contains(':')) {
+      final shopId = key.substring(0, key.indexOf(':'));
+      if (shopId.isNotEmpty) targetShopIds.add(shopId);
+    } else if (key.contains('_')) {
+      final shopId = key.substring(0, key.indexOf('_'));
+      if (shopId.isNotEmpty) targetShopIds.add(shopId);
+    } else {
+      hasLegacyBareKeys = true;
+    }
+  }
+
+  // Filter shops to inspect: only target shops if known, otherwise all shops
+  final shopsToInspect = (targetShopIds.isNotEmpty && !hasLegacyBareKeys)
+      ? shops.where((s) => targetShopIds.contains(s.id)).toList()
+      : shops;
+
+  for (final shop in shopsToInspect) {
+    final menuItems = await ref.watch(shopMenuItemsProvider(shop.id).future);
     for (final item in menuItems) {
       final key = FavoriteNotifier.buildFavoriteKey(shop.id, item.id);
       if (favoriteKeys.contains(key) || favoriteKeys.contains(item.id)) {

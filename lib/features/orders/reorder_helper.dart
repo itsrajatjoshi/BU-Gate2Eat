@@ -24,9 +24,8 @@ class ReorderHelper {
     required WidgetRef ref,
     required AppOrder order,
   }) async {
-    // 1. Fetch current live menu for order.shopId
-    final firestoreService = ref.read(firestoreServiceProvider);
-    final currentMenu = await firestoreService.getMenuItems(order.shopId);
+    // 1. Fetch current live menu for order.shopId (reusing cached provider future if available)
+    final currentMenu = await ref.read(shopMenuItemsProvider(order.shopId).future);
 
     // 2. Map previous order items to current live available items (with exact options & updated prices)
     final List<({

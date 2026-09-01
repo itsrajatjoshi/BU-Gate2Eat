@@ -789,6 +789,8 @@ class _ShopkeeperOrderDetailsModalState
                                     width: 44,
                                     height: 44,
                                     fit: BoxFit.cover,
+                                    memCacheWidth: 120,
+                                    memCacheHeight: 120,
                                     placeholder: (_, __) => Container(
                                       width: 44,
                                       height: 44,

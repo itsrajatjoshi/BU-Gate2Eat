@@ -218,6 +218,7 @@ class _ShopDetailBottomSheet extends ConsumerWidget {
                                   ? CachedNetworkImage(
                                       imageUrl: shop.bannerUrl,
                                       fit: BoxFit.cover,
+                                      memCacheWidth: 800,
                                       placeholder: (_, __) => Container(
                                         color: AppColors.surfaceVariant,
                                         child: const Center(

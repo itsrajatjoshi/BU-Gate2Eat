@@ -510,6 +510,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                                     child: CachedNetworkImage(
                                       imageUrl: shop.bannerUrl,
                                       fit: BoxFit.cover,
+                                      memCacheWidth: 900,
                                       placeholder: (_, __) => Container(
                                         color: AppColors.surfaceVariant,
                                         child: const Icon(
@@ -1173,6 +1174,8 @@ class _CategoryNavWidget extends StatelessWidget {
                                   width: imageSize,
                                   height: imageSize,
                                   fit: BoxFit.cover,
+                                  memCacheWidth: 120,
+                                  memCacheHeight: 120,
                                   placeholder: (context, url) => Container(
                                     color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                                     child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
@@ -1961,6 +1964,7 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                   child: CachedNetworkImage(
                                     imageUrl: widget.displayImageUrl,
                                     fit: BoxFit.cover,
+                                    memCacheWidth: 800,
                                     placeholder: (_, __) => Container(
                                       color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                                       child: const Icon(

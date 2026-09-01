@@ -285,6 +285,8 @@ class UniversalMenuItemCard extends ConsumerWidget {
                             ? CachedNetworkImage(
                                 imageUrl: displayImageUrl,
                                 fit: BoxFit.cover,
+                                memCacheWidth: 400,
+                                memCacheHeight: 320,
                                 placeholder: (_, __) =>
                                     _buildImagePlaceholder(context),
                                 errorWidget: (_, __, ___) =>

@@ -449,6 +449,7 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                                 child: CachedNetworkImage(
                                   imageUrl: shop.bannerUrl,
                                   fit: BoxFit.cover,
+                                  memCacheWidth: 900,
                                   placeholder: (_, __) => Container(
                                     color: AppColors.surfaceVariant,
                                     child: const Icon(
@@ -1049,6 +1050,8 @@ class _CategoryNavWidget extends StatelessWidget {
                             width: imageSize,
                             height: imageSize,
                             fit: BoxFit.cover,
+                            memCacheWidth: 120,
+                            memCacheHeight: 120,
                             placeholder: (context, url) => Container(
                               color: isDark
                                   ? AppColors.darkSurfaceVariant

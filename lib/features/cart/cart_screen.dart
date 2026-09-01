@@ -1061,6 +1061,8 @@ class _CartItemRow extends StatelessWidget {
                 ? CachedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
+                    memCacheWidth: 180,
+                    memCacheHeight: 180,
                     placeholder: (_, __) => Container(
                       color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
                       child: const Center(
@@ -1396,6 +1398,8 @@ class _SuggestionRow extends StatelessWidget {
                   ? CachedNetworkImage(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
+                      memCacheWidth: 140,
+                      memCacheHeight: 140,
                       placeholder: (_, __) => Container(
                         color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
                         child: const Center(
