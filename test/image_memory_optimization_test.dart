@@ -46,6 +46,7 @@ void main() {
     description: 'Delicious food',
     address: 'Gate 2 Commercial Complex',
     bannerUrl: 'https://example.com/banner.jpg',
+    shopLogoImageUrl: 'https://example.com/logo.jpg',
     contactNumber: '9910707219',
     orderNumber: '9319566645',
     openTime: '08:00',

@@ -19,7 +19,11 @@ class _FakeFirestoreService extends Fake implements FirestoreService {
   String? updatedShopId;
 
   @override
-  Future<String> createShop(Shop shop, {Uint8List? bannerBytes}) async {
+  Future<String> createShop(
+    Shop shop, {
+    Uint8List? bannerBytes,
+    Uint8List? logoBytes,
+  }) async {
     createdShop = shop;
     return shop.id;
   }

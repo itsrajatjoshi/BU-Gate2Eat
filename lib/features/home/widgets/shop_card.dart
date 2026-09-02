@@ -440,9 +440,9 @@ class _ShopCardState extends ConsumerState<ShopCard> {
         ],
       ),
       child: ClipOval(
-        child: widget.shop.bannerUrl.isNotEmpty
+        child: widget.shop.shopLogoImageUrl.trim().isNotEmpty
             ? CachedNetworkImage(
-                imageUrl: widget.shop.bannerUrl,
+                imageUrl: widget.shop.shopLogoImageUrl.trim(),
                 fit: BoxFit.cover,
                 memCacheWidth: 160,
                 memCacheHeight: 160,

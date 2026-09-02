@@ -42,6 +42,7 @@ class Shop {
     required this.createdAt,
     required this.updatedAt,
     this.address = '',
+    this.shopLogoImageUrl = '',
     this.orderMethod = ShopOrderMethod.whatsapp,
     this.minimumOrderAmount = 0,
   });
@@ -59,6 +60,7 @@ class Shop {
       description: (data['description'] as String?) ?? '',
       address: (data['address'] as String?) ?? '',
       bannerUrl: (data['bannerUrl'] as String?) ?? (data['imageUrl'] as String?) ?? '',
+      shopLogoImageUrl: (data['shopLogoImageUrl'] as String?) ?? '',
       contactNumber: (data['contactNumber'] as String?) ?? (data['phoneNumber'] as String?) ?? '',
       orderNumber: (data['orderNumber'] as String?) ?? (data['whatsappNumber'] as String?) ?? '',
       openTime: (data['openTime'] as String?) ?? '08:00',
@@ -80,6 +82,7 @@ class Shop {
   final String description;
   final String address;
   final String bannerUrl;
+  final String shopLogoImageUrl;
   final String contactNumber;
   final String orderNumber;
   final String openTime;
@@ -100,6 +103,7 @@ class Shop {
     String? description,
     String? address,
     String? bannerUrl,
+    String? shopLogoImageUrl,
     String? contactNumber,
     String? orderNumber,
     String? openTime,
@@ -120,6 +124,7 @@ class Shop {
       description: description ?? this.description,
       address: address ?? this.address,
       bannerUrl: bannerUrl ?? this.bannerUrl,
+      shopLogoImageUrl: shopLogoImageUrl ?? this.shopLogoImageUrl,
       contactNumber: contactNumber ?? this.contactNumber,
       orderNumber: orderNumber ?? this.orderNumber,
       openTime: openTime ?? this.openTime,
@@ -188,6 +193,7 @@ class Shop {
       'description': description,
       'address': address,
       'bannerUrl': bannerUrl,
+      'shopLogoImageUrl': shopLogoImageUrl,
       'contactNumber': contactNumber,
       'orderNumber': orderNumber,
       'openTime': openTime,

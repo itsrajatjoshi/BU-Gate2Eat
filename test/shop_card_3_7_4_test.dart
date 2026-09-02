@@ -15,6 +15,7 @@ void main() {
       name: 'Raja Hotel',
       description: 'Meals',
       bannerUrl: 'https://example.com/shop_a_logo.jpg',
+      shopLogoImageUrl: 'https://example.com/shop_a_circle.jpg',
       contactNumber: '9191919191',
       orderNumber: '9191919191',
       openTime: '08:00',
@@ -401,9 +402,9 @@ void main() {
       final logoRect = tester.getRect(logoFinder);
       expect(logoRect.center.dx, greaterThan(cardRect.center.dx));
 
-      // Verify shop profile image is used in circular logo (shopA.bannerUrl)
+      // Verify shop profile image is used in circular logo (shopA.shopLogoImageUrl)
       final cachedImages = tester.widgetList<CachedNetworkImage>(find.byType(CachedNetworkImage));
-      expect(cachedImages.any((img) => img.imageUrl == shopA.bannerUrl), isTrue);
+      expect(cachedImages.any((img) => img.imageUrl == shopA.shopLogoImageUrl), isTrue);
     });
   });
 }

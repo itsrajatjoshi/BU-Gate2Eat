@@ -62,13 +62,14 @@ void main() {
           reason: 'Circle center must align at banner boundary (50% upper, 50% lower)');
     });
 
-    testWidgets('2. Dynamic shop image updates when shop bannerUrl updates',
+    testWidgets('2. Dynamic shop image updates when shop shopLogoImageUrl updates',
         (tester) async {
       final initialShop = Shop(
         id: 'shop_dynamic',
         name: 'UP16 Coffee Queen',
         description: 'Coffee and snacks',
-        bannerUrl: 'https://example.com/initial_coffee.jpg',
+        bannerUrl: 'https://example.com/initial_coffee_banner.jpg',
+        shopLogoImageUrl: 'https://example.com/initial_coffee_logo.jpg',
         contactNumber: '8295643910',
         orderNumber: '8295643910',
         openTime: '08:00',
@@ -83,7 +84,7 @@ void main() {
       );
 
       final updatedShop = initialShop.copyWith(
-        bannerUrl: 'https://example.com/updated_coffee.jpg',
+        shopLogoImageUrl: 'https://example.com/updated_coffee_logo.jpg',
       );
 
       // Pump initial state
@@ -109,7 +110,7 @@ void main() {
       );
       expect(cachedImageFinder, findsOneWidget);
       var imageWidget = tester.widget<CachedNetworkImage>(cachedImageFinder);
-      expect(imageWidget.imageUrl, 'https://example.com/initial_coffee.jpg');
+      expect(imageWidget.imageUrl, 'https://example.com/initial_coffee_logo.jpg');
 
       // Update widget with new shop state
       await tester.pumpWidget(
@@ -133,7 +134,7 @@ void main() {
         matching: find.byType(CachedNetworkImage),
       );
       imageWidget = tester.widget<CachedNetworkImage>(cachedImageFinder);
-      expect(imageWidget.imageUrl, 'https://example.com/updated_coffee.jpg');
+      expect(imageWidget.imageUrl, 'https://example.com/updated_coffee_logo.jpg');
     });
 
     testWidgets('3. Two distinct shops render their own distinct circular logos',
@@ -142,7 +143,8 @@ void main() {
         id: 'shop_a',
         name: 'Raja Hotel',
         description: '',
-        bannerUrl: 'https://example.com/shop_a_logo.jpg',
+        bannerUrl: 'https://example.com/shop_a_banner.jpg',
+        shopLogoImageUrl: 'https://example.com/shop_a_logo.jpg',
         contactNumber: '111',
         orderNumber: '111',
         openTime: '08:00',
@@ -160,7 +162,8 @@ void main() {
         id: 'shop_b',
         name: 'Zulus Pizza',
         description: '',
-        bannerUrl: 'https://example.com/shop_b_logo.jpg',
+        bannerUrl: 'https://example.com/shop_b_banner.jpg',
+        shopLogoImageUrl: 'https://example.com/shop_b_logo.jpg',
         contactNumber: '222',
         orderNumber: '222',
         openTime: '10:00',

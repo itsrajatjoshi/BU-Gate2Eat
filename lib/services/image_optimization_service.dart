@@ -11,6 +11,9 @@ enum ImageTargetType {
 
   /// Shop banner photos: Max 800 KB, target dimension ~1400px.
   shopBanner,
+
+  /// Shop circular logo photos: Max 300 KB, target dimension ~512px.
+  shopLogo,
 }
 
 /// Service providing client-side automatic image resizing and compression.
@@ -21,10 +24,13 @@ class ImageOptimizationService {
   /// Maximum byte limit for shop banners (800 KB).
   static const int maxBannerBytes = 800 * 1024;
 
+  /// Maximum byte limit for shop logo photos (300 KB).
+  static const int maxLogoBytes = 300 * 1024;
+
   /// Optimizes image bytes asynchronously on a background isolate ONLY if exceeding limits.
   ///
   /// Rule:
-  /// - If `originalBytes.length <= limit` (<= 300 KB for items, <= 800 KB for banners):
+  /// - If `originalBytes.length <= limit` (<= 300 KB for items/logos, <= 800 KB for banners):
   ///   Does NOT compress, resize, re-encode, or alter the file. Returns exact original bytes.
   /// - If `originalBytes.length > limit`:
   ///   Compresses & resizes in background isolate until within target limits.
@@ -32,9 +38,9 @@ class ImageOptimizationService {
     required Uint8List originalBytes,
     required ImageTargetType type,
   }) async {
-    final int maxAllowedBytes = type == ImageTargetType.menuItem
-        ? maxMenuItemBytes
-        : maxBannerBytes;
+    final int maxAllowedBytes = type == ImageTargetType.shopBanner
+        ? maxBannerBytes
+        : maxMenuItemBytes;
 
     final originalSizeKb =
         (originalBytes.lengthInBytes / 1024).toStringAsFixed(1);
@@ -99,12 +105,13 @@ class ImageOptimizationService {
     final int typeIndex = params['typeIndex'] as int;
     final type = ImageTargetType.values[typeIndex];
 
-    final int maxAllowedBytes = type == ImageTargetType.menuItem
-        ? maxMenuItemBytes
-        : maxBannerBytes;
+    final int maxAllowedBytes = type == ImageTargetType.shopBanner
+        ? maxBannerBytes
+        : maxMenuItemBytes;
 
-    final int initialMaxDimension =
-        type == ImageTargetType.menuItem ? 800 : 1400;
+    final int initialMaxDimension = type == ImageTargetType.shopBanner
+        ? 1400
+        : (type == ImageTargetType.shopLogo ? 512 : 800);
 
     // Decode original image
     final decoded = img.decodeImage(rawBytes);

@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers.dart';
+import '../../../../core/widgets/circular_crop_dialog.dart';
 import '../../../../models/shop_model.dart';
 import '../../../../services/image_optimization_service.dart';
 
@@ -44,11 +45,16 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
   late ShopOrderMethod _selectedOrderMethod;
   bool _isLoading = false;
   bool _isOptimizingImage = false;
+  bool _isOptimizingLogo = false;
 
   final ImagePicker _picker = ImagePicker();
   Uint8List? _selectedBannerBytes;
   int? _selectedBannerSizeBytes;
   String? _bannerError;
+
+  Uint8List? _selectedLogoBytes;
+  int? _selectedLogoSizeBytes;
+  String? _logoError;
 
   @override
   void initState() {
@@ -138,6 +144,49 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     }
   }
 
+  Future<void> _pickAndCropLogo() async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery);
+      if (picked != null) {
+        final rawBytes = await picked.readAsBytes();
+        if (!mounted) return;
+
+        final croppedBytes = await CircularCropDialog.show(
+          context,
+          imageBytes: rawBytes,
+          title: 'Crop Shop Photo (Circle)',
+        );
+
+        if (croppedBytes != null && mounted) {
+          setState(() {
+            _isOptimizingLogo = true;
+            _logoError = null;
+          });
+
+          final optimized = await ImageOptimizationService.optimizeImageBytes(
+            originalBytes: croppedBytes,
+            type: ImageTargetType.shopLogo,
+          );
+
+          if (mounted) {
+            setState(() {
+              _selectedLogoBytes = optimized;
+              _selectedLogoSizeBytes = optimized.lengthInBytes;
+              _isOptimizingLogo = false;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isOptimizingLogo = false;
+          _logoError = 'Failed to process photo. Please try again.';
+        });
+      }
+    }
+  }
+
   Future<void> _pickBanner() async {
     try {
       final picked = await _picker.pickImage(source: ImageSource.gallery);
@@ -214,8 +263,25 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     try {
       final firestoreService = ref.read(firestoreServiceProvider);
       String bannerUrl = widget.shop.bannerUrl;
+      String logoUrl = widget.shop.shopLogoImageUrl;
 
-      // If new banner was picked from gallery, upload optimized bytes to Firebase Storage
+      // 1. If new circle photo was picked and cropped, upload optimized bytes to Firebase Storage
+      if (_selectedLogoBytes != null) {
+        debugPrint('[LOGO] upload started');
+        final uploadedLogoUrl = await firestoreService.uploadImage(
+          shopId: widget.shop.id,
+          path: 'logo',
+          bytes: _selectedLogoBytes!,
+          fileName: 'shop_logo.jpg',
+        );
+        debugPrint('[LOGO] upload completed');
+        if (uploadedLogoUrl != null && uploadedLogoUrl.isNotEmpty) {
+          logoUrl = uploadedLogoUrl;
+          debugPrint('[LOGO] download URL received: $logoUrl');
+        }
+      }
+
+      // 2. If new banner was picked from gallery, upload optimized bytes to Firebase Storage
       if (_selectedBannerBytes != null) {
         debugPrint('[BANNER] upload started');
         final uploadedUrl = await firestoreService.uploadImage(
@@ -231,7 +297,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         }
       }
 
-      debugPrint('[BANNER] Firestore update started');
+      debugPrint('[SHOP] Firestore update started');
       final formattedOpen = _openTimeController.text.trim().isEmpty
           ? '8:00 AM'
           : Shop.format12hr(_openTimeController.text.trim());
@@ -252,12 +318,13 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         'contactNumber': _contactController.text.trim(),
         'orderNumber': _contactController.text.trim(),
         'bannerUrl': bannerUrl,
+        'shopLogoImageUrl': logoUrl,
         'isClosedOverride': _isClosedOverride,
         'orderMethod': _selectedOrderMethod.name,
         'minimumOrderAmount': clampedMinOrder,
       });
-      debugPrint('[BANNER] Firestore update completed');
-      debugPrint('[BANNER] SAVE SUCCESS');
+      debugPrint('[SHOP] Firestore update completed');
+      debugPrint('[SHOP] SAVE SUCCESS');
 
       // Invalidate provider so home screen and shop detail refresh immediately
       ref.invalidate(shopsProvider);
@@ -393,7 +460,272 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             ),
             const SizedBox(height: 16),
 
-            // ─── 1. Shop Banner Section ──────────────────────────────────
+            // ─── 1. Shop Photo (Circle Logo) Section ────────────────────────────
+            Row(
+              children: [
+                Text(
+                  'Shop Photo (Circle Logo)',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
+                      ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Crop & Auto-Optimized ≤ 300 KB',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.secondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            if (_isOptimizingLogo)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Column(
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Optimizing circle photo...',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              )
+            else if (_selectedLogoBytes != null) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: Image.memory(
+                          _selectedLogoBytes!,
+                          width: 54,
+                          height: 54,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'New Circle Photo Selected',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Optimized: ${((_selectedLogoSizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB (Square)',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: AppColors.error,
+                        size: 20,
+                      ),
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _selectedLogoBytes = null;
+                                _selectedLogoSizeBytes = null;
+                                _logoError = null;
+                              });
+                            },
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurfaceVariant
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _logoError != null
+                        ? AppColors.error
+                        : (isDark ? AppColors.darkDivider : AppColors.divider),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppColors.darkDivider : AppColors.divider,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: _selectedLogoBytes != null
+                            ? Image.memory(
+                                _selectedLogoBytes!,
+                                width: 54,
+                                height: 54,
+                                fit: BoxFit.cover,
+                              )
+                            : (widget.shop.shopLogoImageUrl.trim().isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: widget.shop.shopLogoImageUrl.trim(),
+                                    width: 54,
+                                    height: 54,
+                                    fit: BoxFit.cover,
+                                    memCacheWidth: 120,
+                                    memCacheHeight: 120,
+                                    errorWidget: (_, __, ___) => const Icon(
+                                      Icons.store_rounded,
+                                      color: AppColors.textHint,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.store_rounded,
+                                    color: AppColors.textHint,
+                                  )),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _selectedLogoBytes != null
+                                ? 'New Circle Photo Selected'
+                                : (widget.shop.shopLogoImageUrl.trim().isNotEmpty
+                                    ? 'Current Circle Photo'
+                                    : 'No Photo Uploaded (Default Icon)'),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _selectedLogoBytes != null
+                                ? 'Square 512x512 • Tap Save below to apply'
+                                : 'Tap Change to pick and crop',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.textHint,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: (_isLoading || _isOptimizingLogo)
+                          ? null
+                          : _pickAndCropLogo,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: const Icon(Icons.crop_rotate_rounded, size: 16),
+                      label: const Text(
+                        'Change',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            if (_logoError != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _logoError!,
+                style: const TextStyle(
+                  color: AppColors.error,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 16),
+
+            // ─── 2. Shop Banner Section ──────────────────────────────────
             Row(
               children: [
                 Text(

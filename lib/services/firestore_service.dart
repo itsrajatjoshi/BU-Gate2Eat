@@ -131,8 +131,12 @@ class FirestoreService {
     }
   }
 
-  /// Creates a new shop document in Firestore with optional banner upload.
-  Future<String> createShop(Shop shop, {Uint8List? bannerBytes}) async {
+  /// Creates a new shop document in Firestore with optional banner and logo uploads.
+  Future<String> createShop(
+    Shop shop, {
+    Uint8List? bannerBytes,
+    Uint8List? logoBytes,
+  }) async {
     debugPrint('📝 FirestoreService.createShop -> creating shops/${shop.id}');
     try {
       String bannerUrl = shop.bannerUrl;
@@ -148,8 +152,22 @@ class FirestoreService {
         }
       }
 
+      String logoUrl = shop.shopLogoImageUrl;
+      if (logoBytes != null && logoBytes.isNotEmpty) {
+        final uploadedLogoUrl = await uploadImage(
+          shopId: shop.id,
+          path: 'logo',
+          bytes: logoBytes,
+          fileName: 'shop_logo.jpg',
+        );
+        if (uploadedLogoUrl != null && uploadedLogoUrl.isNotEmpty) {
+          logoUrl = uploadedLogoUrl;
+        }
+      }
+
       final shopData = shop.toFirestore();
       shopData['bannerUrl'] = bannerUrl;
+      shopData['shopLogoImageUrl'] = logoUrl;
       shopData['createdAt'] = FieldValue.serverTimestamp();
       shopData['updatedAt'] = FieldValue.serverTimestamp();
 
@@ -163,7 +181,11 @@ class FirestoreService {
   }
 
   /// Deep cascade delete for a shop (Menu items + Categories + Storage images + Shop doc).
-  Future<void> deleteShopCascade(String shopId, {String? bannerUrl}) async {
+  Future<void> deleteShopCascade(
+    String shopId, {
+    String? bannerUrl,
+    String? logoUrl,
+  }) async {
     debugPrint('📝 FirestoreService.deleteShopCascade -> deleting shops/$shopId');
     try {
       // 1. Delete all menu items and their storage photos
@@ -200,7 +222,12 @@ class FirestoreService {
         await deleteStorageImageByUrl(bannerUrl);
       }
 
-      // 4. Delete the parent shop document
+      // 4. Delete shop logo image from storage
+      if (logoUrl != null && logoUrl.isNotEmpty) {
+        await deleteStorageImageByUrl(logoUrl);
+      }
+
+      // 5. Delete the parent shop document
       await _firestore.collection('shops').doc(shopId).delete();
       debugPrint('✅ FirestoreService.deleteShopCascade -> SUCCESS for shops/$shopId');
     } catch (e, stack) {

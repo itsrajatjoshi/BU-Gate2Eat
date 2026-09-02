@@ -12,6 +12,7 @@ void main() {
       name: 'Raja Hotel',
       description: 'Meals',
       bannerUrl: 'https://example.com/shop_a_logo.jpg',
+      shopLogoImageUrl: 'https://example.com/shop_a_circle.jpg',
       contactNumber: '9191919191',
       orderNumber: '9191919191',
       openTime: '08:00',
@@ -189,9 +190,9 @@ void main() {
       final pageViewFinder = find.byKey(const ValueKey('shop_card_slideshow_pageview'));
       expect(pageViewFinder, findsOneWidget);
 
-      // Circular logo uses shopA.bannerUrl
+      // Circular logo uses shopA.shopLogoImageUrl
       final cachedImages = tester.widgetList<CachedNetworkImage>(find.byType(CachedNetworkImage));
-      expect(cachedImages.any((img) => img.imageUrl == shopA.bannerUrl), isTrue);
+      expect(cachedImages.any((img) => img.imageUrl == shopA.shopLogoImageUrl), isTrue);
     });
   });
 }
