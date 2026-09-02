@@ -153,7 +153,8 @@ final shopSlideshowImagesProvider =
   );
 });
 
-/// Pure helper function to resolve deterministic slideshow images starting with shop banner at index 0.
+/// Pure helper function to resolve deterministic slideshow images:
+/// Exactly: Shop Banner + All Category Image + First Menu Item Image of each actual Category.
 List<String> resolveShopSlideshowImages({
   required List<Category> categories,
   required List<MenuItem> menuItems,
@@ -161,12 +162,10 @@ List<String> resolveShopSlideshowImages({
   String? fallbackShopBannerUrl,
 }) {
   final List<String> images = [];
-  final Set<String> seenUrls = {};
 
   void addImage(String url) {
     final trimmed = url.trim();
-    if (trimmed.isNotEmpty && !seenUrls.contains(trimmed)) {
-      seenUrls.add(trimmed);
+    if (trimmed.isNotEmpty) {
       images.add(trimmed);
     }
   }
@@ -177,33 +176,57 @@ List<String> resolveShopSlideshowImages({
     addImage(primaryBanner);
   }
 
-  // 2. Sort categories by sortOrder
-  final sortedCats = List<Category>.from(categories)
+  // Filter out any virtual 'all' category and inactive categories, then sort by sortOrder
+  final actualCats = categories
+      .where((c) => c.id != 'all' && c.isActive)
+      .toList()
     ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
-  // 3. Sort menu items by sortOrder
+  // Sort menu items by sortOrder
   final sortedItems = List<MenuItem>.from(menuItems)
     ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
-  // 4. For each category, resolve the first menu item's image
-  for (final cat in sortedCats) {
-    final catItems = sortedItems.where((item) => item.categoryId == cat.id);
-    final firstItemWithImg = catItems.cast<MenuItem?>().firstWhere(
-      (item) => item != null && item.imageUrl.trim().isNotEmpty,
-      orElse: () => null,
-    );
+  // If there are actual categories, include 'All' category image + each category's first item image
+  if (actualCats.isNotEmpty) {
+    // 2. 'All' Category Image: First item's image across the entire shop menu
+    final firstShopItemWithImg = sortedItems
+        .where((item) => item.isAvailable && item.imageUrl.trim().isNotEmpty)
+        .firstOrNull ??
+        sortedItems
+            .where((item) => item.imageUrl.trim().isNotEmpty)
+            .firstOrNull;
 
-    if (firstItemWithImg != null && firstItemWithImg.imageUrl.trim().isNotEmpty) {
-      addImage(firstItemWithImg.imageUrl);
-    } else if (cat.imageUrl.trim().isNotEmpty) {
-      addImage(cat.imageUrl);
+    if (firstShopItemWithImg != null &&
+        firstShopItemWithImg.imageUrl.trim().isNotEmpty) {
+      addImage(firstShopItemWithImg.imageUrl);
     }
-  }
 
-  // 5. If any other menu items have images not yet included, add them
-  for (final item in sortedItems) {
-    if (item.imageUrl.trim().isNotEmpty) {
-      addImage(item.imageUrl);
+    // 3. For each actual category, resolve the first menu item's image
+    for (final cat in actualCats) {
+      final catItems = sortedItems.where(
+        (item) => item.categoryId == cat.id || item.categoryId == cat.name,
+      );
+      final firstCategoryItem = catItems
+          .where((item) => item.isAvailable && item.imageUrl.trim().isNotEmpty)
+          .firstOrNull ??
+          catItems
+              .where((item) => item.imageUrl.trim().isNotEmpty)
+              .firstOrNull;
+
+      if (firstCategoryItem != null &&
+          firstCategoryItem.imageUrl.trim().isNotEmpty) {
+        addImage(firstCategoryItem.imageUrl);
+      } else if (cat.imageUrl.trim().isNotEmpty) {
+        addImage(cat.imageUrl);
+      }
+    }
+  } else if (images.isEmpty && sortedItems.isNotEmpty) {
+    // Fallback if no banner and no categories: first menu item image
+    final firstItem = sortedItems
+        .where((item) => item.imageUrl.trim().isNotEmpty)
+        .firstOrNull;
+    if (firstItem != null) {
+      addImage(firstItem.imageUrl);
     }
   }
 

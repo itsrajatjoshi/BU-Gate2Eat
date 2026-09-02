@@ -346,8 +346,20 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     final isCurrentShopInCart =
         cartState.shopId == widget.shopId && cartItemCount > 0;
     final minOrderAmount = shopAsync.valueOrNull?.minimumOrderAmount ?? 0;
-
-    return Scaffold(
+    final canPop = Navigator.of(context).canPop();
+    return PopScope(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          try {
+            context.go(AppRoutes.home);
+          } catch (_) {}
+        }
+      },
+      child: Scaffold(
       floatingActionButtonLocation: (isCurrentShopInCart && minOrderAmount > 0)
           ? FloatingActionButtonLocation.centerFloat
           : FloatingActionButtonLocation.endFloat,
@@ -407,13 +419,41 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
       body: shopAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Scaffold(
-          appBar: AppBar(title: const Text('Error')),
+          appBar: AppBar(
+            title: const Text('Error'),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                } else {
+                  try {
+                    context.go(AppRoutes.home);
+                  } catch (_) {}
+                }
+              },
+            ),
+          ),
           body: Center(child: Text('Error loading shop: $error')),
         ),
         data: (shop) {
           if (shop == null) {
             return Scaffold(
-              appBar: AppBar(title: const Text('Shop Not Found')),
+              appBar: AppBar(
+                title: const Text('Shop Not Found'),
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () {
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    } else {
+                      try {
+                        context.go(AppRoutes.home);
+                      } catch (_) {}
+                    }
+                  },
+                ),
+              ),
               body: const Center(child: Text('Shop not found')),
             );
           }
@@ -442,7 +482,15 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                     child: IconButton(
                       icon: const Icon(Icons.arrow_back_rounded),
                       color: Theme.of(context).iconTheme.color,
-                      onPressed: () => context.pop(),
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        } else {
+                          try {
+                            context.go(AppRoutes.home);
+                          } catch (_) {}
+                        }
+                      },
                     ),
                   ),
                 ),
@@ -779,6 +827,7 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           );
         },
       ),
+    ),
     );
   }
 

@@ -106,10 +106,12 @@ void main() {
         menuItems: [itemA2, itemA1],
       );
 
-      expect(images.length, equals(3));
+      // Banner + All + Cat 1 + Cat 2 = 4 images
+      expect(images.length, equals(4));
       expect(images[0], equals(shopA.bannerUrl));
-      expect(images[1], equals('https://cdn.yummbu.com/images/veg_thali.jpg'));
-      expect(images[2], equals('https://cdn.yummbu.com/images/dum_biryani.jpg'));
+      expect(images[1], equals('https://cdn.yummbu.com/images/dum_biryani.jpg')); // All
+      expect(images[2], equals('https://cdn.yummbu.com/images/veg_thali.jpg')); // catA1
+      expect(images[3], equals('https://cdn.yummbu.com/images/dum_biryani.jpg')); // catA2
     });
 
     test('3. Banner changes correctly when shop bannerUrl changes', () {
@@ -130,12 +132,14 @@ void main() {
         menuItems: [itemA1, itemA2],
       );
 
-      expect(images.length, equals(2));
+      // No banner -> All + Cat 1 + Cat 2 = 3 images
+      expect(images.length, equals(3));
       expect(images[0], equals('https://cdn.yummbu.com/images/veg_thali.jpg'));
-      expect(images[1], equals('https://cdn.yummbu.com/images/dum_biryani.jpg'));
+      expect(images[1], equals('https://cdn.yummbu.com/images/veg_thali.jpg'));
+      expect(images[2], equals('https://cdn.yummbu.com/images/dum_biryani.jpg'));
     });
 
-    test('5. Duplicate banner URL in menu items is not added twice', () {
+    test('5. Duplicate banner URL in menu items is resolved into slideshow', () {
       final duplicateItem = MenuItem(
         id: itemA1.id,
         name: itemA1.name,
@@ -154,7 +158,8 @@ void main() {
         menuItems: [duplicateItem],
       );
 
-      expect(images.length, equals(1));
+      // 1 category -> Banner + All + Cat 1 = 3 images
+      expect(images.length, equals(3));
       expect(images[0], equals(shopA.bannerUrl));
     });
 

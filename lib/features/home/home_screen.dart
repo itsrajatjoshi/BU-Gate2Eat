@@ -43,23 +43,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final cartState = ref.watch(cartProvider);
     final cartItemCount = cartState.totalItemCount;
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          const HomeTabContent(),
-          _visitedIndices.contains(1)
-              ? const FavouritesScreen()
-              : const SizedBox.shrink(),
-          _visitedIndices.contains(2)
-              ? const CartScreen()
-              : const SizedBox.shrink(),
-          _visitedIndices.contains(3)
-              ? const OrderHistoryScreen()
-              : const SizedBox.shrink(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setState(() {
+            _currentIndex = 0;
+          });
+        }
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: [
+            const HomeTabContent(),
+            _visitedIndices.contains(1)
+                ? const FavouritesScreen()
+                : const SizedBox.shrink(),
+            _visitedIndices.contains(2)
+                ? const CartScreen()
+                : const SizedBox.shrink(),
+            _visitedIndices.contains(3)
+                ? const OrderHistoryScreen()
+                : const SizedBox.shrink(),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: _onTabTapped,
         items: [
@@ -110,6 +120,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }

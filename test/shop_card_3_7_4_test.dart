@@ -116,11 +116,12 @@ void main() {
         menuItems: [itemA2, itemA1],
       );
 
-      // Must have shop banner at index 0, followed by category sortOrder (catA1: thali -> catA2: biryani)
-      expect(images.length, equals(3));
+      // Must have shop banner at index 0, followed by All Category (first in list: dum_biryani), then category sortOrder (catA1: thali -> catA2: biryani)
+      expect(images.length, equals(4));
       expect(images[0], equals(shopA.bannerUrl));
-      expect(images[1], equals('https://cdn.yummbu.com/images/veg_thali.jpg'));
-      expect(images[2], equals('https://cdn.yummbu.com/images/dum_biryani.jpg'));
+      expect(images[1], equals('https://cdn.yummbu.com/images/dum_biryani.jpg')); // All
+      expect(images[2], equals('https://cdn.yummbu.com/images/veg_thali.jpg')); // catA1
+      expect(images[3], equals('https://cdn.yummbu.com/images/dum_biryani.jpg')); // catA2
     });
 
     test('2. Strict shop boundary separation — No cross-shop image leakage', () {

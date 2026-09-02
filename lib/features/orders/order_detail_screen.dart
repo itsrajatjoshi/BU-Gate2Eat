@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
+import '../../core/router.dart';
 import '../../core/utils/order_timer_helper.dart';
 import '../../models/order_model.dart';
 import '../../services/whatsapp_service.dart';
@@ -110,41 +111,63 @@ class OrderDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildNotFoundScreen(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Order Details'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
+    final canPop = Navigator.of(context).canPop();
+    return PopScope(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          try {
+            context.go(AppRoutes.home);
+          } catch (_) {}
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Order Details'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                try {
+                  context.go(AppRoutes.home);
+                } catch (_) {}
+              }
+            },
+          ),
         ),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.receipt_long_outlined,
-              size: 64,
-              color: Colors.grey,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Order not found',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: () => context.pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.receipt_long_outlined,
+                size: 64,
+                color: Colors.grey,
               ),
-              child: const Text('Go Back'),
-            ),
-          ],
+              const SizedBox(height: 16),
+              const Text(
+                'Order not found',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () => context.canPop() ? context.pop() : context.go(AppRoutes.home),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -188,15 +211,40 @@ class OrderDetailScreen extends ConsumerWidget {
       });
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Order Details',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+    final canPop = Navigator.of(context).canPop();
+    return PopScope(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          try {
+            context.go(AppRoutes.home);
+          } catch (_) {}
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                try {
+                  context.go(AppRoutes.home);
+                } catch (_) {}
+              }
+            },
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Order Details',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             Text(
               order.orderId,
               style: TextStyle(
@@ -252,10 +300,6 @@ class OrderDetailScreen extends ConsumerWidget {
               ),
             ),
         ],
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
-        ),
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -840,6 +884,7 @@ class OrderDetailScreen extends ConsumerWidget {
           ),
         ),
       ),
+    ),
     );
   }
 

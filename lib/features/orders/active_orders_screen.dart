@@ -20,17 +20,38 @@ class ActiveOrdersScreen extends ConsumerWidget {
     final activeOrdersAsync = ref.watch(customerActiveOrdersStreamProvider);
     final now = ref.watch(orderReconciliationTickerProvider).value ?? DateTime.now();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Active Orders',
-          style: TextStyle(fontWeight: FontWeight.bold),
+    final canPop = Navigator.of(context).canPop();
+    return PopScope(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          try {
+            context.go(AppRoutes.home);
+          } catch (_) {}
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'Active Orders',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                try {
+                  context.go(AppRoutes.home);
+                } catch (_) {}
+              }
+            },
+          ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
-        ),
-      ),
       body: activeOrdersAsync.when(
         data: (activeOrders) {
           // Double filter to guarantee only placed or accepted
@@ -126,6 +147,7 @@ class ActiveOrdersScreen extends ConsumerWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
