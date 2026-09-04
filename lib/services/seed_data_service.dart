@@ -485,16 +485,16 @@ class SeedDataService {
     }
   }
 
-  // ─── Shop 6: UP16 Queens ──────────────────────────────────────────────
+  // ─── Shop 6: UP16 Coffee Queen ───────────────────────────────────────
   static Future<void> _seedUP16Queens(FirebaseFirestore firestore) async {
-    const shopId = 'up16_queens';
+    const shopId = 'up16_coffee_queen';
     final shopRef = firestore.collection('shops').doc(shopId);
     final doc = await shopRef.get();
 
     if (!doc.exists) {
       debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
       await shopRef.set({
-        'name': 'UP16 Queens',
+        'name': 'UP16 Coffee Queen',
         'description': 'Special Fast Food, Desserts & Beverages',
         'address': 'Outside Gate 2, Bennett University, Dabra',
         'bannerUrl': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500',
@@ -505,7 +505,7 @@ class SeedDataService {
         'isClosedOverride': false,
         'isActive': true,
         'sortOrder': 6,
-        'searchKeywords': ['up16', 'queens', 'fast food', 'beverages', 'desserts'],
+        'searchKeywords': ['up16', 'queens', 'coffee queen', 'fast food', 'beverages', 'desserts'],
         'deliveryNote': 'Pickup from Gate 3',
         'orderMethod': 'whatsapp',
         'minimumOrderAmount': 0,
@@ -518,7 +518,7 @@ class SeedDataService {
         doc,
         defaultOrderMethod: 'whatsapp',
         defaultMinOrderAmount: 0,
-        fallbackName: 'UP16 Queens',
+        fallbackName: 'UP16 Coffee Queen',
       );
     }
   }

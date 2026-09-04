@@ -19,6 +19,7 @@ class ShopkeeperMainShell extends ConsumerStatefulWidget {
 
 class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
   int _currentIndex = 0;
+  String? _lastShopId;
 
   @override
   Widget build(BuildContext context) {
@@ -27,13 +28,30 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
 
     // If phone number is unknown / not assigned to any shop, show safe unauthorized view
     if (shopId == null || shopId.isEmpty) {
+      _lastShopId = null;
+      _currentIndex = 0;
       return _buildUnauthorizedView(context);
     }
 
+    // Reset tab index if switching between different shopkeepers
+    if (_lastShopId != null && _lastShopId != shopId) {
+      _currentIndex = 0;
+    }
+    _lastShopId = shopId;
+
     final screens = [
-      ShopkeeperOrdersScreen(shopId: shopId),
-      ShopkeeperOrderHistoryScreen(shopId: shopId),
-      ShopkeeperHomeScreen(shopId: shopId),
+      ShopkeeperOrdersScreen(
+        key: ValueKey('orders_$shopId'),
+        shopId: shopId,
+      ),
+      ShopkeeperOrderHistoryScreen(
+        key: ValueKey('history_$shopId'),
+        shopId: shopId,
+      ),
+      ShopkeeperHomeScreen(
+        key: ValueKey('home_$shopId'),
+        shopId: shopId,
+      ),
     ];
 
     return PopScope(
@@ -48,6 +66,7 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
       },
       child: Scaffold(
         body: IndexedStack(
+          key: ValueKey('shopkeeper_stack_$shopId'),
           index: _currentIndex,
           children: screens,
         ),

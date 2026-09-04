@@ -149,6 +149,18 @@ class NotificationRouterBridge {
       }
 
       if (isShopkeeper) {
+        final authorizedShopId = AppAuthRoles.getShopIdForPhone(cleanPhone);
+        if (shopId.isNotEmpty &&
+            authorizedShopId != null &&
+            shopId != authorizedShopId) {
+          debugPrint(
+            '⛔ [Notification Router] Cross-Shop Isolation: Shopkeeper for "$authorizedShopId" cannot open notification for "$shopId".',
+          );
+          return ResolvedNotificationRoute(
+            isAuthorized: false,
+            rejectionReason: 'Shopkeeper unauthorized for target shop: $shopId',
+          );
+        }
         debugPrint(
           'ℹ️ [Notification Router] Shopkeeper opening order detail: #$orderId',
         );

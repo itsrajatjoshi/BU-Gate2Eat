@@ -50,14 +50,45 @@ class OrderDetailScreen extends ConsumerWidget {
       if (localStorage == null) return true;
 
       final phone = localStorage.userPhone;
-      final isCustomer = !AppAuthRoles.isAdminPhone(phone) && !AppAuthRoles.isShopkeeperPhone(phone);
-      if (isCustomer) {
+      final cleanPhone = AppAuthRoles.normalizeCleanPhone(phone);
+
+      // 1. Admin has authorized oversight of all orders
+      if (AppAuthRoles.isAdminPhone(cleanPhone)) {
+        return true;
+      }
+
+      // 2. Shopkeeper: strictly authorized ONLY for orders belonging to their assigned shop,
+      // or orders they placed personally as a customer.
+      if (AppAuthRoles.isShopkeeperPhone(cleanPhone)) {
+        final authorizedShopId = AppAuthRoles.getShopIdForPhone(cleanPhone);
+        final isOwnShopOrder = authorizedShopId != null &&
+            authorizedShopId.isNotEmpty &&
+            o.shopId == authorizedShopId;
         final identity = ref.read(customerIdentityProvider);
-        if (identity.customerId.isNotEmpty &&
-            o.customerId.isNotEmpty &&
-            o.customerId != identity.customerId) {
+        final isPersonalCustomerOrder = (cleanPhone.isNotEmpty &&
+                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone) ||
+            (identity.customerId.isNotEmpty && o.customerId == identity.customerId);
+
+        if (!isOwnShopOrder && !isPersonalCustomerOrder) {
+          debugPrint(
+            '⛔ [Order Authorization] Blocked cross-shop access: Shopkeeper "$authorizedShopId" cannot view order #${o.orderId} of shop "${o.shopId}".',
+          );
           return false;
         }
+        return true;
+      }
+
+      // 3. Customer: strictly authorized ONLY for their own customer orders
+      final identity = ref.read(customerIdentityProvider);
+      final matchesCustomerId = identity.customerId.isNotEmpty &&
+          o.customerId.isNotEmpty &&
+          o.customerId == identity.customerId;
+      final matchesPhone = cleanPhone.isNotEmpty &&
+          o.customerPhone.isNotEmpty &&
+          AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone;
+
+      if (!matchesCustomerId && !matchesPhone) {
+        return false;
       }
       return true;
     }

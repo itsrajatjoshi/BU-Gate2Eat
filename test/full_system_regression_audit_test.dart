@@ -340,7 +340,7 @@ void main() {
       expect(AppAuthRoles.getShopIdForPhone('8875344034'), equals('kivisha_shop'));
       expect(AppAuthRoles.getShopIdForPhone('8079065843'), equals('up16_junction_fast_food'));
       expect(AppAuthRoles.getShopIdForPhone('8888822222'), equals('raja_hotel'));
-      expect(AppAuthRoles.getShopIdForPhone('9999922222'), equals('up16_queens'));
+      expect(AppAuthRoles.getShopIdForPhone('9999922222'), equals('up16_coffee_queen'));
 
       // Unknown phones produce null
       expect(AppAuthRoles.getShopIdForPhone('9999911111'), isNull);

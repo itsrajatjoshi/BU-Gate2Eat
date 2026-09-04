@@ -110,7 +110,7 @@ class AppAuthRoles {
     '8745007244': 'up16_junction_fast_food',
     '8745950335': 'up16_junction_fast_food',
     '8888822222': 'raja_hotel',
-    '9999922222': 'up16_queens',
+    '9999922222': 'up16_coffee_queen',
   };
 
   /// Extracts digits only and strips international +91 prefix for clean 10-digit comparison.
@@ -138,15 +138,23 @@ class AppAuthRoles {
         shopkeeperPhoneMap.keys.any((p) => clean.endsWith(p));
   }
 
+  /// Resolves any legacy or colloquial shopId alias to the authoritative canonical Firestore shop ID.
+  static String canonicalShopId(String shopId) {
+    if (shopId == 'up16_queens') {
+      return 'up16_coffee_queen';
+    }
+    return shopId;
+  }
+
   /// Resolves the shopId assigned to the shopkeeper phone, or returns null if not found.
   static String? getShopIdForPhone(String rawPhone) {
     final clean = normalizeCleanPhone(rawPhone);
     if (shopkeeperPhoneMap.containsKey(clean)) {
-      return shopkeeperPhoneMap[clean];
+      return canonicalShopId(shopkeeperPhoneMap[clean]!);
     }
     for (final entry in shopkeeperPhoneMap.entries) {
       if (clean.endsWith(entry.key)) {
-        return entry.value;
+        return canonicalShopId(entry.value);
       }
     }
     return null;

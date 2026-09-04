@@ -215,7 +215,7 @@ void main() {
       expect(find.text('No order history yet'), findsOneWidget);
       expect(
         find.text(
-          'Your completed, and rejected orders will appear here.',
+          'Your completed and rejected orders will appear here.',
         ),
         findsOneWidget,
       );

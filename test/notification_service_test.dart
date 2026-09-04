@@ -65,7 +65,7 @@ void main() {
         '8875344034': 'kivisha_shop',
         '8079065843': 'up16_junction_fast_food',
         '8888822222': 'raja_hotel',
-        '9999922222': 'up16_queens',
+        '9999922222': 'up16_coffee_queen',
       };
 
       for (final entry in testCases.entries) {

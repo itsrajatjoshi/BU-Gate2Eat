@@ -33,6 +33,15 @@ class _ShopkeeperOrdersScreenState
   String _searchQuery = '';
 
   @override
+  void didUpdateWidget(ShopkeeperOrdersScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.shopId != widget.shopId) {
+      _searchController.clear();
+      _searchQuery = '';
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();

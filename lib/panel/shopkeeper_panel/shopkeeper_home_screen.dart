@@ -56,6 +56,25 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
   }
 
   @override
+  void didUpdateWidget(ShopkeeperHomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.shopId != widget.shopId) {
+      _searchController.clear();
+      _searchQuery = '';
+      _foodFilter = FoodFilter.all;
+      _selectedCategoryId = 'all';
+      _isManualCategoryTap = false;
+      _categoryKeys.clear();
+      if (_mainScrollController.hasClients) {
+        _mainScrollController.jumpTo(0);
+      }
+      if (_categoryScrollController.hasClients) {
+        _categoryScrollController.jumpTo(0);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _mainScrollController.removeListener(_onMainScroll);
     _mainScrollController.dispose();

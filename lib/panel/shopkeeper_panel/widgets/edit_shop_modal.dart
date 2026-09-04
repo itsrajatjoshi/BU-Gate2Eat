@@ -269,6 +269,8 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
 
     try {
       final firestoreService = ref.read(firestoreServiceProvider);
+      final oldLogoUrl = widget.shop.shopLogoImageUrl.trim();
+      final oldBannerUrl = widget.shop.bannerUrl.trim();
       String bannerUrl = widget.shop.bannerUrl;
       String logoUrl = widget.shop.shopLogoImageUrl;
 
@@ -337,6 +339,23 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       });
       debugPrint('[SHOP] Firestore update completed');
       debugPrint('[SHOP] SAVE SUCCESS');
+
+      // 3. Best-effort cleanup of previous storage images ONLY after successful Firestore update
+      if (_selectedLogoBytes != null && oldLogoUrl.isNotEmpty && oldLogoUrl != logoUrl) {
+        try {
+          await firestoreService.deleteStorageImageByUrl(oldLogoUrl);
+        } catch (e) {
+          debugPrint('⚠️ [LOGO] Best-effort old logo cleanup skipped: $e');
+        }
+      }
+
+      if (_selectedBannerBytes != null && oldBannerUrl.isNotEmpty && oldBannerUrl != bannerUrl) {
+        try {
+          await firestoreService.deleteStorageImageByUrl(oldBannerUrl);
+        } catch (e) {
+          debugPrint('⚠️ [BANNER] Best-effort old banner cleanup skipped: $e');
+        }
+      }
 
       // Invalidate provider so home screen and shop detail refresh immediately
       ref.invalidate(shopsProvider);
@@ -1341,7 +1360,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
               height: 48,
               child: ElevatedButton(
                 onPressed:
-                    (_isLoading || _isOptimizingImage) ? null : _onSave,
+                    (_isLoading || _isOptimizingImage || _isOptimizingLogo) ? null : _onSave,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,

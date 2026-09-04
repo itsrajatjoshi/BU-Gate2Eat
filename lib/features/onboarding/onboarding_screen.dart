@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
+import '../../models/order_model.dart';
 import '../cart/cart_provider.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -45,10 +46,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // Atomically synchronize customer identity and purge any leftover in-memory state from previous session
     ref.read(customerIdentityProvider.notifier).refresh();
     ref.read(cartProvider.notifier).clearCart();
+    ref.read(dummyOrdersProvider.notifier).setOrders(<AppOrder>[]);
     ref.invalidate(customerActiveOrdersStreamProvider);
     ref.invalidate(customerOrderHistoryStreamProvider);
     ref.invalidate(favoritesProvider);
     ref.invalidate(currentShopkeeperShopIdProvider);
+    ref.invalidate(shopActiveOrdersStreamProvider);
+    ref.invalidate(shopOrderHistoryStreamProvider);
+    ref.invalidate(shopStatsStreamProvider);
+    ref.invalidate(shopCategoriesProvider);
+    ref.invalidate(shopMenuItemsProvider);
 
     // Non-blocking notification permission request & token registration
     try {

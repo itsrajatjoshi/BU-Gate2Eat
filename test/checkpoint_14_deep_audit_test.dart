@@ -103,7 +103,7 @@ void main() {
       expect(AppAuthRoles.isShopkeeperPhone('8888822222'), isTrue);
       expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'raja_hotel');
       expect(AppAuthRoles.isShopkeeperPhone('9999922222'), isTrue);
-      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_queens');
+      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_coffee_queen');
 
       // Regular customer
       expect(AppAuthRoles.isShopkeeperPhone('9876543210'), isFalse);

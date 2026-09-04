@@ -56,7 +56,7 @@ void main() {
       expect(AppAuthRoles.getShopIdForPhone('8875344034'), 'kivisha_shop');
       expect(AppAuthRoles.getShopIdForPhone('8079065843'), 'up16_junction_fast_food');
       expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'raja_hotel');
-      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_queens');
+      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_coffee_queen');
     });
   });
 

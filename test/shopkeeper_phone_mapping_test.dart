@@ -34,7 +34,7 @@ void main() {
       expect(AppAuthRoles.getShopIdForPhone('8745950335'), 'up16_junction_fast_food');
 
       expect(AppAuthRoles.getShopIdForPhone('8888822222'), 'raja_hotel');
-      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_queens');
+      expect(AppAuthRoles.getShopIdForPhone('9999922222'), 'up16_coffee_queen');
     });
 
     test('2. Returns null for unknown / unregistered phone numbers', () {
@@ -161,7 +161,7 @@ void main() {
         {'phone': '8745007244', 'shopId': 'up16_junction_fast_food'},
         {'phone': '8745950335', 'shopId': 'up16_junction_fast_food'},
         {'phone': '8888822222', 'shopId': 'raja_hotel'},
-        {'phone': '9999922222', 'shopId': 'up16_queens'},
+        {'phone': '9999922222', 'shopId': 'up16_coffee_queen'},
       ];
 
       for (final item in mappings) {

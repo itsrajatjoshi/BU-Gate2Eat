@@ -352,10 +352,16 @@ Future<void> clearCustomerSession(dynamic ref) async {
   await localStorage.logout();
   ref.read(cartProvider.notifier).clearCart();
   ref.read(customerIdentityProvider.notifier).clear();
+  ref.read(dummyOrdersProvider.notifier).setOrders(<AppOrder>[]);
   ref.invalidate(customerActiveOrdersStreamProvider);
   ref.invalidate(customerOrderHistoryStreamProvider);
   ref.invalidate(favoritesProvider);
   ref.invalidate(currentShopkeeperShopIdProvider);
+  ref.invalidate(shopActiveOrdersStreamProvider);
+  ref.invalidate(shopOrderHistoryStreamProvider);
+  ref.invalidate(shopStatsStreamProvider);
+  ref.invalidate(shopCategoriesProvider);
+  ref.invalidate(shopMenuItemsProvider);
 }
 
 /// Provider for the ForceUpdate service.
