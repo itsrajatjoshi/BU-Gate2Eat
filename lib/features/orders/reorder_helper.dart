@@ -24,6 +24,15 @@ class ReorderHelper {
     required WidgetRef ref,
     required AppOrder order,
   }) async {
+    // Verify customer ownership before reordering
+    final currentIdentity = ref.read(customerIdentityProvider);
+    if (order.customerId.isNotEmpty &&
+        currentIdentity.customerId.isNotEmpty &&
+        order.customerId != currentIdentity.customerId) {
+      debugPrint('⛔ [Reorder] Blocked reorder of order belonging to another customer.');
+      return;
+    }
+
     // 1. Fetch current live menu for order.shopId (reusing cached provider future if available)
     final currentMenu = await ref.read(shopMenuItemsProvider(order.shopId).future);
 

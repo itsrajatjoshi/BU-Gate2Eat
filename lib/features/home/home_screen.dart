@@ -128,11 +128,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 class HomeTabContent extends ConsumerStatefulWidget {
   const HomeTabContent({
     this.onShopTap,
+    this.onProfileTap,
     this.floatingActionButton,
     super.key,
   });
 
   final void Function(Shop shop)? onShopTap;
+  final VoidCallback? onProfileTap;
   final Widget? floatingActionButton;
 
   @override
@@ -221,7 +223,7 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: InkWell(
-              onTap: () => context.push(AppRoutes.profile),
+              onTap: widget.onProfileTap ?? () => context.push(AppRoutes.profile),
               borderRadius: BorderRadius.circular(20),
               child: Container(
                 width: 38,

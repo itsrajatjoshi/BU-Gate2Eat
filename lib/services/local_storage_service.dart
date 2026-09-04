@@ -3,6 +3,8 @@
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/constants/app_constants.dart';
+
 /// Service for managing locally stored user data.
 /// User profile is stored on-device only (no server-side accounts).
 class LocalStorageService {
@@ -39,7 +41,8 @@ class LocalStorageService {
   /// Gets the stored customer ID or initializes a stable device/phone identifier.
   /// When a phone number exists, customer ID is strictly and deterministically derived from it.
   String get customerId {
-    final phone = userPhone.trim();
+    final rawPhone = userPhone.trim();
+    final phone = AppAuthRoles.normalizeCleanPhone(rawPhone);
     if (phone.isNotEmpty) {
       final expectedId = 'cust_$phone';
       final currentId = _prefs.getString(_keyCustomerId);
@@ -61,7 +64,7 @@ class LocalStorageService {
   /// Gets the stored user name.
   String get userName => _prefs.getString(_keyName) ?? '';
 
-  /// Gets the stored phone number.
+  /// Gets the stored phone number (normalized 10 digits when valid).
   String get userPhone => _prefs.getString(_keyPhone) ?? '';
 
   /// Gets the stored user age.
@@ -73,7 +76,7 @@ class LocalStorageService {
     required String phone,
     int? age,
   }) async {
-    final cleanPhone = phone.trim();
+    final cleanPhone = AppAuthRoles.normalizeCleanPhone(phone);
     await _prefs.setString(_keyName, name.trim());
     await _prefs.setString(_keyPhone, cleanPhone);
     if (cleanPhone.isNotEmpty) {
@@ -92,7 +95,7 @@ class LocalStorageService {
 
   /// Updates the phone number and synchronizes the customer ID.
   Future<void> updatePhone(String phone) async {
-    final cleanPhone = phone.trim();
+    final cleanPhone = AppAuthRoles.normalizeCleanPhone(phone);
     await _prefs.setString(_keyPhone, cleanPhone);
     if (cleanPhone.isNotEmpty) {
       await _prefs.setString(_keyCustomerId, 'cust_$cleanPhone');
@@ -136,6 +139,7 @@ class LocalStorageService {
     await _prefs.remove(_keyPhone);
     await _prefs.remove(_keyAge);
     await _prefs.remove(_keyCustomerId);
+    await _prefs.remove(_keyFavorites);
   }
 
   /// Permanently deletes customer account profile, identity, favorites, and session state.

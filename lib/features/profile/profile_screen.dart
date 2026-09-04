@@ -110,13 +110,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final localStorage = ref.read(localStorageServiceProvider);
-      final notificationService = ref.read(notificationServiceProvider);
-      final cachedToken = notificationService.cachedToken;
-      if (cachedToken != null && cachedToken.isNotEmpty) {
-        notificationService.deleteDeviceToken(cachedToken).catchError((_) {});
-      }
-      await localStorage.logout();
+      await clearCustomerSession(ref);
 
       if (mounted) {
         context.go(AppRoutes.onboarding);

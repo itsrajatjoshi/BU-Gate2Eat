@@ -149,8 +149,7 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final localStorage = ref.read(localStorageServiceProvider);
-      await localStorage.logout();
+      await clearCustomerSession(ref);
 
       if (mounted) {
         context.go(AppRoutes.onboarding);

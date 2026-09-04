@@ -228,6 +228,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
   }
 
   Future<void> _onAdd() async {
+    if (_isLoading) return;
     final name = _nameController.text.trim();
     final priceText = _priceController.text.trim();
     final details = _detailsController.text.trim();

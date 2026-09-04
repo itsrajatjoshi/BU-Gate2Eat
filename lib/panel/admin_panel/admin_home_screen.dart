@@ -9,12 +9,18 @@ import '../../features/home/home_screen.dart';
 import 'widgets/add_shop_modal.dart';
 
 class AdminHomeScreen extends StatelessWidget {
-  const AdminHomeScreen({super.key});
+  const AdminHomeScreen({
+    this.onProfileTap,
+    super.key,
+  });
+
+  final VoidCallback? onProfileTap;
 
   @override
   Widget build(BuildContext context) {
     return HomeTabContent(
       onShopTap: (shop) => context.push('/admin/shop/${shop.id}'),
+      onProfileTap: onProfileTap,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => AddShopModal.show(context),
         backgroundColor: AppColors.primary,

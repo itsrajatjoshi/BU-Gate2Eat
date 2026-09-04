@@ -329,21 +329,28 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       final now = DateTime.now();
       final orderId = _generateOrderId();
 
+      final currentStoragePhone =
+          AppAuthRoles.normalizeCleanPhone(localStorage.userPhone);
+      final customerPhone = customerIdentity.phone.trim().isNotEmpty
+          ? customerIdentity.phone.trim()
+          : currentStoragePhone;
+      final customerId = customerIdentity.customerId.trim().isNotEmpty
+          ? customerIdentity.customerId.trim()
+          : (customerPhone.isNotEmpty
+              ? 'cust_$customerPhone'
+              : localStorage.customerId);
       final customerName = customerIdentity.name.trim().isNotEmpty
           ? customerIdentity.name.trim()
           : (localStorage.userName.isNotEmpty
               ? localStorage.userName
               : 'Student');
-      final customerPhone = customerIdentity.phone.trim().isNotEmpty
-          ? customerIdentity.phone.trim()
-          : localStorage.userPhone;
 
       // 2. Build immutable Order Snapshot
       final newOrder = AppOrder(
         orderId: orderId,
         shopId: shopId,
         shopName: shopName,
-        customerId: customerIdentity.customerId,
+        customerId: customerId,
         customerName: customerName,
         customerPhone: customerPhone,
         items: cartItems
@@ -649,14 +656,16 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       final localStorage = ref.read(localStorageServiceProvider);
       final customerIdentity = ref.read(customerIdentityProvider);
 
+      final currentStoragePhone =
+          AppAuthRoles.normalizeCleanPhone(localStorage.userPhone);
+      final customerPhone = customerIdentity.phone.trim().isNotEmpty
+          ? customerIdentity.phone.trim()
+          : currentStoragePhone;
       final customerName = customerIdentity.name.trim().isNotEmpty
           ? customerIdentity.name.trim()
           : (localStorage.userName.isNotEmpty
               ? localStorage.userName
               : 'Guest');
-      final customerPhone = customerIdentity.phone.trim().isNotEmpty
-          ? customerIdentity.phone.trim()
-          : localStorage.userPhone;
 
       final deliveryCharges = shop.deliveryCharges.toDouble();
 

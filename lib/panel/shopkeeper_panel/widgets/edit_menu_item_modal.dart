@@ -312,6 +312,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
   }
 
   Future<void> _onSave() async {
+    if (_isLoading) return;
     final name = _nameController.text.trim();
     final priceText = _priceController.text.trim();
     final details = _detailsController.text.trim();
@@ -484,7 +485,8 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         }
       }
 
-      String imageUrl = widget.item.imageUrl;
+      final String oldImageUrl = widget.item.imageUrl;
+      String imageUrl = oldImageUrl;
       // If new image was picked from gallery, upload optimized bytes to Firebase Storage
       if (_selectedImageBytes != null) {
         final uploaded = await firestoreService.uploadImage(
@@ -514,6 +516,15 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
       debugPrint('📝 FIRESTORE UPDATE START -> shops/${widget.shopId}/menuItems/${widget.item.id}');
       await firestoreService.updateMenuItem(widget.shopId, widget.item.id, updateMap);
       debugPrint('✅ FIRESTORE UPDATE COMPLETE');
+
+      // Best-effort cleanup of previous storage image if replaced with a new one
+      if (oldImageUrl.isNotEmpty && oldImageUrl != imageUrl) {
+        try {
+          await firestoreService.deleteStorageImageByUrl(oldImageUrl);
+        } catch (e) {
+          debugPrint('⚠️ Best-effort image cleanup skipped on edit: $e');
+        }
+      }
 
       // Invalidate Riverpod providers to refresh menu & categories instantly
       ref.invalidate(shopMenuItemsProvider(widget.shopId));

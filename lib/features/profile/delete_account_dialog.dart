@@ -18,6 +18,10 @@ Future<bool> showCustomerDeleteAccountFlow(
 ) async {
   final localStorage = ref.read(localStorageServiceProvider);
   final sessionPhone = localStorage.userPhone.trim();
+  final cleanSessionPhone = AppAuthRoles.normalizeCleanPhone(sessionPhone);
+  final maskedPhone = cleanSessionPhone.length >= 2
+      ? '********${cleanSessionPhone.substring(cleanSessionPhone.length - 2)}'
+      : '**********';
 
   // ─── 1. First Confirmation: Enter Phone Number ───────────────────────
   final phoneConfirmed = await showDialog<bool>(
@@ -60,6 +64,15 @@ Future<bool> showCustomerDeleteAccountFlow(
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Registered phone: $maskedPhone',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -205,22 +218,7 @@ Future<bool> showCustomerDeleteAccountFlow(
                         setDialogState(() => isDeleting = true);
 
                         try {
-                          // 1. Delete FCM device token if registered
-                          final notificationService =
-                              ref.read(notificationServiceProvider);
-                          final cachedToken = notificationService.cachedToken;
-                          if (cachedToken != null && cachedToken.isNotEmpty) {
-                            await notificationService
-                                .deleteDeviceToken(cachedToken)
-                                .catchError((Object e) {
-                              debugPrint(
-                                '⚠️ Non-fatal token deletion note: $e',
-                              );
-                            });
-                          }
-
-                          // 2. Clear customer account, profile data, favorites, and session
-                          await localStorage.deleteCustomerAccount();
+                          await clearCustomerSession(ref);
 
                           if (ctx.mounted) {
                             Navigator.of(dialogCtx).pop(true);

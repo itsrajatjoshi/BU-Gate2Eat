@@ -16,6 +16,7 @@ import '../services/notification_service.dart';
 import '../services/order_service.dart';
 import '../services/report_service.dart';
 import '../services/shop_stats_service.dart';
+import '../features/cart/cart_provider.dart';
 import 'constants/app_constants.dart';
 
 export '../models/shop_model.dart' show ShopOrderMethod;
@@ -258,28 +259,104 @@ class CustomerIdentity {
   final String customerId;
   final String name;
   final String phone;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CustomerIdentity &&
+          runtimeType == other.runtimeType &&
+          customerId == other.customerId &&
+          name == other.name &&
+          phone == other.phone;
+
+  @override
+  int get hashCode => customerId.hashCode ^ name.hashCode ^ phone.hashCode;
+
+  @override
+  String toString() =>
+      'CustomerIdentity(customerId: $customerId, name: $name, phone: $phone)';
 }
 
-/// Provider for the current customer's identity.
-/// Easily swappable with Firebase Auth UID in future phases.
-final customerIdentityProvider = Provider<CustomerIdentity>((ref) {
-  try {
-    final localStorage = ref.watch(localStorageServiceProvider);
-    final phone = localStorage.userPhone.trim();
-    final name = localStorage.userName.trim();
-    return CustomerIdentity(
-      customerId: localStorage.customerId,
-      name: name.isNotEmpty ? name : 'Student',
-      phone: phone,
-    );
-  } catch (_) {
-    return const CustomerIdentity(
-      customerId: 'cust_default',
+/// Reactive notifier for current customer identity.
+class CustomerIdentityNotifier extends StateNotifier<CustomerIdentity> {
+  CustomerIdentityNotifier(this._localStorage)
+      : super(_resolveIdentity(_localStorage));
+
+  final LocalStorageService? _localStorage;
+
+  static CustomerIdentity _resolveIdentity(LocalStorageService? storage) {
+    if (storage == null) {
+      // In test or development environments where localStorage may not be overridden
+      return const CustomerIdentity(
+        customerId: 'dummy_customer_1',
+        name: 'Student',
+        phone: '9876543210',
+      );
+    }
+    try {
+      final rawPhone = storage.userPhone.trim();
+      final cleanPhone = AppAuthRoles.normalizeCleanPhone(rawPhone);
+      final name = storage.userName.trim();
+      final id = cleanPhone.isNotEmpty
+          ? 'cust_$cleanPhone'
+          : storage.customerId;
+      return CustomerIdentity(
+        customerId: id,
+        name: name.isNotEmpty ? name : 'Student',
+        phone: cleanPhone,
+      );
+    } catch (_) {
+      return const CustomerIdentity(
+        customerId: '',
+        name: 'Student',
+        phone: '',
+      );
+    }
+  }
+
+  /// Refreshes in-memory identity directly from latest LocalStorage state.
+  void refresh() {
+    state = _resolveIdentity(_localStorage);
+  }
+
+  /// Resets in-memory identity to empty state (used on logout/delete account).
+  void clear() {
+    state = const CustomerIdentity(
+      customerId: '',
       name: 'Student',
-      phone: '9876543210',
+      phone: '',
     );
   }
+}
+
+/// Reactive Provider for the current customer's identity.
+final customerIdentityProvider =
+    StateNotifierProvider<CustomerIdentityNotifier, CustomerIdentity>((ref) {
+  LocalStorageService? localStorage;
+  try {
+    localStorage = ref.watch(localStorageServiceProvider);
+  } catch (_) {
+    // UnimplementedError in widget tests where localStorage is not overridden
+  }
+  return CustomerIdentityNotifier(localStorage);
 });
+
+/// Completely and atomically purges all customer session state from memory and disk.
+Future<void> clearCustomerSession(dynamic ref) async {
+  final localStorage = ref.read(localStorageServiceProvider) as LocalStorageService;
+  final notificationService = ref.read(notificationServiceProvider) as NotificationService;
+  final cachedToken = notificationService.cachedToken;
+  if (cachedToken != null && cachedToken.isNotEmpty) {
+    await notificationService.deleteDeviceToken(cachedToken).catchError((_) {});
+  }
+  await localStorage.logout();
+  ref.read(cartProvider.notifier).clearCart();
+  ref.read(customerIdentityProvider.notifier).clear();
+  ref.invalidate(customerActiveOrdersStreamProvider);
+  ref.invalidate(customerOrderHistoryStreamProvider);
+  ref.invalidate(favoritesProvider);
+  ref.invalidate(currentShopkeeperShopIdProvider);
+}
 
 /// Provider for the ForceUpdate service.
 final forceUpdateServiceProvider = Provider<ForceUpdateService>((ref) {
@@ -401,7 +478,6 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
       }
     }
   }
-
   return results;
 });
 
@@ -414,6 +490,39 @@ final customerActiveOrdersStreamProvider =
   final identity = ref.watch(customerIdentityProvider);
   final dummyOrders = ref.watch(dummyOrdersProvider);
 
+  LocalStorageService? storage;
+  try {
+    storage = ref.watch(localStorageServiceProvider);
+  } catch (_) {}
+
+  // If a real storage session exists, enforce strict session boundaries
+  if (storage != null) {
+    if (storage.userPhone.isEmpty && storage.customerId.isEmpty) {
+      yield const <AppOrder>[];
+      return;
+    }
+    final cleanPhone = AppAuthRoles.normalizeCleanPhone(storage.userPhone);
+    final custId = storage.customerId.isNotEmpty ? storage.customerId : 'cust_$cleanPhone';
+
+    if (!orderService.isAvailable) {
+      yield dummyOrders
+          .where((o) =>
+              (o.status == 'placed' || o.status == 'accepted') &&
+              ((custId.isNotEmpty && o.customerId == custId) ||
+               (cleanPhone.isNotEmpty &&
+                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone)))
+          .toList();
+      return;
+    }
+
+    yield* orderService.watchCustomerActiveOrders(
+      customerId: custId,
+      customerPhone: cleanPhone,
+    );
+    return;
+  }
+
+  // Fallback for widget/unit tests where LocalStorageService is not overridden
   if (!orderService.isAvailable) {
     yield dummyOrders
         .where((o) => o.status == 'placed' || o.status == 'accepted')
@@ -421,11 +530,10 @@ final customerActiveOrdersStreamProvider =
     return;
   }
 
-  yield* orderService
-      .watchCustomerActiveOrders(
-        customerId: identity.customerId,
-        customerPhone: identity.phone,
-      );
+  yield* orderService.watchCustomerActiveOrders(
+    customerId: identity.customerId,
+    customerPhone: identity.phone,
+  );
 });
 
 /// Auto-ticking 1-second stream provider for live order countdowns and active order reconciliation.
@@ -464,6 +572,43 @@ final customerOrderHistoryStreamProvider =
   final identity = ref.watch(customerIdentityProvider);
   final dummyOrders = ref.watch(dummyOrdersProvider);
 
+  LocalStorageService? storage;
+  try {
+    storage = ref.watch(localStorageServiceProvider);
+  } catch (_) {}
+
+  // If a real storage session exists, enforce strict session boundaries
+  if (storage != null) {
+    if (storage.userPhone.isEmpty && storage.customerId.isEmpty) {
+      yield const <AppOrder>[];
+      return;
+    }
+    final cleanPhone = AppAuthRoles.normalizeCleanPhone(storage.userPhone);
+    final custId = storage.customerId.isNotEmpty ? storage.customerId : 'cust_$cleanPhone';
+
+    if (!orderService.isAvailable) {
+      yield dummyOrders
+          .where((o) =>
+              (o.status == 'delivered' ||
+               o.status == 'rejected' ||
+               o.status == 'delivery_expired' ||
+               o.status == 'cancelled') &&
+              ((custId.isNotEmpty && o.customerId == custId) ||
+               (cleanPhone.isNotEmpty &&
+                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone)))
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return;
+    }
+
+    yield* orderService.watchCustomerOrderHistory(
+      customerId: custId,
+      customerPhone: cleanPhone,
+    );
+    return;
+  }
+
+  // Fallback for widget/unit tests where LocalStorageService is not overridden
   if (!orderService.isAvailable) {
     yield dummyOrders
         .where((o) =>
@@ -476,11 +621,10 @@ final customerOrderHistoryStreamProvider =
     return;
   }
 
-  yield* orderService
-      .watchCustomerOrderHistory(
-        customerId: identity.customerId,
-        customerPhone: identity.phone,
-      );
+  yield* orderService.watchCustomerOrderHistory(
+    customerId: identity.customerId,
+    customerPhone: identity.phone,
+  );
 });
 
 /// Real-time stream provider for watching a single order by orderId.
@@ -582,6 +726,10 @@ final dummyOrdersProvider =
 
 class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
   DummyOrdersNotifier() : super([]);
+
+  void setOrders(List<AppOrder> orders) {
+    state = orders;
+  }
 
   void addOrder(AppOrder order) {
     state = [order, ...state];

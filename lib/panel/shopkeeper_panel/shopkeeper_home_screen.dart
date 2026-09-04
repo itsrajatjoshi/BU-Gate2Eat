@@ -25,7 +25,7 @@ enum FoodFilter { all, veg, nonVeg }
 
 class ShopkeeperHomeScreen extends ConsumerStatefulWidget {
   const ShopkeeperHomeScreen({
-    this.shopId = 'rajat_shop',
+    required this.shopId,
     this.isAdmin = false,
     super.key,
   });

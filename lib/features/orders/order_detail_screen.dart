@@ -11,6 +11,7 @@ import '../../core/providers.dart';
 import '../../core/router.dart';
 import '../../core/utils/order_timer_helper.dart';
 import '../../models/order_model.dart';
+import '../../services/local_storage_service.dart';
 import '../../services/whatsapp_service.dart';
 import 'reorder_helper.dart';
 
@@ -39,10 +40,32 @@ class OrderDetailScreen extends ConsumerWidget {
       }
     }
 
+    bool isCustomerAuthorized(AppOrder o) {
+      LocalStorageService? localStorage;
+      try {
+        localStorage = ref.read(localStorageServiceProvider);
+      } catch (_) {
+        return true;
+      }
+      if (localStorage == null) return true;
+
+      final phone = localStorage.userPhone;
+      final isCustomer = !AppAuthRoles.isAdminPhone(phone) && !AppAuthRoles.isShopkeeperPhone(phone);
+      if (isCustomer) {
+        final identity = ref.read(customerIdentityProvider);
+        if (identity.customerId.isNotEmpty &&
+            o.customerId.isNotEmpty &&
+            o.customerId != identity.customerId) {
+          return false;
+        }
+      }
+      return true;
+    }
+
     return orderAsync.when(
       data: (order) {
         final effectiveOrder = order ?? getFallback();
-        if (effectiveOrder == null) {
+        if (effectiveOrder == null || !isCustomerAuthorized(effectiveOrder)) {
           return _buildNotFoundScreen(context);
         }
         return _buildOrderContent(context, ref, effectiveOrder, isDark);
@@ -50,6 +73,9 @@ class OrderDetailScreen extends ConsumerWidget {
       loading: () {
         final fallback = getFallback();
         if (fallback != null) {
+          if (!isCustomerAuthorized(fallback)) {
+            return _buildNotFoundScreen(context);
+          }
           return _buildOrderContent(context, ref, fallback, isDark);
         }
         return Scaffold(
@@ -62,6 +88,9 @@ class OrderDetailScreen extends ConsumerWidget {
       error: (err, _) {
         final fallback = getFallback();
         if (fallback != null) {
+          if (!isCustomerAuthorized(fallback)) {
+            return _buildNotFoundScreen(context);
+          }
           return _buildOrderContent(context, ref, fallback, isDark);
         }
         return Scaffold(
