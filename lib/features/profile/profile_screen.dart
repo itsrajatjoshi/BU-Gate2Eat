@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
-import 'delete_account_dialog.dart';
+
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -371,20 +371,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     trailing: const Icon(Icons.chevron_right, color: AppColors.yummbuRed),
                     onTap: _showLogoutDialog,
                   ),
-                  const Divider(height: 1, thickness: 0.6, color: AppColors.divider),
-                  ListTile(
-                    leading: const Icon(Icons.delete_forever_rounded, color: AppColors.error),
-                    title: const Text(
-                      'Delete Account',
-                      style: TextStyle(
-                        color: AppColors.error,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    subtitle: const Text('Permanently delete your account and data'),
-                    trailing: const Icon(Icons.chevron_right, color: AppColors.error),
-                    onTap: () => showCustomerDeleteAccountFlow(context, ref),
-                  ),
+
                 ],
               ),
             ),

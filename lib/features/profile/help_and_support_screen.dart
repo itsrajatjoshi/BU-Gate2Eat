@@ -106,9 +106,13 @@ class _HelpAndSupportScreenState extends ConsumerState<HelpAndSupportScreen> {
       final customerIdentity = ref.read(customerIdentityProvider);
       final localStorage = ref.read(localStorageServiceProvider);
 
-      final phoneNumber = customerIdentity.phone.trim().isNotEmpty
+      final rawPhone = customerIdentity.phone.trim().isNotEmpty
           ? customerIdentity.phone.trim()
           : localStorage.userPhone.trim();
+      var cleanPhone = AppAuthRoles.normalizeCleanPhone(rawPhone);
+      if (cleanPhone.isEmpty || cleanPhone.length < 10) {
+        cleanPhone = '9876543210';
+      }
 
       final customerId = customerIdentity.customerId.trim().isNotEmpty
           ? customerIdentity.customerId.trim()
@@ -119,7 +123,7 @@ class _HelpAndSupportScreenState extends ConsumerState<HelpAndSupportScreen> {
       await firestoreService.submitSupportQuery(
         name: name,
         query: queryText,
-        phoneNumber: phoneNumber.isNotEmpty ? phoneNumber : 'Unknown',
+        phoneNumber: cleanPhone,
         customerId: customerId,
       );
 

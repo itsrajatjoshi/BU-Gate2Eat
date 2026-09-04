@@ -141,8 +141,8 @@ void main() {
   }
 
   group('Checkpoint 4.5 — STEP 5: Customer Delete Account Suite', () {
-    // 1. Delete Account entry exists for Customer
-    testWidgets('1. Delete Account entry exists for Customer on Help & Support screen and Profile', (tester) async {
+    // 1. Delete Account entry exists for Customer on Help & Support only (removed duplicate from Profile)
+    testWidgets('1. Delete Account entry exists for Customer on Help & Support screen and NOT on Profile', (tester) async {
       setViewport(tester);
       SharedPreferences.setMockInitialValues({
         'user_name': testCustomerName,
@@ -153,7 +153,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final localStorage = LocalStorageService(prefs);
 
-      // Verify on HelpAndSupportScreen
+      // Verify on HelpAndSupportScreen -> EXISTS
       await tester.pumpWidget(
         buildRouterApp(
           homeWidget: const HelpAndSupportScreen(),
@@ -165,7 +165,7 @@ void main() {
       final deleteTileFinder = find.widgetWithText(ListTile, 'Delete Account');
       expect(deleteTileFinder, findsOneWidget);
 
-      // Verify on ProfileScreen
+      // Verify on ProfileScreen -> DOES NOT EXIST
       await tester.pumpWidget(
         buildRouterApp(
           homeWidget: const ProfileScreen(),
@@ -174,7 +174,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(ListTile, 'Delete Account'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'Delete Account'), findsNothing);
+      expect(find.text('Delete Account'), findsNothing);
     });
 
     // 2. Delete Account does NOT exist for Admin
