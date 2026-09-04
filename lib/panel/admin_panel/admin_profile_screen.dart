@@ -429,6 +429,22 @@ class _AdminProfileScreenState extends ConsumerState<AdminProfileScreen> {
                 children: [
                   ListTile(
                     leading: const Icon(
+                      Icons.support_agent_rounded,
+                      color: AppColors.primary,
+                    ),
+                    title: const Text('Customer Queries'),
+                    subtitle: const Text('View customer support queries'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () {
+                      context.push(AppRoutes.adminCustomerQueries);
+                    },
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? AppColors.darkDivider : AppColors.divider,
+                  ),
+                  ListTile(
+                    leading: const Icon(
                       Icons.description_outlined,
                       color: AppColors.primary,
                     ),

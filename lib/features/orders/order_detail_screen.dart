@@ -774,11 +774,21 @@ class OrderDetailScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               // Bill Rows
-              _buildBillRow('Subtotal', order.formattedTotal, isDark),
+              _buildBillRow(
+                'Subtotal',
+                '₹${order.subtotal.toStringAsFixed(0)}',
+                isDark,
+              ),
+              const SizedBox(height: 6),
+              _buildBillRow(
+                'Delivery Charges',
+                order.deliveryCharges > 0
+                    ? '₹${order.deliveryCharges.toStringAsFixed(0)}'
+                    : '₹0',
+                isDark,
+              ),
               const SizedBox(height: 6),
               _buildBillRow('Tax (5%)', 'Included', isDark),
-              const SizedBox(height: 6),
-              _buildBillRow('Delivery / Service', 'Free (Gate 3)', isDark),
               const SizedBox(height: 8),
               const Divider(height: 1, thickness: 0.8),
               const SizedBox(height: 8),

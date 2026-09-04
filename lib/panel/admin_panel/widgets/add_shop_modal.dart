@@ -4,6 +4,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -40,6 +41,8 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
   final TextEditingController _pickupNoteController =
       TextEditingController(text: 'Pickup from Gate 3');
   final TextEditingController _contactController = TextEditingController();
+  final TextEditingController _deliveryChargesController =
+      TextEditingController(text: '0');
 
   bool _isLoading = false;
   bool _isOptimizingImage = false;
@@ -63,6 +66,7 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
     _closeTimeController.dispose();
     _pickupNoteController.dispose();
     _contactController.dispose();
+    _deliveryChargesController.dispose();
     super.dispose();
   }
 
@@ -240,6 +244,10 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
           ? '11:30 PM'
           : Shop.format12hr(_closeTimeController.text.trim());
 
+      final deliveryChargesVal =
+          int.tryParse(_deliveryChargesController.text.trim()) ?? 0;
+      final clampedDeliveryCharges = deliveryChargesVal.clamp(0, 10000);
+
       final newShop = Shop(
         id: shopId,
         name: name,
@@ -260,6 +268,7 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
         deliveryNote: _pickupNoteController.text.trim().isEmpty
             ? 'Pickup from Gate 3'
             : _pickupNoteController.text.trim(),
+        deliveryCharges: clampedDeliveryCharges,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -895,6 +904,22 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
                         prefixText: '+91 ',
                         border: OutlineInputBorder(),
                         isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ─── 7. Delivery Charges (₹) ───────────────────
+                    TextField(
+                      controller: _deliveryChargesController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Delivery Charges (₹)',
+                        hintText: '0 (Free Delivery)',
+                        prefixIcon: Icon(Icons.currency_rupee_rounded),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        helperText: '₹0 means free delivery for customers',
                       ),
                     ),
                     const SizedBox(height: 16),

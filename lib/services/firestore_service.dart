@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' hide Category;
 import '../models/category_model.dart';
 import '../models/menu_item_model.dart';
 import '../models/shop_model.dart';
+import '../models/support_query_model.dart';
 import 'image_optimization_service.dart';
 
 /// Service class for all Firestore operations.
@@ -643,6 +644,82 @@ class FirestoreService {
       return doc.data();
     } catch (_) {
       return null;
+    }
+  }
+
+  // ─── Customer Support Queries ────────────────────────────────
+
+  /// Submits a customer support query to Firestore `supportQueries` collection.
+  Future<String> submitSupportQuery({
+    required String name,
+    required String query,
+    required String phoneNumber,
+    String customerId = '',
+  }) async {
+    final cleanName = name.trim();
+    final cleanQuery = query.trim();
+    final cleanPhone = phoneNumber.trim();
+
+    if (cleanName.isEmpty) {
+      throw ArgumentError('Customer name cannot be empty.');
+    }
+    if (cleanQuery.isEmpty) {
+      throw ArgumentError('Query text cannot be empty.');
+    }
+
+    final docRef = _firestore.collection('supportQueries').doc();
+    final data = {
+      'id': docRef.id,
+      'name': cleanName,
+      'query': cleanQuery,
+      'phoneNumber': cleanPhone,
+      'phone': cleanPhone,
+      'customerId': customerId.trim(),
+      'status': 'unread',
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    debugPrint(
+      '📝 FirestoreService.submitSupportQuery -> creating supportQueries/${docRef.id}',
+    );
+    try {
+      await docRef.set(data);
+      debugPrint(
+        '✅ FirestoreService.submitSupportQuery -> SUCCESS for ${docRef.id}',
+      );
+      return docRef.id;
+    } catch (e, stack) {
+      debugPrint('❌ FirestoreService.submitSupportQuery -> ERROR: $e\n$stack');
+      rethrow;
+    }
+  }
+
+  /// Real-time stream of customer support queries for Admin, sorted newest first.
+  Stream<List<SupportQuery>> watchSupportQueries() {
+    return _firestore
+        .collection('supportQueries')
+        .snapshots()
+        .map((snapshot) {
+      final queries = snapshot.docs
+          .map((doc) => SupportQuery.fromFirestore(doc))
+          .toList();
+      queries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return queries;
+    });
+  }
+
+  /// One-time fetch of customer support queries for Admin, sorted newest first.
+  Future<List<SupportQuery>> getSupportQueries() async {
+    try {
+      final snapshot = await _firestore.collection('supportQueries').get();
+      final queries = snapshot.docs
+          .map((doc) => SupportQuery.fromFirestore(doc))
+          .toList();
+      queries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return queries;
+    } catch (e) {
+      debugPrint('❌ Firestore getSupportQueries error: $e');
+      return [];
     }
   }
 }

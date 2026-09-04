@@ -98,6 +98,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return;
     }
 
+    final deliveryCharges = (currentShop?.deliveryCharges ?? 0).toDouble();
+    final itemsSubtotal = grandTotal;
+    final finalOrderTotal = itemsSubtotal + deliveryCharges;
+
     // 1. Show Confirmation Dialog
     final confirmed = await showDialog<bool>(
       context: context,
@@ -108,7 +112,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Text(
-          'Confirm order from $shopName for ₹${grandTotal.toStringAsFixed(0)}?',
+          'Confirm order from $shopName for ₹${finalOrderTotal.toStringAsFixed(0)}?',
           style: const TextStyle(fontSize: 14.5),
         ),
         actions: [
@@ -139,7 +143,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       final localStorage = ref.read(localStorageServiceProvider);
       final customerIdentity = ref.read(customerIdentityProvider);
       final firestoreService = ref.read(firestoreServiceProvider);
-      final shop = await firestoreService.getShop(shopId);
+      final shop = currentShop ?? await firestoreService.getShop(shopId);
       final deliveryNote = (shop != null && shop.deliveryNote.trim().isNotEmpty)
           ? shop.deliveryNote.trim()
           : 'Bennett University • Gate No. 3';
@@ -176,7 +180,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   cartKey: ci.cartKey,
                 ),)
             .toList(),
-        totalAmount: grandTotal,
+        totalAmount: finalOrderTotal,
+        deliveryCharges: deliveryCharges,
         specialInstructions: _specialInstructionsController.text.trim(),
         deliveryNote: deliveryNote,
         createdAt: now,
@@ -307,7 +312,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
       // Find the shop's contact/order number from Firestore
       final firestoreService = ref.read(firestoreServiceProvider);
-      final shop = await firestoreService.getShop(shopId);
+      final currentShop = ref
+          .read(shopsProvider)
+          .valueOrNull
+          ?.where((s) => s.id == shopId)
+          .firstOrNull;
+      final shop = currentShop ?? await firestoreService.getShop(shopId);
+      final deliveryCharges = (shop?.deliveryCharges ?? 0).toDouble();
 
       final rawTargetNumber = (shop != null && shop.contactNumber.trim().isNotEmpty)
           ? shop.contactNumber.trim()
@@ -362,6 +373,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         userPhone: customerPhone,
         cartItems: snapshotCartItems,
         specialInstructions: snapshotInstructions,
+        deliveryCharges: deliveryCharges,
       );
 
       // Launch WhatsApp
@@ -480,6 +492,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final grandTotal = cartState.grandTotal;
     final shopId = cartState.shopId ?? '';
     final shopName = cartState.shopName ?? (cartItems.isNotEmpty ? cartItems.first.shopName : '');
+    final currentShop = ref
+        .watch(shopsProvider)
+        .valueOrNull
+        ?.where((s) => s.id == shopId)
+        .firstOrNull;
+    final deliveryCharges = currentShop?.deliveryCharges ?? 0;
+    final itemsSubtotal = grandTotal;
+    final finalTotal = itemsSubtotal + deliveryCharges;
 
     final screenWidth = MediaQuery.of(context).size.width;
     final horizontalPadding = screenWidth < 360 ? 12.0 : 16.0;
@@ -762,11 +782,16 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ),
 
                     // Bill Rows
-                    _BillRow(label: 'Subtotal', value: '₹${grandTotal.toStringAsFixed(0)}'),
+                    _BillRow(label: 'Subtotal', value: '₹${itemsSubtotal.toStringAsFixed(0)}'),
+                    const SizedBox(height: 8),
+                    _BillRow(
+                      label: 'Delivery Charges',
+                      value: deliveryCharges > 0
+                          ? '₹$deliveryCharges'
+                          : '₹0',
+                    ),
                     const SizedBox(height: 8),
                     const _BillRow(label: 'Tax (5%)', value: 'Included'),
-                    const SizedBox(height: 8),
-                    const _BillRow(label: 'Service Charge', value: 'Free (Gate 3)'),
                     const SizedBox(height: 12),
                     const Divider(height: 1, thickness: 0.8),
                     const SizedBox(height: 12),
@@ -783,7 +808,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           ),
                         ),
                         Text(
-                          '₹${grandTotal.toStringAsFixed(0)}',
+                          '₹${finalTotal.toStringAsFixed(0)}',
                           style: const TextStyle(
                             fontSize: 21.5,
                             fontWeight: FontWeight.w900,

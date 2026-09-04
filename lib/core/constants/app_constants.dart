@@ -88,6 +88,11 @@ class AppConfig {
 
   // App version
   static const String appVersion = '1.0.7';
+
+  // Support Contacts
+  static const String supportEmail = 'support@yummbu.com';
+  static const String supportInstagram = '@yummbu.app';
+  static const String supportInstagramUrl = 'https://instagram.com/yummbu.app';
 }
 
 // ─── Auth Roles & Phone Mappings ──────────────────────────────

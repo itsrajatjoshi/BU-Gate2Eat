@@ -1,15 +1,15 @@
 // BU Gate2Eat — Profile Screen
-// User/account information screen (Name, Phone, Age, Pickup Info)
+// User/account information screen (Name, Bennett University, Help & Support, etc.)
 // Clearly separated from general app Settings.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
+import 'delete_account_dialog.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -20,20 +20,17 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _nameController;
-  late TextEditingController _phoneController;
 
   @override
   void initState() {
     super.initState();
     final localStorage = ref.read(localStorageServiceProvider);
     _nameController = TextEditingController(text: localStorage.userName);
-    _phoneController = TextEditingController(text: localStorage.userPhone);
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
     super.dispose();
   }
 
@@ -129,10 +126,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final localStorage = ref.watch(localStorageServiceProvider);
     final userName = localStorage.userName.isNotEmpty ? localStorage.userName : 'Student';
-    final userPhone = localStorage.userPhone.isNotEmpty ? '+91 ${localStorage.userPhone}' : '';
 
     final screenWidth = MediaQuery.of(context).size.width;
     final horizontalPadding = screenWidth < 360 ? 12.0 : 16.0;
@@ -230,17 +225,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               fontSize: 17,
                             ),
                       ),
-                      if (userPhone.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          userPhone,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
                       const SizedBox(height: 4),
                       const Row(
                         children: [
@@ -288,31 +272,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             decoration: const InputDecoration(
               labelText: 'Name',
               prefixIcon: Icon(Icons.person_outline_rounded),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // Phone field (read-only permanent identity)
-          TextField(
-            controller: _phoneController,
-            readOnly: true,
-            enableInteractiveSelection: false,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-            decoration: const InputDecoration(
-              labelText: 'Phone Number (Account Identity)',
-              prefixIcon: Icon(Icons.phone_outlined),
-              prefixText: '+91 ',
-              suffixIcon: Tooltip(
-                message: 'Phone number is permanently linked to your account',
-                child: Icon(
-                  Icons.lock_outline_rounded,
-                  size: 18,
-                  color: AppColors.textHint,
-                ),
-              ),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -364,6 +323,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Column(
                 children: [
                   ListTile(
+                    leading: const Icon(Icons.help_outline_rounded, color: AppColors.primary),
+                    title: const Text('Help & Support'),
+                    subtitle: const Text('Contact us or send a query'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      context.push(AppRoutes.helpAndSupport);
+                    },
+                  ),
+                  const Divider(height: 1, thickness: 0.6, color: AppColors.divider),
+                  ListTile(
                     leading: const Icon(Icons.description_outlined, color: AppColors.primary),
                     title: const Text('Privacy Policy'),
                     subtitle: const Text('Read our privacy practices'),
@@ -401,6 +370,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     subtitle: const Text('Sign out from this device'),
                     trailing: const Icon(Icons.chevron_right, color: AppColors.yummbuRed),
                     onTap: _showLogoutDialog,
+                  ),
+                  const Divider(height: 1, thickness: 0.6, color: AppColors.divider),
+                  ListTile(
+                    leading: const Icon(Icons.delete_forever_rounded, color: AppColors.error),
+                    title: const Text(
+                      'Delete Account',
+                      style: TextStyle(
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text('Permanently delete your account and data'),
+                    trailing: const Icon(Icons.chevron_right, color: AppColors.error),
+                    onTap: () => showCustomerDeleteAccountFlow(context, ref),
                   ),
                 ],
               ),

@@ -422,15 +422,15 @@ class AdminOrderDetailsModal extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Delivery / Taxes',
+                'Delivery Charges',
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                 ),
               ),
-              const Text(
-                '₹0',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              Text(
+                '₹${order.deliveryCharges.toStringAsFixed(0)}',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
           ),

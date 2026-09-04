@@ -137,4 +137,15 @@ class LocalStorageService {
     await _prefs.remove(_keyAge);
     await _prefs.remove(_keyCustomerId);
   }
+
+  /// Permanently deletes customer account profile, identity, favorites, and session state.
+  Future<void> deleteCustomerAccount() async {
+    await _prefs.remove(_keyIsOnboarded);
+    await _prefs.remove(_keyName);
+    await _prefs.remove(_keyPhone);
+    await _prefs.remove(_keyAge);
+    await _prefs.remove(_keyCustomerId);
+    await _prefs.remove(_keyFavorites);
+  }
 }
+

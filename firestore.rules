@@ -150,7 +150,35 @@ service cloud.firestore {
       allow delete: if true;
     }
 
-    // ─── 6. DEFAULT DENY ───────────────────────────────────────────────
+    // ─── 6. SUPPORT QUERIES COLLECTION ─────────────────────────────────
+    function isValidSupportQuery() {
+      let data = request.resource.data;
+      return data.get('name', '') is string && data.get('name', '').size() > 0
+        && data.get('query', '') is string && data.get('query', '').size() > 0
+        && data.get('phoneNumber', '') is string && data.get('phoneNumber', '').size() >= 10
+        && data.get('status', '') == 'unread';
+    }
+
+    // Authorizes only the trusted Administrator (AppAuthRoles.adminPhone: '8078643910')
+    function isAuthorizedAdmin() {
+      return request.auth != null && (
+        request.auth.token.get('phone_number', '') == '+918078643910' ||
+        request.auth.token.get('phone_number', '') == '8078643910' ||
+        request.auth.token.get('phone', '') == '8078643910' ||
+        request.auth.token.get('admin', false) == true
+      );
+    }
+
+    match /supportQueries/{queryId} {
+      // Customer submission only with strict validation
+      allow create: if isValidSupportQuery();
+      // Only authorized Administrator can read customer support queries
+      allow read: if isAuthorizedAdmin();
+      // Queries are immutable records
+      allow update, delete: if false;
+    }
+
+    // ─── 7. DEFAULT DENY ───────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

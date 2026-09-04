@@ -14,6 +14,7 @@ class WhatsAppService {
     required String userPhone,
     required List<CartItem> cartItems,
     String? specialInstructions,
+    double deliveryCharges = 0.0,
   }) {
     final buffer = StringBuffer();
 
@@ -42,11 +43,18 @@ class WhatsAppService {
     buffer.writeln();
 
     // Total
-    final grandTotal = cartItems.fold<double>(
+    final itemsSubtotal = cartItems.fold<double>(
       0,
       (sum, item) => sum + item.totalPrice,
     );
-    buffer.writeln('Total: ₹${grandTotal.toStringAsFixed(0)}');
+    if (deliveryCharges > 0) {
+      final grandTotal = itemsSubtotal + deliveryCharges;
+      buffer.writeln('Subtotal: ₹${itemsSubtotal.toStringAsFixed(0)}');
+      buffer.writeln('Delivery Charges: ₹${deliveryCharges.toStringAsFixed(0)}');
+      buffer.writeln('Total: ₹${grandTotal.toStringAsFixed(0)}');
+    } else {
+      buffer.writeln('Total: ₹${itemsSubtotal.toStringAsFixed(0)}');
+    }
     buffer.writeln();
 
     // Special instructions (only if provided)

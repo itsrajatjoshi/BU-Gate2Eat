@@ -82,6 +82,7 @@ class AppOrder {
     required this.items,
     required this.totalAmount,
     required this.createdAt,
+    this.deliveryCharges = 0.0,
     this.customerId = '',
     this.specialInstructions = '',
     this.deliveryNote = 'Bennett University',
@@ -108,6 +109,7 @@ class AppOrder {
   final String customerPhone;
   final List<OrderItem> items;
   final double totalAmount;
+  final double deliveryCharges;
   final String specialInstructions;
   final String deliveryNote;
   final String status;
@@ -160,6 +162,7 @@ class AppOrder {
     String? customerPhone,
     List<OrderItem>? items,
     double? totalAmount,
+    double? deliveryCharges,
     String? specialInstructions,
     String? deliveryNote,
     String? status,
@@ -186,6 +189,7 @@ class AppOrder {
       customerPhone: customerPhone ?? this.customerPhone,
       items: items ?? this.items,
       totalAmount: totalAmount ?? this.totalAmount,
+      deliveryCharges: deliveryCharges ?? this.deliveryCharges,
       specialInstructions: specialInstructions ?? this.specialInstructions,
       deliveryNote: deliveryNote ?? this.deliveryNote,
       status: status ?? this.status,
@@ -215,6 +219,7 @@ class AppOrder {
       'customerPhone': customerPhone,
       'items': items.map((i) => i.toMap()).toList(),
       'subtotal': subtotal,
+      'deliveryCharges': deliveryCharges,
       'totalItems': totalItemCount,
       'grandTotal': totalAmount,
       'totalAmount': totalAmount,
@@ -279,6 +284,10 @@ class AppOrder {
       items: items,
       totalAmount: (map['grandTotal'] as num?)?.toDouble() ??
           (map['totalAmount'] as num?)?.toDouble() ??
+          0.0,
+      deliveryCharges: (map['deliveryCharges'] as num?)?.toDouble() ??
+          (map['deliveryCharge'] as num?)?.toDouble() ??
+          (map['deliveryFee'] as num?)?.toDouble() ??
           0.0,
       specialInstructions: (map['specialInstructions'] as String?) ?? '',
       deliveryNote: (map['deliveryNote'] as String?) ?? 'Bennett University',

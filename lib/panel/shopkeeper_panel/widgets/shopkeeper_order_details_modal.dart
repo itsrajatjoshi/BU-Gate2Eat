@@ -991,7 +991,9 @@ class _ShopkeeperOrderDetailsModalState
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Total Items: ${order.totalItemCount}',
+                              order.deliveryCharges > 0
+                                  ? 'Total Items: ${order.totalItemCount} (Incl. ₹${order.deliveryCharges.toStringAsFixed(0)} delivery)'
+                                  : 'Total Items: ${order.totalItemCount}',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: isDark

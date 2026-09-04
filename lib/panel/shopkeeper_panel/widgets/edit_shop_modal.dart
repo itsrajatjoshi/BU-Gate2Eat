@@ -41,6 +41,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
   late TextEditingController _pickupNoteController;
   late TextEditingController _contactController;
   late TextEditingController _minOrderController;
+  late TextEditingController _deliveryChargesController;
   late bool _isClosedOverride;
   late ShopOrderMethod _selectedOrderMethod;
   bool _isLoading = false;
@@ -75,6 +76,11 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
           ? widget.shop.minimumOrderAmount.toString()
           : '0',
     );
+    _deliveryChargesController = TextEditingController(
+      text: widget.shop.deliveryCharges > 0
+          ? widget.shop.deliveryCharges.toString()
+          : '0',
+    );
     _isClosedOverride = widget.shop.isClosedOverride;
     _selectedOrderMethod = widget.shop.orderMethod;
   }
@@ -89,6 +95,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     _pickupNoteController.dispose();
     _contactController.dispose();
     _minOrderController.dispose();
+    _deliveryChargesController.dispose();
     super.dispose();
   }
 
@@ -308,6 +315,10 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       final minOrderVal = int.tryParse(_minOrderController.text.trim()) ?? 0;
       final clampedMinOrder = minOrderVal.clamp(0, 10000);
 
+      final deliveryChargesVal =
+          int.tryParse(_deliveryChargesController.text.trim()) ?? 0;
+      final clampedDeliveryCharges = deliveryChargesVal.clamp(0, 10000);
+
       await firestoreService.updateShop(widget.shop.id, {
         'name': name,
         'description': _descController.text.trim(),
@@ -322,6 +333,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         'isClosedOverride': _isClosedOverride,
         'orderMethod': _selectedOrderMethod.name,
         'minimumOrderAmount': clampedMinOrder,
+        'deliveryCharges': clampedDeliveryCharges,
       });
       debugPrint('[SHOP] Firestore update completed');
       debugPrint('[SHOP] SAVE SUCCESS');
@@ -1221,6 +1233,29 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                 hintText: '0 (No minimum)',
                 prefixIcon: Icon(Icons.currency_rupee_rounded),
                 helperText: '₹0 means customers can order any amount',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ─── 8b. Delivery Charges Setting ─────────────────────────────
+            Text(
+              'Delivery Charges (₹)',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _deliveryChargesController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                hintText: '0 (Free Delivery)',
+                prefixIcon: Icon(Icons.currency_rupee_rounded),
+                helperText: '₹0 means free delivery for customers',
                 isDense: true,
               ),
             ),

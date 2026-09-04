@@ -8,11 +8,12 @@ import '../models/menu_item_model.dart';
 import '../models/order_model.dart';
 import '../models/shop_model.dart';
 import '../models/shop_stats_model.dart';
+import '../models/support_query_model.dart';
 import '../services/firestore_service.dart';
 import '../services/force_update_service.dart';
 import '../services/local_storage_service.dart';
-import '../services/order_service.dart';
 import '../services/notification_service.dart';
+import '../services/order_service.dart';
 import '../services/report_service.dart';
 import '../services/shop_stats_service.dart';
 import 'constants/app_constants.dart';
@@ -634,6 +635,12 @@ final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
     }
   } catch (_) {}
   return null;
+});
+
+/// Real-time stream provider for customer support queries (Admin only).
+final supportQueriesStreamProvider = StreamProvider<List<SupportQuery>>((ref) {
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  return firestoreService.watchSupportQueries();
 });
 
 

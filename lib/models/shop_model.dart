@@ -45,17 +45,17 @@ class Shop {
     this.shopLogoImageUrl = '',
     this.orderMethod = ShopOrderMethod.whatsapp,
     this.minimumOrderAmount = 0,
+    this.deliveryCharges = 0,
   });
 
-  /// Creates a Shop from a Firestore document snapshot.
-  factory Shop.fromFirestore(DocumentSnapshot doc) {
-    final data = (doc.data() as Map<String, dynamic>?) ?? {};
+  /// Creates a Shop from a Map and optional document ID.
+  factory Shop.fromMap(Map<String, dynamic> data, [String id = '']) {
     final rawKeywords = data['searchKeywords'] as List<dynamic>?;
     final keywords =
         rawKeywords != null ? rawKeywords.map((e) => e.toString()).toList() : <String>[];
 
     return Shop(
-      id: doc.id,
+      id: id,
       name: (data['name'] as String?) ?? '',
       description: (data['description'] as String?) ?? '',
       address: (data['address'] as String?) ?? '',
@@ -70,11 +70,25 @@ class Shop {
       sortOrder: (data['sortOrder'] as int?) ?? 0,
       searchKeywords: keywords,
       deliveryNote: (data['deliveryNote'] as String?) ?? 'Pickup from Gate 3',
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (data['createdAt'] is Timestamp)
+          ? (data['createdAt'] as Timestamp).toDate()
+          : (data['createdAt'] is DateTime ? data['createdAt'] as DateTime : DateTime.now()),
+      updatedAt: (data['updatedAt'] is Timestamp)
+          ? (data['updatedAt'] as Timestamp).toDate()
+          : (data['updatedAt'] is DateTime ? data['updatedAt'] as DateTime : DateTime.now()),
       orderMethod: ShopOrderMethod.fromString(data['orderMethod']),
       minimumOrderAmount: (data['minimumOrderAmount'] as num?)?.toInt() ?? 0,
+      deliveryCharges: ((data['deliveryCharges'] as num?)?.toInt() ??
+              (data['deliveryCharge'] as num?)?.toInt() ??
+              (data['deliveryFee'] as num?)?.toInt() ??
+              0)
+          .clamp(0, 100000),
     );
+  }
+
+  /// Creates a Shop from a Firestore document snapshot.
+  factory Shop.fromFirestore(DocumentSnapshot doc) {
+    return Shop.fromMap((doc.data() as Map<String, dynamic>?) ?? {}, doc.id);
   }
 
   final String id;
@@ -96,6 +110,7 @@ class Shop {
   final DateTime updatedAt;
   final ShopOrderMethod orderMethod;
   final int minimumOrderAmount;
+  final int deliveryCharges;
 
   Shop copyWith({
     String? id,
@@ -117,6 +132,7 @@ class Shop {
     DateTime? updatedAt,
     ShopOrderMethod? orderMethod,
     int? minimumOrderAmount,
+    int? deliveryCharges,
   }) {
     return Shop(
       id: id ?? this.id,
@@ -138,6 +154,7 @@ class Shop {
       updatedAt: updatedAt ?? this.updatedAt,
       orderMethod: orderMethod ?? this.orderMethod,
       minimumOrderAmount: minimumOrderAmount ?? this.minimumOrderAmount,
+      deliveryCharges: deliveryCharges ?? this.deliveryCharges,
     );
   }
 
@@ -205,6 +222,7 @@ class Shop {
       'deliveryNote': deliveryNote,
       'orderMethod': orderMethod.name,
       'minimumOrderAmount': minimumOrderAmount,
+      'deliveryCharges': deliveryCharges,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

@@ -10,10 +10,12 @@ import '../features/onboarding/onboarding_screen.dart';
 import '../features/orders/active_orders_screen.dart';
 import '../features/orders/order_detail_screen.dart';
 import '../features/orders/order_history_screen.dart';
+import '../features/profile/help_and_support_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/shop/shop_detail_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../models/order_model.dart';
+import '../panel/admin_panel/admin_customer_queries_screen.dart';
 import '../panel/admin_panel/admin_main_shell.dart';
 import '../panel/admin_panel/admin_monthly_reports_screen.dart';
 import '../panel/admin_panel/admin_shop_detail_screen.dart';
@@ -35,6 +37,7 @@ class AppRoutes {
   static const String orderDetail = '/order/:orderId';
   static const String orderHistory = '/order-history';
   static const String profile = '/profile';
+  static const String helpAndSupport = '/help-and-support';
   static const String shopkeeper = '/shopkeeper';
   static const String shopkeeperProfile = '/shopkeeper/profile';
   static const String admin = '/admin';
@@ -42,6 +45,7 @@ class AppRoutes {
   static const String adminShopStats = '/admin/stats/:shopId';
   static const String adminShopOrders = '/admin/stats/:shopId/orders';
   static const String adminMonthlyReports = '/admin/reports';
+  static const String adminCustomerQueries = '/admin/customer-queries';
 }
 
 /// GoRouter configuration for the app.
@@ -125,6 +129,10 @@ final GoRouter appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: AppRoutes.adminCustomerQueries,
+      builder: (context, state) => const AdminCustomerQueriesScreen(),
+    ),
+    GoRoute(
       path: AppRoutes.shopDetail,
       builder: (context, state) {
         final shopId = state.pathParameters['shopId'] ?? '';
@@ -154,6 +162,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.profile,
       builder: (context, state) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.helpAndSupport,
+      builder: (context, state) => const HelpAndSupportScreen(),
     ),
     GoRoute(
       path: AppRoutes.shopkeeperProfile,
