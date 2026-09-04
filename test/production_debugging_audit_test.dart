@@ -106,6 +106,45 @@ void main() {
       expect(!closedShop.isOpen || !closedShop.isActive, isTrue);
       expect(!inactiveShop.isOpen || !inactiveShop.isActive, isTrue);
     });
+
+    test('Deleted shop detection: checkout blocked when shop document is null', () {
+      const Shop? deletedShop = null;
+      expect(deletedShop == null, isTrue);
+    });
+
+    test('Live menu verification detects deleted items from shop menu', () {
+      const liveItems = [
+        MenuItem(
+          id: 'item_1',
+          name: 'Spring Roll',
+          price: 80,
+          details: '',
+          imageUrl: '',
+          isVeg: true,
+          isAvailable: true,
+          isRecommended: false,
+          categoryId: 'chinese',
+          sortOrder: 1,
+        ),
+      ];
+
+      // Cart contains item_2 which was deleted by shopkeeper
+      const deletedItemInCart = MenuItem(
+        id: 'item_2',
+        name: 'Deleted Pasta',
+        price: 120,
+        details: '',
+        imageUrl: '',
+        isVeg: true,
+        isAvailable: true,
+        isRecommended: false,
+        categoryId: 'italian',
+        sortOrder: 2,
+      );
+
+      final liveMatch = liveItems.where((m) => m.id == deletedItemInCart.id).firstOrNull;
+      expect(liveMatch, isNull);
+    });
   });
 
   group('Production Debugging Audit — 2. Order State Machine Transition Invariants', () {

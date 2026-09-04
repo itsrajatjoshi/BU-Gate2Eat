@@ -66,8 +66,40 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         ?.where((s) => s.id == shopId)
         .firstOrNull;
 
-    // 1. Check Shop Open & Active Status
-    if (currentShop != null && (!currentShop.isOpen || !currentShop.isActive)) {
+    // 1. Verify Shop Existence and Active/Open Status
+    final shop = currentShop ?? await ref.read(firestoreServiceProvider).getShop(shopId);
+    if (shop == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.store_mall_directory_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '$shopName is no longer available. You cannot place an order.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!shop.isOpen || !shop.isActive) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -98,7 +130,78 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return;
     }
 
-    // 2. Check Item Stock Availability
+    // 2. Check Item Stock Availability against live menu
+    try {
+      final liveMenuItems =
+          await ref.read(firestoreServiceProvider).getMenuItems(shopId);
+      if (liveMenuItems.isNotEmpty) {
+        for (final ci in cartItems) {
+          final liveItem =
+              liveMenuItems.where((m) => m.id == ci.menuItem.id).firstOrNull;
+          if (liveItem == null) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.remove_shopping_cart_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '"${ci.menuItem.name}" is no longer on the menu. Please remove it from your cart.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+          if (!liveItem.isAvailable) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.remove_shopping_cart_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '"${ci.menuItem.name}" is currently out of stock. Please remove it from your cart.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+
     final unavailableItem =
         cartItems.where((ci) => !ci.menuItem.isAvailable).firstOrNull;
     if (unavailableItem != null) {
@@ -133,7 +236,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     }
 
     // 3. Check Minimum Order Amount (source of truth: Firestore shop document)
-    final minOrderAmount = currentShop?.minimumOrderAmount ?? 0;
+    final minOrderAmount = shop.minimumOrderAmount;
     if (minOrderAmount > 0 && grandTotal < minOrderAmount) {
       final diff = (minOrderAmount - grandTotal).ceil();
       if (mounted) {
@@ -166,7 +269,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return;
     }
 
-    final deliveryCharges = (currentShop?.deliveryCharges ?? 0).toDouble();
+    final deliveryCharges = shop.deliveryCharges.toDouble();
     final itemsSubtotal = grandTotal;
     final finalOrderTotal = itemsSubtotal + deliveryCharges;
 
@@ -219,9 +322,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     try {
       final localStorage = ref.read(localStorageServiceProvider);
       final customerIdentity = ref.read(customerIdentityProvider);
-      final firestoreService = ref.read(firestoreServiceProvider);
-      final shop = currentShop ?? await firestoreService.getShop(shopId);
-      final deliveryNote = (shop != null && shop.deliveryNote.trim().isNotEmpty)
+      final deliveryNote = shop.deliveryNote.trim().isNotEmpty
           ? shop.deliveryNote.trim()
           : 'Bennett University • Gate No. 3';
 
@@ -338,8 +439,40 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         ?.where((s) => s.id == shopId)
         .firstOrNull;
 
-    // 1. Check Shop Open & Active Status
-    if (currentShop != null && (!currentShop.isOpen || !currentShop.isActive)) {
+    // 1. Verify Shop Existence and Active/Open Status
+    final shop = currentShop ?? await ref.read(firestoreServiceProvider).getShop(shopId);
+    if (shop == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.store_mall_directory_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '$shopName is no longer available. You cannot place an order.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!shop.isOpen || !shop.isActive) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -370,7 +503,78 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return;
     }
 
-    // 2. Check Item Stock Availability
+    // 2. Check Item Stock Availability against live menu
+    try {
+      final liveMenuItems =
+          await ref.read(firestoreServiceProvider).getMenuItems(shopId);
+      if (liveMenuItems.isNotEmpty) {
+        for (final ci in cartItems) {
+          final liveItem =
+              liveMenuItems.where((m) => m.id == ci.menuItem.id).firstOrNull;
+          if (liveItem == null) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.remove_shopping_cart_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '"${ci.menuItem.name}" is no longer on the menu. Please remove it from your cart.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+          if (!liveItem.isAvailable) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.remove_shopping_cart_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '"${ci.menuItem.name}" is currently out of stock. Please remove it from your cart.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+
     final unavailableItem =
         cartItems.where((ci) => !ci.menuItem.isAvailable).firstOrNull;
     if (unavailableItem != null) {
@@ -405,7 +609,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     }
 
     // 3. Check Minimum Order Amount (source of truth: Firestore shop document)
-    final minOrderAmount = currentShop?.minimumOrderAmount ?? 0;
+    final minOrderAmount = shop.minimumOrderAmount;
     if (minOrderAmount > 0 && grandTotal < minOrderAmount) {
       final diff = (minOrderAmount - grandTotal).ceil();
       if (mounted) {
@@ -454,21 +658,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ? customerIdentity.phone.trim()
           : localStorage.userPhone;
 
-      // Find the shop's contact/order number from Firestore
-      final firestoreService = ref.read(firestoreServiceProvider);
-      final currentShop = ref
-          .read(shopsProvider)
-          .valueOrNull
-          ?.where((s) => s.id == shopId)
-          .firstOrNull;
-      final shop = currentShop ?? await firestoreService.getShop(shopId);
-      final deliveryCharges = (shop?.deliveryCharges ?? 0).toDouble();
+      final deliveryCharges = shop.deliveryCharges.toDouble();
 
-      final rawTargetNumber = (shop != null && shop.contactNumber.trim().isNotEmpty)
+      final rawTargetNumber = shop.contactNumber.trim().isNotEmpty
           ? shop.contactNumber.trim()
-          : (shop != null && shop.orderNumber.trim().isNotEmpty)
+          : (shop.orderNumber.trim().isNotEmpty
               ? shop.orderNumber.trim()
-              : '';
+              : '');
 
       final normalizedNumber =
           WhatsAppService.normalizePhoneNumber(rawTargetNumber);
