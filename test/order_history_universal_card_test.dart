@@ -221,7 +221,7 @@ void main() {
 
       expect(find.byType(UniversalOrderCard), findsNothing);
       expect(find.text('No order history yet'), findsOneWidget);
-      expect(find.text('Your completed, cancelled and rejected orders will appear here.'), findsOneWidget);
+      expect(find.text('Your completed, and rejected orders will appear here.'), findsOneWidget);
     });
   });
 }

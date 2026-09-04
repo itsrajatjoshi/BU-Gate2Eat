@@ -31,6 +31,7 @@ class CartScreen extends ConsumerStatefulWidget {
 class _CartScreenState extends ConsumerState<CartScreen> {
   final _specialInstructionsController = TextEditingController();
   bool _isPlacingOrder = false;
+  bool _isDialogOpen = false;
 
   @override
   void dispose() {
@@ -49,7 +50,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 
   Future<void> _placeAppOrder() async {
-    if (_isPlacingOrder) return;
+    if (_isPlacingOrder || _isDialogOpen) return;
 
     final cartState = ref.read(cartProvider);
     final cartItems = cartState.items;
@@ -59,12 +60,79 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final grandTotal = cartState.grandTotal;
     final shopId = cartState.shopId ?? cartItems.first.shopId;
 
-    // Check Minimum Order Amount (source of truth: Firestore shop document)
     final currentShop = ref
         .read(shopsProvider)
         .valueOrNull
         ?.where((s) => s.id == shopId)
         .firstOrNull;
+
+    // 1. Check Shop Open & Active Status
+    if (currentShop != null && (!currentShop.isOpen || !currentShop.isActive)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.store_mall_directory_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '$shopName is currently closed. You cannot place an order right now.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 2. Check Item Stock Availability
+    final unavailableItem =
+        cartItems.where((ci) => !ci.menuItem.isAvailable).firstOrNull;
+    if (unavailableItem != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.remove_shopping_cart_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '"${unavailableItem.menuItem.name}" is currently out of stock. Please remove it from your cart.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 3. Check Minimum Order Amount (source of truth: Firestore shop document)
     final minOrderAmount = currentShop?.minimumOrderAmount ?? 0;
     if (minOrderAmount > 0 && grandTotal < minOrderAmount) {
       final diff = (minOrderAmount - grandTotal).ceil();
@@ -102,38 +170,47 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final itemsSubtotal = grandTotal;
     final finalOrderTotal = itemsSubtotal + deliveryCharges;
 
-    // 1. Show Confirmation Dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Confirm Order',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Confirm order from $shopName for ₹${finalOrderTotal.toStringAsFixed(0)}?',
-          style: const TextStyle(fontSize: 14.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+    // 4. In-flight guard: prevent double-tap opening multiple dialogs
+    _isDialogOpen = true;
+
+    bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Confirm Order',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+          content: Text(
+            'Confirm order from $shopName for ₹${finalOrderTotal.toStringAsFixed(0)}?',
+            style: const TextStyle(fontSize: 14.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
             ),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      confirmed = false;
+    } finally {
+      _isDialogOpen = false;
+    }
 
     if (confirmed != true || !mounted) return;
 
@@ -255,12 +332,79 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final grandTotal = cartState.grandTotal;
     final shopId = cartState.shopId ?? cartItems.first.shopId;
 
-    // Check Minimum Order Amount (source of truth: Firestore shop document)
     final currentShop = ref
         .read(shopsProvider)
         .valueOrNull
         ?.where((s) => s.id == shopId)
         .firstOrNull;
+
+    // 1. Check Shop Open & Active Status
+    if (currentShop != null && (!currentShop.isOpen || !currentShop.isActive)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.store_mall_directory_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '$shopName is currently closed. You cannot place an order right now.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 2. Check Item Stock Availability
+    final unavailableItem =
+        cartItems.where((ci) => !ci.menuItem.isAvailable).firstOrNull;
+    if (unavailableItem != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.remove_shopping_cart_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '"${unavailableItem.menuItem.name}" is currently out of stock. Please remove it from your cart.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 3. Check Minimum Order Amount (source of truth: Firestore shop document)
     final minOrderAmount = currentShop?.minimumOrderAmount ?? 0;
     if (minOrderAmount > 0 && grandTotal < minOrderAmount) {
       final diff = (minOrderAmount - grandTotal).ceil();

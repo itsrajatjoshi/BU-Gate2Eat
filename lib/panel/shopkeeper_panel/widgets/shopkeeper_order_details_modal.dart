@@ -43,181 +43,201 @@ class ShopkeeperOrderDetailsModal extends ConsumerStatefulWidget {
 class _ShopkeeperOrderDetailsModalState
     extends ConsumerState<ShopkeeperOrderDetailsModal> {
   bool _isSubmitting = false;
+  bool _isDialogOpen = false;
 
   Future<void> _handleAccept() async {
-    if (_isSubmitting) return;
-    final confirmed = await AcceptOrderDialog.show(context, order: widget.order);
-    if (confirmed == true && mounted) {
-      setState(() => _isSubmitting = true);
-      try {
-        await ref.read(orderServiceProvider).updateOrderStatus(
-              widget.order.orderId,
-              'accepted',
-            );
-        ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
-              widget.order.orderId,
-              'accepted',
-            );
+    if (_isSubmitting || _isDialogOpen) return;
+    _isDialogOpen = true;
+    bool? confirmed;
+    try {
+      confirmed = await AcceptOrderDialog.show(context, order: widget.order);
+    } finally {
+      _isDialogOpen = false;
+    }
+    if (confirmed != true || !mounted) return;
 
-        if (mounted) {
-          Navigator.pop(context); // Close bottom sheet
+    setState(() => _isSubmitting = true);
+    try {
+      await ref.read(orderServiceProvider).updateOrderStatus(
+            widget.order.orderId,
+            'accepted',
+          );
+      ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
+            widget.order.orderId,
+            'accepted',
+          );
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Order #${widget.order.orderId} accepted successfully',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              backgroundColor: AppColors.success,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 2),
+      if (mounted) {
+        Navigator.pop(context); // Close bottom sheet
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Order #${widget.order.orderId} accepted successfully',
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _isSubmitting = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Failed to accept order: $e',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              backgroundColor: AppColors.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 4),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-          );
-        }
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to accept order: $e',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     }
   }
 
   Future<void> _handleMarkDelivered() async {
-    if (_isSubmitting) return;
-    final confirmed =
-        await MarkDeliveredDialog.show(context, order: widget.order);
-    if (confirmed == true && mounted) {
-      setState(() => _isSubmitting = true);
+    if (_isSubmitting || _isDialogOpen) return;
+    _isDialogOpen = true;
+    bool? confirmed;
+    try {
+      confirmed = await MarkDeliveredDialog.show(context, order: widget.order);
+    } finally {
+      _isDialogOpen = false;
+    }
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      String deliveryPersonId = '';
+      String deliveryPersonName = '';
       try {
-        String deliveryPersonId = '';
-        String deliveryPersonName = '';
-        try {
-          final localStorage = ref.read(localStorageServiceProvider);
-          deliveryPersonId = localStorage.userPhone.trim();
-          deliveryPersonName = localStorage.userName.trim();
-        } catch (_) {}
+        final localStorage = ref.read(localStorageServiceProvider);
+        deliveryPersonId = localStorage.userPhone.trim();
+        deliveryPersonName = localStorage.userName.trim();
+      } catch (_) {}
 
-        await ref.read(orderServiceProvider).updateOrderStatus(
-              widget.order.orderId,
-              'delivered',
-              deliveryPersonId: deliveryPersonId,
-              deliveryPersonName: deliveryPersonName,
-            );
-        ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
-              widget.order.orderId,
-              'delivered',
-            );
-
-        if (mounted) {
-          Navigator.pop(context); // Close bottom sheet
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Order #${widget.order.orderId} marked as delivered',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              backgroundColor: AppColors.success,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 2),
-            ),
+      await ref.read(orderServiceProvider).updateOrderStatus(
+            widget.order.orderId,
+            'delivered',
+            deliveryPersonName: deliveryPersonName.isNotEmpty
+                ? deliveryPersonName
+                : deliveryPersonId,
+            deliveryPersonId: deliveryPersonId,
           );
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _isSubmitting = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Failed to mark order as delivered: $e',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              backgroundColor: AppColors.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 4),
-            ),
+      ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
+            widget.order.orderId,
+            'delivered',
           );
-        }
+
+      if (mounted) {
+        Navigator.pop(context); // Close bottom sheet
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Order #${widget.order.orderId} marked as delivered',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to mark order as delivered: $e',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     }
   }
 
   Future<void> _handleReject() async {
-    if (_isSubmitting) return;
-    final reason = await RejectOrderDialog.show(context, order: widget.order);
-    if (reason != null && reason.trim().isNotEmpty && mounted) {
-      setState(() => _isSubmitting = true);
-      try {
-        await ref.read(orderServiceProvider).updateOrderStatus(
-              widget.order.orderId,
-              'rejected',
-              rejectionReason: reason.trim(),
-            );
-        ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
-              widget.order.orderId,
-              'rejected',
-              rejectionReason: reason.trim(),
-            );
+    if (_isSubmitting || _isDialogOpen) return;
+    _isDialogOpen = true;
+    String? reason;
+    try {
+      reason = await RejectOrderDialog.show(context, order: widget.order);
+    } finally {
+      _isDialogOpen = false;
+    }
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
 
-        if (mounted) {
-          Navigator.pop(context); // Close bottom sheet
+    setState(() => _isSubmitting = true);
+    try {
+      await ref.read(orderServiceProvider).updateOrderStatus(
+            widget.order.orderId,
+            'rejected',
+            rejectionReason: reason.trim(),
+          );
+      ref.read(dummyOrdersProvider.notifier).updateOrderStatus(
+            widget.order.orderId,
+            'rejected',
+            rejectionReason: reason.trim(),
+          );
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Order #${widget.order.orderId} rejected',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              backgroundColor: AppColors.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 2),
+      if (mounted) {
+        Navigator.pop(context); // Close bottom sheet
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Order #${widget.order.orderId} rejected',
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _isSubmitting = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Failed to reject order: $e',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              backgroundColor: AppColors.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 4),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-          );
-        }
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to reject order: $e',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     }
   }

@@ -160,7 +160,7 @@ class _EmptyOrderHistoryView extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Your completed, cancelled and rejected orders will appear here.',
+              'Your completed, and rejected orders will appear here.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: isDark
                         ? AppColors.darkTextSecondary
