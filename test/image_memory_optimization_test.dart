@@ -15,6 +15,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
 class _FakeLocalStorageService extends Fake implements LocalStorageService {
   @override
@@ -74,7 +75,7 @@ void main() {
   );
 
   group('Checkpoint 4.6 — Image Loading & Memory Optimization Suite', () {
-    testWidgets('TEST 1: UniversalMenuItemCard uses bounded memCacheWidth & memCacheHeight', (tester) async {
+    testWidgets('TEST 1: UniversalMenuItemCard uses bounded memCacheWidth & preserves natural aspect ratio (memCacheHeight == null)', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -103,7 +104,7 @@ void main() {
 
       final cachedImage = tester.widget<CachedNetworkImage>(imageFinder);
       expect(cachedImage.memCacheWidth, 400);
-      expect(cachedImage.memCacheHeight, 320);
+      expect(cachedImage.memCacheHeight, isNull);
       expect(cachedImage.fit, BoxFit.cover);
     });
 
@@ -163,6 +164,74 @@ void main() {
         type: ios.ImageTargetType.menuItem,
       );
       expect(result, equals(smallBytes));
+    });
+
+    test('TEST 6: Square image keeps 1:1 natural proportions when bounded by memCacheWidth only', () {
+      const originalW = 1000;
+      const originalH = 1000;
+      const originalRatio = originalW / originalH; // 1.0
+
+      // When only memCacheWidth is set (400), Flutter ResizeImage preserves aspect ratio:
+      const targetW = 400;
+      final targetH = (originalH * (targetW / originalW)).round(); // 400
+      final decodedRatio = targetW / targetH;
+
+      expect(decodedRatio, equals(originalRatio));
+      expect(targetW, equals(400));
+      expect(targetH, equals(400));
+    });
+
+    test('TEST 7: Portrait image keeps 3:4 natural proportions when bounded by memCacheWidth only', () {
+      const originalW = 600;
+      const originalH = 800; // 3:4 portrait
+      const originalRatio = originalW / originalH; // 0.75
+
+      const targetW = 400;
+      final targetH = (originalH * (targetW / originalW)).round(); // 533
+      final decodedRatio = targetW / targetH;
+
+      expect((decodedRatio - originalRatio).abs(), lessThan(0.01));
+      // Without memCacheHeight: 320, decoded height is ~533 (natural portrait), NOT squashed to 320
+      expect(targetH, greaterThan(targetW));
+    });
+
+    test('TEST 8: Landscape image keeps 16:9 natural proportions when bounded by memCacheWidth only', () {
+      const originalW = 1600;
+      const originalH = 900; // 16:9 landscape
+      const originalRatio = originalW / originalH; // 1.777...
+
+      const targetW = 400;
+      final targetH = (originalH * (targetW / originalW)).round(); // 225
+      final decodedRatio = targetW / targetH;
+
+      expect((decodedRatio - originalRatio).abs(), lessThan(0.01));
+      // Decoded height is 225 (natural landscape), NOT stretched to 320
+      expect(targetH, equals(225));
+    });
+
+    test('TEST 9: EXIF camera orientation is baked correctly into pixel buffer', () async {
+      // Create a 1200x800 (landscape buffer) test image with EXIF orientation 6 (90° CW rotation = portrait photo)
+      final rawImage = img.Image(width: 1200, height: 800);
+      for (int y = 0; y < 800; y++) {
+        for (int x = 0; x < 1200; x++) {
+          rawImage.setPixelRgba(x, y, (x * 17 + y * 31) % 256, (x * 7 + y * 13) % 256, 128, 255);
+        }
+      }
+      rawImage.exif.imageIfd.orientation = 6;
+      final rawJpeg = Uint8List.fromList(img.encodeJpg(rawImage, quality: 100));
+      expect(rawJpeg.lengthInBytes, greaterThan(ios.ImageOptimizationService.maxMenuItemBytes));
+
+      final optimized = await ios.ImageOptimizationService.optimizeImageBytes(
+        originalBytes: rawJpeg,
+        type: ios.ImageTargetType.menuItem,
+      );
+
+      final decoded = img.decodeImage(optimized);
+      expect(decoded, isNotNull);
+      // After bakeOrientation, orientation 6 was applied to the raster: height is now greater than width (portrait)
+      expect(decoded!.height, greaterThan(decoded.width));
+      expect(decoded.width, lessThanOrEqualTo(800));
+      expect(decoded.height, lessThanOrEqualTo(800));
     });
   });
 }

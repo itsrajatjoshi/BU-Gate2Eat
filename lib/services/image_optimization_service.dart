@@ -119,7 +119,9 @@ class ImageOptimizationService {
       return rawBytes;
     }
 
-    img.Image image = decoded;
+    // Bake EXIF orientation so phone camera images are upright before resizing/encoding
+    final oriented = img.bakeOrientation(decoded);
+    img.Image image = oriented;
 
     // 1. Initial dimension resize if larger than maximum target
     if (image.width > initialMaxDimension ||
