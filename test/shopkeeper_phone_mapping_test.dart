@@ -6,10 +6,12 @@ import 'package:bugate2eat_app/core/providers.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
 import 'package:bugate2eat_app/models/shop_model.dart';
 import 'package:bugate2eat_app/panel/shopkeeper_panel/shopkeeper_main_shell.dart';
+import 'package:bugate2eat_app/core/router.dart';
 import 'package:bugate2eat_app/services/local_storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -136,6 +138,132 @@ void main() {
       expect(find.textContaining('9999999999'), findsOneWidget);
       expect(find.text('Return to Login'), findsOneWidget);
       expect(find.byType(BottomNavigationBar), findsNothing);
+    });
+  });
+
+  group('S-003 Step 5 — Sequential Multi-Shop Login & Reactive Resolution Suite', () {
+    test('Sequential logins: A -> logout -> B -> logout -> C -> logout -> D correctly resolves each shopId reactively', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final localStorage = LocalStorageService(prefs);
+
+      final container = ProviderContainer(
+        overrides: [
+          localStorageServiceProvider.overrideWithValue(localStorage),
+        ],
+      );
+
+      final mappings = [
+        {'phone': '8000383993', 'shopId': 'rajat_shop'},
+        {'phone': '8295643910', 'shopId': 'nayan_shop'},
+        {'phone': '8875344034', 'shopId': 'kivisha_shop'},
+        {'phone': '8079065843', 'shopId': 'up16_junction_fast_food'},
+        {'phone': '8745007244', 'shopId': 'up16_junction_fast_food'},
+        {'phone': '8745950335', 'shopId': 'up16_junction_fast_food'},
+        {'phone': '8888822222', 'shopId': 'raja_hotel'},
+        {'phone': '9999922222', 'shopId': 'up16_queens'},
+      ];
+
+      for (final item in mappings) {
+        final phone = item['phone']!;
+        final expectedShopId = item['shopId']!;
+
+        // 1. Login as this shopkeeper
+        await localStorage.saveUserProfile(name: 'Manager', phone: phone);
+        container.read(customerIdentityProvider.notifier).refresh();
+        container.invalidate(currentShopkeeperShopIdProvider);
+
+        expect(
+          container.read(currentShopkeeperShopIdProvider),
+          equals(expectedShopId),
+          reason: 'Phone $phone should resolve to $expectedShopId',
+        );
+
+        // 2. Logout
+        await localStorage.logout();
+        container.read(customerIdentityProvider.notifier).clear();
+        container.invalidate(currentShopkeeperShopIdProvider);
+
+        expect(
+          container.read(currentShopkeeperShopIdProvider),
+          isNull,
+          reason: 'Logged out session should resolve to null',
+        );
+      }
+    });
+
+    testWidgets('Unauthorized-view recovery: Return to Login resets session and permits next valid shop login', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'user_phone': '9999999999',
+        'user_name': 'Unknown Person',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final localStorage = LocalStorageService(prefs);
+
+      final container = ProviderContainer(
+        overrides: [
+          localStorageServiceProvider.overrideWithValue(localStorage),
+          shopActiveOrdersStreamProvider.overrideWith((ref, shopId) => Stream.value(<AppOrder>[])),
+          shopOrderHistoryStreamProvider.overrideWith((ref, shopId) => Stream.value(<AppOrder>[])),
+          shopsProvider.overrideWith((ref) async => <Shop>[]),
+        ],
+      );
+
+      final router = GoRouter(
+        initialLocation: AppRoutes.shopkeeper,
+        routes: [
+          GoRoute(
+            path: AppRoutes.shopkeeper,
+            builder: (context, state) => const ShopkeeperMainShell(),
+          ),
+          GoRoute(
+            path: AppRoutes.onboarding,
+            builder: (context, state) => const Scaffold(body: Text('Onboarding Screen')),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Unauthorized screen is visible
+      expect(find.text('No Shop Assigned'), findsOneWidget);
+      expect(find.text('Return to Login'), findsOneWidget);
+
+      // Tap Return to Login
+      await tester.tap(find.text('Return to Login'));
+      await tester.pumpAndSettle();
+
+      // Successfully navigated to Onboarding Screen
+      expect(find.text('Onboarding Screen'), findsOneWidget);
+
+      // Session was cleared
+      expect(localStorage.userPhone, isEmpty);
+      expect(container.read(currentShopkeeperShopIdProvider), isNull);
+
+      // Now log in as Nayan Shop
+      await localStorage.saveUserProfile(name: 'Nayan Mgr', phone: '8295643910');
+      container.read(customerIdentityProvider.notifier).refresh();
+      container.invalidate(currentShopkeeperShopIdProvider);
+
+      // Verify immediate resolution to nayan_shop
+      expect(container.read(currentShopkeeperShopIdProvider), equals('nayan_shop'));
+
+      // Navigate back to shopkeeper shell
+      router.go(AppRoutes.shopkeeper);
+      await tester.pumpAndSettle();
+
+      // Should now render active tabs, NOT No Shop Assigned
+      expect(find.text('No Shop Assigned'), findsNothing);
+      expect(find.byType(BottomNavigationBar), findsOneWidget);
+      expect(find.text('Orders'), findsWidgets);
     });
   });
 }

@@ -775,6 +775,16 @@ class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
 /// Returns null if phone number is not linked to any registered shopkeeper.
 final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
   try {
+    // 1. Prioritize reactive customerIdentity phone
+    final customerIdentity = ref.watch(customerIdentityProvider);
+    if (customerIdentity.phone.isNotEmpty) {
+      final resolved = AppAuthRoles.getShopIdForPhone(customerIdentity.phone);
+      if (resolved != null && resolved.isNotEmpty) {
+        return resolved;
+      }
+    }
+
+    // 2. Fallback to persisted disk profile via localStorage
     final localStorage = ref.watch(localStorageServiceProvider);
     final phone = localStorage.userPhone;
     final resolvedShopId = AppAuthRoles.getShopIdForPhone(phone);

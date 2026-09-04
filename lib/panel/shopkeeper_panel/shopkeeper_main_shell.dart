@@ -134,7 +134,7 @@ class _ShopkeeperMainShellState extends ConsumerState<ShopkeeperMainShell> {
               const SizedBox(height: AppSpacing.xl),
               ElevatedButton.icon(
                 onPressed: () async {
-                  await localStorage.logout();
+                  await clearCustomerSession(ref);
                   if (context.mounted) {
                     context.go(AppRoutes.onboarding);
                   }

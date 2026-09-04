@@ -48,6 +48,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ref.invalidate(customerActiveOrdersStreamProvider);
     ref.invalidate(customerOrderHistoryStreamProvider);
     ref.invalidate(favoritesProvider);
+    ref.invalidate(currentShopkeeperShopIdProvider);
 
     // Non-blocking notification permission request & token registration
     try {
