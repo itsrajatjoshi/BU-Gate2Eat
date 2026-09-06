@@ -428,3 +428,23 @@ exports.onOrderStatusUpdated = functions.firestore
       return null;
     }
   });
+
+// ─── PART 5: AUTHENTICATION & ROLE CLAIMS FOUNDATION ────────────────────────
+const {
+  normalizeCanonicalPhone,
+  canonicalizeShopId,
+  resolveIdentityForPhone,
+  createCustomTokenForPhone,
+  SERVER_ADMIN_PHONES,
+  SERVER_SHOPKEEPER_PHONE_MAP,
+} = require("./auth_service");
+
+exports.auth = {
+  normalizeCanonicalPhone,
+  canonicalizeShopId,
+  resolveIdentityForPhone,
+  createCustomTokenForPhone,
+  SERVER_ADMIN_PHONES,
+  SERVER_SHOPKEEPER_PHONE_MAP,
+};
+

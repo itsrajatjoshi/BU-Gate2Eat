@@ -77,4 +77,18 @@ class AuthService {
     if (user == null) return null;
     return user.getIdToken(forceRefresh);
   }
+
+  /// Retrieves custom claims associated with the current user's ID token.
+  /// Returns empty map if unauthenticated or on error.
+  Future<Map<String, dynamic>> getCustomClaims({bool forceRefresh = false}) async {
+    final user = currentUser;
+    if (user == null) return const {};
+    try {
+      final tokenResult = await user.getIdTokenResult(forceRefresh);
+      return tokenResult.claims ?? const {};
+    } catch (e) {
+      debugPrint('⚠️ [AuthService] getCustomClaims error: $e');
+      return const {};
+    }
+  }
 }
