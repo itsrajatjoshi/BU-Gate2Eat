@@ -4,9 +4,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/login_screen.dart';
+import '../features/auth/name_input_screen.dart';
+import '../features/auth/otp_screen.dart';
 import '../features/cart/cart_screen.dart';
 import '../features/home/home_screen.dart';
-import '../features/onboarding/onboarding_screen.dart';
 import '../features/orders/active_orders_screen.dart';
 import '../features/orders/order_detail_screen.dart';
 import '../features/orders/order_history_screen.dart';
@@ -30,6 +32,9 @@ class AppRoutes {
 
   static const String splash = '/';
   static const String onboarding = '/onboarding';
+  static const String login = '/login';
+  static const String otp = '/otp';
+  static const String nameInput = '/name-input';
   static const String home = '/home';
   static const String shopDetail = '/shop/:shopId';
   static const String cart = '/cart';
@@ -66,11 +71,48 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.onboarding,
       pageBuilder: (context, state) => CustomTransitionPage(
         key: state.pageKey,
-        child: const OnboardingScreen(),
+        child: const LoginScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 400),
       ),
+    ),
+    GoRoute(
+      path: AppRoutes.login,
+      pageBuilder: (context, state) {
+        final phone = state.extra as String?;
+        return CustomTransitionPage(
+          key: state.pageKey,
+          child: LoginScreen(initialPhone: phone),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              FadeTransition(opacity: animation, child: child),
+          transitionDuration: const Duration(milliseconds: 400),
+        );
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.otp,
+      pageBuilder: (context, state) {
+        final phone = state.extra as String? ?? '';
+        return CustomTransitionPage(
+          key: state.pageKey,
+          child: OtpScreen(phone: phone),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              FadeTransition(opacity: animation, child: child),
+        );
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.nameInput,
+      pageBuilder: (context, state) {
+        final phone = state.extra as String? ?? '';
+        return CustomTransitionPage(
+          key: state.pageKey,
+          child: NameInputScreen(phone: phone),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              FadeTransition(opacity: animation, child: child),
+        );
+      },
     ),
     GoRoute(
       path: AppRoutes.home,

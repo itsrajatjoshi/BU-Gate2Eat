@@ -170,7 +170,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       ),
     );
 
-    // Navigate to home, shopkeeper, admin, or onboarding
+    // Navigate to home, shopkeeper, admin, name input (if OTP verified), or onboarding
     final localStorage = ref.read(localStorageServiceProvider);
     if (localStorage.isOnboarded) {
       final phone = localStorage.userPhone;
@@ -181,6 +181,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       } else {
         context.go(AppRoutes.home);
       }
+    } else if (localStorage.isOtpVerified && localStorage.verifiedPhone.isNotEmpty) {
+      context.go(AppRoutes.nameInput, extra: localStorage.verifiedPhone);
     } else {
       context.go(AppRoutes.onboarding);
     }

@@ -16,6 +16,8 @@ class LocalStorageService {
   static const String _keyAge = 'user_age';
   static const String _keyCustomerId = 'customer_id';
   static const String _keyIsOnboarded = 'is_onboarded';
+  static const String _keyIsOtpVerified = 'is_otp_verified';
+  static const String _keyVerifiedPhone = 'verified_phone';
   static const String _keyThemeMode = 'theme_mode';
 
   final SharedPreferences _prefs;
@@ -26,14 +28,33 @@ class LocalStorageService {
     return LocalStorageService(prefs);
   }
 
-  // ─── Onboarding ─────────────────────────────────────────────
+  // ─── Onboarding & OTP Verification State ─────────────────────
 
-  /// Whether the user has completed the first-time setup.
+  /// Whether the user has completed the first-time setup (entered Name).
   bool get isOnboarded => _prefs.getBool(_keyIsOnboarded) ?? false;
 
   /// Marks onboarding as complete.
   Future<void> setOnboarded() async {
     await _prefs.setBool(_keyIsOnboarded, true);
+  }
+
+  /// Whether the temporary OTP verification succeeded before Name submission.
+  bool get isOtpVerified => _prefs.getBool(_keyIsOtpVerified) ?? false;
+
+  /// Gets the verified phone number for the active onboarding attempt.
+  String get verifiedPhone => _prefs.getString(_keyVerifiedPhone) ?? '';
+
+  /// Persists temporary OTP verification state across app restarts.
+  Future<void> saveOtpVerificationState(String phone) async {
+    final cleanPhone = AppAuthRoles.normalizeCleanPhone(phone);
+    await _prefs.setBool(_keyIsOtpVerified, true);
+    await _prefs.setString(_keyVerifiedPhone, cleanPhone);
+  }
+
+  /// Clears temporary OTP verification state.
+  Future<void> clearOtpVerificationState() async {
+    await _prefs.remove(_keyIsOtpVerified);
+    await _prefs.remove(_keyVerifiedPhone);
   }
 
   // ─── User Profile & Identity ───────────────────────────────
@@ -86,6 +107,7 @@ class LocalStorageService {
       await _prefs.setInt(_keyAge, age);
     }
     await _prefs.setBool(_keyIsOnboarded, true);
+    await clearOtpVerificationState();
   }
 
   /// Updates the user name.
@@ -134,6 +156,7 @@ class LocalStorageService {
 
   /// Clears the user profile, customer identity, and onboarding state, effectively logging out.
   Future<void> logout() async {
+    await clearOtpVerificationState();
     await _prefs.remove(_keyIsOnboarded);
     await _prefs.remove(_keyName);
     await _prefs.remove(_keyPhone);
@@ -144,6 +167,7 @@ class LocalStorageService {
 
   /// Permanently deletes customer account profile, identity, favorites, and session state.
   Future<void> deleteCustomerAccount() async {
+    await clearOtpVerificationState();
     await _prefs.remove(_keyIsOnboarded);
     await _prefs.remove(_keyName);
     await _prefs.remove(_keyPhone);
