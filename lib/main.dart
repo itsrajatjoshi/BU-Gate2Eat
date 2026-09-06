@@ -22,8 +22,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Bound Flutter decoded image cache in RAM to prevent memory bloat on low-end devices
-  PaintingBinding.instance.imageCache.maximumSize = 100;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024; // 50 MB
+  PaintingBinding.instance.imageCache.maximumSize = 150;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 60 * 1024 * 1024; // 60 MB
 
   // Lock orientation to portrait (Mobile only)
   if (!kIsWeb) {

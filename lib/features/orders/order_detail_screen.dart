@@ -249,8 +249,13 @@ class OrderDetailScreen extends ConsumerWidget {
     final isAccepted = order.status == 'accepted';
     final isPlaced = order.status == 'placed';
 
-    final shops = ref.watch(shopsProvider).valueOrNull ?? [];
-    final shop = shops.where((s) => s.id == order.shopId).firstOrNull;
+    final shop = ref.watch(
+      shopsProvider.select(
+        (asyncShops) => asyncShops.valueOrNull
+            ?.where((s) => s.id == order.shopId)
+            .firstOrNull,
+      ),
+    );
     final shopPhone = (shop?.contactNumber.trim().isNotEmpty == true)
         ? shop!.contactNumber.trim()
         : ((shop?.orderNumber.trim().isNotEmpty == true)
@@ -566,6 +571,10 @@ class OrderDetailScreen extends ConsumerWidget {
                                     fit: BoxFit.cover,
                                     memCacheWidth: 120,
                                     memCacheHeight: 120,
+                                    fadeInDuration:
+                                        const Duration(milliseconds: 150),
+                                    fadeOutDuration:
+                                        const Duration(milliseconds: 100),
                                     errorWidget: (_, __, ___) => Container(
                                       width: 44,
                                       height: 44,

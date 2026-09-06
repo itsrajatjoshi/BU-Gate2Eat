@@ -9,6 +9,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
 import '../../core/utils/order_timer_helper.dart';
+import '../../models/order_model.dart';
 import 'widgets/universal_order_card.dart';
 
 class ActiveOrdersScreen extends ConsumerWidget {
@@ -63,8 +64,16 @@ class ActiveOrdersScreen extends ConsumerWidget {
             return _EmptyActiveOrdersView(isDark: isDark);
           }
 
+          final seenIds = <String>{};
+          final uniqueOrders = <AppOrder>[];
+          for (final o in filtered) {
+            if (seenIds.add(o.orderId)) {
+              uniqueOrders.add(o);
+            }
+          }
+
           // Auto-reconciliation check on live boundary
-          for (final order in filtered) {
+          for (final order in uniqueOrders) {
             if (order.isPlaced && OrderTimerHelper.isAcceptExpired(order, now)) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 ref.read(orderServiceProvider).checkAndExpireOrder(order.orderId, customNow: now);
@@ -79,10 +88,10 @@ class ActiveOrdersScreen extends ConsumerWidget {
           return ListView.separated(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            itemCount: filtered.length,
+            itemCount: uniqueOrders.length,
             separatorBuilder: (_, __) => const SizedBox(height: 14),
             itemBuilder: (context, index) {
-              final order = filtered[index];
+              final order = uniqueOrders[index];
               return UniversalOrderCard(
                 order: order,
                 customNow: now,

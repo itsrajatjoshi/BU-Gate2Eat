@@ -53,7 +53,7 @@ class OrderItem {
     final rawOptions = map['selectedOptions'] as List<dynamic>? ?? [];
     final selectedOptions = rawOptions
         .map((o) =>
-            SelectedMenuItemOption.fromMap(Map<String, dynamic>.from(o as Map)))
+            SelectedMenuItemOption.fromMap(Map<String, dynamic>.from(o as Map)),)
         .toList();
 
     return OrderItem(
@@ -61,8 +61,8 @@ class OrderItem {
           (map['menuItemId'] as String?) ??
           '',
       name: (map['name'] as String?) ?? '',
-      price: (map['price'] as num?)?.toInt() ?? 0,
-      quantity: (map['quantity'] as num?)?.toInt() ?? 1,
+      price: ((map['price'] as num?)?.toInt() ?? 0).clamp(0, 1000000),
+      quantity: ((map['quantity'] as num?)?.toInt() ?? 1).clamp(1, 999),
       imageUrl: (map['imageUrl'] as String?) ?? '',
       optionsDescription: (map['optionsDescription'] as String?) ?? '',
       selectedOptions: selectedOptions,
@@ -271,7 +271,7 @@ class AppOrder {
     final rawItems = map['items'] as List<dynamic>? ?? [];
     final items = rawItems
         .map((item) =>
-            OrderItem.fromMap(Map<String, dynamic>.from(item as Map)))
+            OrderItem.fromMap(Map<String, dynamic>.from(item as Map)),)
         .toList();
 
     return AppOrder(
@@ -282,13 +282,15 @@ class AppOrder {
       customerName: (map['customerName'] as String?) ?? '',
       customerPhone: (map['customerPhone'] as String?) ?? '',
       items: items,
-      totalAmount: (map['grandTotal'] as num?)?.toDouble() ??
-          (map['totalAmount'] as num?)?.toDouble() ??
-          0.0,
-      deliveryCharges: (map['deliveryCharges'] as num?)?.toDouble() ??
-          (map['deliveryCharge'] as num?)?.toDouble() ??
-          (map['deliveryFee'] as num?)?.toDouble() ??
-          0.0,
+      totalAmount: ((map['grandTotal'] as num?)?.toDouble() ??
+              (map['totalAmount'] as num?)?.toDouble() ??
+              0.0)
+          .clamp(0.0, 1000000.0),
+      deliveryCharges: ((map['deliveryCharges'] as num?)?.toDouble() ??
+              (map['deliveryCharge'] as num?)?.toDouble() ??
+              (map['deliveryFee'] as num?)?.toDouble() ??
+              0.0)
+          .clamp(0.0, 10000.0),
       specialInstructions: (map['specialInstructions'] as String?) ?? '',
       deliveryNote: (map['deliveryNote'] as String?) ?? 'Bennett University',
       status: (map['status'] as String?) ?? 'placed',

@@ -257,12 +257,16 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final shopsAsync = ref.watch(shopsProvider);
     final categoriesAsync = ref.watch(shopCategoriesProvider(widget.shopId));
     final menuItemsAsync = ref.watch(shopMenuItemsProvider(widget.shopId));
 
-    final shops = shopsAsync.value ?? [];
-    final shop = shops.where((s) => s.id == widget.shopId).firstOrNull ??
+    final shop = ref.watch(
+          shopsProvider.select(
+            (asyncShops) => asyncShops.valueOrNull
+                ?.where((s) => s.id == widget.shopId)
+                .firstOrNull,
+          ),
+        ) ??
         Shop(
           id: widget.shopId,
           name: 'Shop',
@@ -465,6 +469,10 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                                   imageUrl: shop.bannerUrl,
                                   fit: BoxFit.cover,
                                   memCacheWidth: 900,
+                                  fadeInDuration:
+                                      const Duration(milliseconds: 150),
+                                  fadeOutDuration:
+                                      const Duration(milliseconds: 100),
                                   placeholder: (_, __) => Container(
                                     color: AppColors.surfaceVariant,
                                     child: const Icon(
@@ -1077,6 +1085,10 @@ class _CategoryNavWidget extends StatelessWidget {
                             fit: BoxFit.cover,
                             memCacheWidth: 120,
                             memCacheHeight: 120,
+                            fadeInDuration:
+                                const Duration(milliseconds: 150),
+                            fadeOutDuration:
+                                const Duration(milliseconds: 100),
                             placeholder: (context, url) => Container(
                               color: isDark
                                   ? AppColors.darkSurfaceVariant

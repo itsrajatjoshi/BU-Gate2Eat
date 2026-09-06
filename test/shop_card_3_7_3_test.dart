@@ -292,7 +292,7 @@ void main() {
       expect(find.text('Bennett Food Court'), findsOneWidget);
       expect(find.text('8:00 AM – 11:30 PM'), findsOneWidget);
       expect(find.text('9876543210'), findsOneWidget);
-      expect(find.text('OPEN'), findsOneWidget);
+      expect(find.text(shop.isOpen ? 'OPEN' : 'CLOSED'), findsOneWidget);
 
       await tester.tap(find.byType(ShopCard));
       expect(tapped, isTrue);

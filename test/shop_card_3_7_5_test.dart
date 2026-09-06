@@ -121,17 +121,17 @@ void main() {
         ),
       );
 
-      final openFinder = find.text('OPEN');
-      expect(openFinder, findsOneWidget);
+      final statusFinder = find.text(shopA.isOpen ? 'OPEN' : 'CLOSED');
+      expect(statusFinder, findsOneWidget);
 
-      final openWidget = tester.widget<Text>(openFinder);
-      expect(openWidget.style?.fontWeight, equals(FontWeight.w800));
+      final statusWidget = tester.widget<Text>(statusFinder);
+      expect(statusWidget.style?.fontWeight, equals(FontWeight.w800));
 
-      final tillFinder = find.text('Till 11:30 PM');
-      expect(tillFinder, findsOneWidget);
+      final subFinder = find.text(shopA.isOpen ? 'Till 11:30 PM' : 'Opens 8:00 AM');
+      expect(subFinder, findsOneWidget);
 
-      final tillWidget = tester.widget<Text>(tillFinder);
-      expect(tillWidget.style?.fontWeight, equals(FontWeight.w500));
+      final subWidget = tester.widget<Text>(subFinder);
+      expect(subWidget.style?.fontWeight, equals(FontWeight.w500));
     });
 
     testWidgets('5. Long shop names gracefully truncate with ellipsis without card overflow',

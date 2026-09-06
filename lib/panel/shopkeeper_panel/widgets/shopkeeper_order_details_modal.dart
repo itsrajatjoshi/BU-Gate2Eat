@@ -821,6 +821,10 @@ class _ShopkeeperOrderDetailsModalState
                                     fit: BoxFit.cover,
                                     memCacheWidth: 120,
                                     memCacheHeight: 120,
+                                    fadeInDuration:
+                                        const Duration(milliseconds: 150),
+                                    fadeOutDuration:
+                                        const Duration(milliseconds: 100),
                                     placeholder: (_, __) => Container(
                                       width: 44,
                                       height: 44,

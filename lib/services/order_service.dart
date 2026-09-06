@@ -136,7 +136,7 @@ class OrderService {
           return; // Idempotent duplicate protection
         }
         transaction.set(docRef, data);
-      });
+      }).timeout(const Duration(seconds: 15));
     } catch (e) {
       debugPrint('❌ OrderService createOrder error: $e');
       throw OrderServiceException('Failed to create order: $e');
@@ -515,11 +515,15 @@ class OrderService {
             SetOptions(merge: true),
           );
         }
-        // ── Transition: PLACED → CANCELLED (Direct update fallback if called) ──
+        // ── Transition: PLACED → CANCELLED (Customer cancellation before accept) ──
         else if (currentStatus == OrderStatusRules.statusPlaced &&
             newStatus == OrderStatusRules.statusCancelled) {
-          // Rule 1: Delete completely!
-          transaction.delete(orderDocRef);
+          transaction.update(orderDocRef, {
+            'status': OrderStatusRules.statusCancelled,
+            'cancelledAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          // Zero shopStats counters are modified
         } else {
           final Map<String, dynamic> updates = {
             'status': newStatus,
@@ -527,7 +531,7 @@ class OrderService {
           };
           transaction.update(orderDocRef, updates);
         }
-      });
+      }).timeout(const Duration(seconds: 15));
     } on OrderServiceException {
       rethrow;
     } catch (e) {
@@ -536,9 +540,10 @@ class OrderService {
     }
   }
 
-  // ─── Customer Cancellation (Rule 1: Complete Disappearance) ────────────────
+  // ─── Customer Cancellation (Strictly before shopkeeper acceptance) ──────────
 
-  /// Cancels a placed order by completely deleting its Firestore document.
+  /// Cancels a placed order before shopkeeper acceptance.
+  /// Transitions order status to 'cancelled' with server timestamp.
   /// Zero shopStats counters are modified.
   /// Throws [OrderServiceException] if the order is not in 'placed' status.
   Future<void> cancelOrder(String orderId) async {
@@ -559,10 +564,14 @@ class OrderService {
           );
         }
 
-        // Complete disappearance from database
-        transaction.delete(docRef);
-      });
-      debugPrint('✅ OrderService: Placed order #$orderId completely deleted');
+        // Transition status to cancelled with timestamp; preserve document for history
+        transaction.update(docRef, {
+          'status': OrderStatusRules.statusCancelled,
+          'cancelledAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }).timeout(const Duration(seconds: 15));
+      debugPrint('✅ OrderService: Placed order #$orderId cancelled successfully');
     } on OrderServiceException {
       rethrow;
     } catch (e) {

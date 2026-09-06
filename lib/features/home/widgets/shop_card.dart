@@ -349,6 +349,8 @@ class _ShopCardState extends ConsumerState<ShopCard> {
         imageUrl: images.first,
         fit: BoxFit.cover,
         memCacheWidth: 800,
+        fadeInDuration: const Duration(milliseconds: 150),
+        fadeOutDuration: const Duration(milliseconds: 100),
         placeholder: (context, url) => _buildPlaceholder(isDark),
         errorWidget: (context, url, error) => _buildPlaceholder(isDark),
       );
@@ -370,6 +372,8 @@ class _ShopCardState extends ConsumerState<ShopCard> {
               imageUrl: images[index],
               fit: BoxFit.cover,
               memCacheWidth: 800,
+              fadeInDuration: const Duration(milliseconds: 150),
+              fadeOutDuration: const Duration(milliseconds: 100),
               placeholder: (context, url) => _buildPlaceholder(isDark),
               errorWidget: (context, url, error) => _buildPlaceholder(isDark),
             );
@@ -448,6 +452,8 @@ class _ShopCardState extends ConsumerState<ShopCard> {
                 fit: BoxFit.cover,
                 memCacheWidth: 160,
                 memCacheHeight: 160,
+                fadeInDuration: const Duration(milliseconds: 150),
+                fadeOutDuration: const Duration(milliseconds: 100),
                 placeholder: (context, url) =>
                     _buildLogoPlaceholder(isDark, size),
                 errorWidget: (context, url, error) =>

@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/menu_item_model.dart';
-import '../cart/cart_dialog_helper.dart';
 import '../cart/cart_provider.dart';
 import '../shop/shop_detail_screen.dart';
 
@@ -191,7 +190,6 @@ class FavouritesScreen extends ConsumerWidget {
               final item = fav.item;
               final shop = fav.shop;
               final imageUrl = _getEffectiveImageUrl(item);
-              final quantityInCart = cartState.getQuantityForShop(shop.id, item.id);
               final isAvailable = item.isAvailable && shop.isOpen;
               return GestureDetector(
                 onTap: () => showItemDetailBottomSheet(
@@ -235,6 +233,10 @@ class FavouritesScreen extends ConsumerWidget {
                                 fit: BoxFit.cover,
                                 memCacheWidth: 200,
                                 memCacheHeight: 200,
+                                fadeInDuration:
+                                    const Duration(milliseconds: 150),
+                                fadeOutDuration:
+                                    const Duration(milliseconds: 100),
                                 placeholder: (context, url) => Container(
                                   width: 88,
                                   height: 88,

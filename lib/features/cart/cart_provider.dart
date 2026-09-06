@@ -126,7 +126,7 @@ class CartNotifier extends StateNotifier<CartState> {
                   shopName: shopName,
                   selectedOptions: List.unmodifiable(entry.selectedOptions),
                   unitPriceOverride: entry.unitPrice,
-                ))
+                ),)
             .toList(),
       );
     } else {
@@ -230,6 +230,24 @@ class CartNotifier extends StateNotifier<CartState> {
     final updated = [...state.items];
     updated[existingIndex] = updated[existingIndex].copyWith(
       quantity: quantity,
+    );
+    state = state.copyWith(items: updated);
+    _enforceInvariant();
+  }
+
+  /// Updates the unit price override of an existing cart item or variant.
+  void updateItemUnitPrice(String cartKeyOrMenuItemId, int newUnitPrice, [String? shopId]) {
+    final existingIndex = state.items.indexWhere(
+      (item) =>
+          (shopId == null || item.shopId == shopId) &&
+          (item.cartKey == cartKeyOrMenuItemId ||
+              item.menuItem.id == cartKeyOrMenuItemId),
+    );
+    if (existingIndex < 0) return;
+
+    final updated = [...state.items];
+    updated[existingIndex] = updated[existingIndex].copyWith(
+      unitPriceOverride: newUnitPrice,
     );
     state = state.copyWith(items: updated);
     _enforceInvariant();

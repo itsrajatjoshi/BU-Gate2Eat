@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
+import '../../models/order_model.dart';
 import 'widgets/universal_order_card.dart';
 
 class OrderHistoryScreen extends ConsumerWidget {
@@ -45,13 +46,21 @@ class OrderHistoryScreen extends ConsumerWidget {
             return _EmptyOrderHistoryView(isDark: isDark);
           }
 
+          final seenIds = <String>{};
+          final uniqueFiltered = <AppOrder>[];
+          for (final o in filtered) {
+            if (seenIds.add(o.orderId)) {
+              uniqueFiltered.add(o);
+            }
+          }
+
           return ListView.separated(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            itemCount: filtered.length,
+            itemCount: uniqueFiltered.length,
             separatorBuilder: (_, __) => const SizedBox(height: 14),
             itemBuilder: (context, index) {
-              final order = filtered[index];
+              final order = uniqueFiltered[index];
               return UniversalOrderCard(
                 order: order,
                 onTap: () {

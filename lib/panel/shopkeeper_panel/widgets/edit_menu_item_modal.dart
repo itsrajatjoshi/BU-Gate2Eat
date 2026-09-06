@@ -2,6 +2,8 @@
 // Edit Menu Item Modal (Client-Side Auto-Compression <= 300KB & Universal Options Support)
 
 
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -516,18 +518,22 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
       await firestoreService.updateMenuItem(widget.shopId, widget.item.id, updateMap);
       debugPrint('✅ FIRESTORE UPDATE COMPLETE');
 
-      // Best-effort cleanup of previous storage image if replaced with a new one
+      // Best-effort cleanup of previous storage image in background (non-blocking)
       if (oldImageUrl.isNotEmpty && oldImageUrl != imageUrl) {
-        try {
-          await firestoreService.deleteStorageImageByUrl(oldImageUrl);
-        } catch (e) {
-          debugPrint('⚠️ Best-effort image cleanup skipped on edit: $e');
-        }
+        unawaited(
+          firestoreService.deleteStorageImageByUrl(oldImageUrl).catchError(
+            (Object e) {
+              debugPrint('⚠️ Best-effort image cleanup skipped on edit: $e');
+            },
+          ),
+        );
       }
 
-      // Invalidate Riverpod providers to refresh menu & categories instantly
+      // Invalidate menu items to refresh menu immediately
       ref.invalidate(shopMenuItemsProvider(widget.shopId));
-      ref.invalidate(shopCategoriesProvider(widget.shopId));
+      if (categoryId.isNotEmpty && categoryId != widget.item.categoryId) {
+        ref.invalidate(shopCategoriesProvider(widget.shopId));
+      }
 
       if (mounted) {
         Navigator.pop(context);
@@ -874,6 +880,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                         fit: BoxFit.cover,
                         memCacheWidth: 140,
                         memCacheHeight: 140,
+                        fadeInDuration:
+                            const Duration(milliseconds: 150),
+                        fadeOutDuration:
+                            const Duration(milliseconds: 100),
                         placeholder: (context, url) => Container(
                           color: Colors.grey.shade300,
                           child: const Icon(Icons.image, color: Colors.grey),

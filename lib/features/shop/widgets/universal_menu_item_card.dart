@@ -203,8 +203,13 @@ class UniversalMenuItemCard extends ConsumerWidget {
     final displayImageUrl = _getEffectiveImageUrl(item);
     final shouldShowFavorite = showFavorite ?? _isCustomer;
 
-    final favorites = ref.watch(favoritesProvider);
-    final isFavorite = favorites.contains(FavoriteNotifier.buildFavoriteKey(shop.id, item.id));
+    final isFavorite = ref.watch(
+      favoritesProvider.select(
+        (favs) => favs.contains(
+          FavoriteNotifier.buildFavoriteKey(shop.id, item.id),
+        ),
+      ),
+    );
 
     void handleCardTap() {
       if (onTap != null) {
@@ -286,6 +291,10 @@ class UniversalMenuItemCard extends ConsumerWidget {
                                 imageUrl: displayImageUrl,
                                 fit: BoxFit.cover,
                                 memCacheWidth: 400,
+                                fadeInDuration:
+                                    const Duration(milliseconds: 150),
+                                fadeOutDuration:
+                                    const Duration(milliseconds: 100),
                                 placeholder: (_, __) =>
                                     _buildImagePlaceholder(context),
                                 errorWidget: (_, __, ___) =>

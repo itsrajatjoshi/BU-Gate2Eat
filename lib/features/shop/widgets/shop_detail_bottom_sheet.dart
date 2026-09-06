@@ -219,6 +219,10 @@ class _ShopDetailBottomSheet extends ConsumerWidget {
                                       imageUrl: shop.bannerUrl,
                                       fit: BoxFit.cover,
                                       memCacheWidth: 800,
+                                      fadeInDuration:
+                                          const Duration(milliseconds: 150),
+                                      fadeOutDuration:
+                                          const Duration(milliseconds: 100),
                                       placeholder: (_, __) => Container(
                                         color: AppColors.surfaceVariant,
                                         child: const Center(
@@ -559,28 +563,3 @@ class _ShopDetailBottomSheet extends ConsumerWidget {
   }
 }
 
-/// Custom painter for the non-veg red triangle icon.
-class _TrianglePainter extends CustomPainter {
-  const _TrianglePainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final path = Path()
-      ..moveTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _TrianglePainter oldDelegate) =>
-      oldDelegate.color != color;
-}

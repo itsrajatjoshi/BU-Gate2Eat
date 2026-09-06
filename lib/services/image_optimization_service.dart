@@ -127,32 +127,49 @@ class ImageOptimizationService {
     if (image.width > initialMaxDimension ||
         image.height > initialMaxDimension) {
       if (image.width >= image.height) {
-        image = img.copyResize(image, width: initialMaxDimension);
+        image = img.copyResize(
+          image,
+          width: initialMaxDimension,
+          interpolation: img.Interpolation.linear,
+        );
       } else {
-        image = img.copyResize(image, height: initialMaxDimension);
+        image = img.copyResize(
+          image,
+          height: initialMaxDimension,
+          interpolation: img.Interpolation.linear,
+        );
       }
     }
 
-    // 2. Progressive quality stepping loop (85% -> 75% -> 65% -> 50% -> 40%)
-    int quality = 85;
+    // 2. High-performance single-pass encode at quality 75
+    int quality = 75;
     Uint8List encoded =
         Uint8List.fromList(img.encodeJpg(image, quality: quality));
 
-    while (encoded.lengthInBytes > maxAllowedBytes && quality > 40) {
-      quality -= 10;
+    // 3. Fast fallback only if still exceeding max budget
+    if (encoded.lengthInBytes > maxAllowedBytes) {
+      quality = 60;
       encoded = Uint8List.fromList(img.encodeJpg(image, quality: quality));
     }
 
-    // 3. Dimensional scaling loop if quality reduction alone is insufficient
+    // 4. Dimensional scaling fallback if quality reduction alone is insufficient
     int currentDimension = initialMaxDimension;
     while (encoded.lengthInBytes > maxAllowedBytes && currentDimension > 350) {
       currentDimension = (currentDimension * 0.8).toInt();
       if (image.width >= image.height) {
-        image = img.copyResize(image, width: currentDimension);
+        image = img.copyResize(
+          image,
+          width: currentDimension,
+          interpolation: img.Interpolation.linear,
+        );
       } else {
-        image = img.copyResize(image, height: currentDimension);
+        image = img.copyResize(
+          image,
+          height: currentDimension,
+          interpolation: img.Interpolation.linear,
+        );
       }
-      encoded = Uint8List.fromList(img.encodeJpg(image, quality: 70));
+      encoded = Uint8List.fromList(img.encodeJpg(image, quality: 55));
     }
 
     return encoded;

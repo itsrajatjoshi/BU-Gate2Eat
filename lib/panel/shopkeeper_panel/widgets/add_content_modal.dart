@@ -374,6 +374,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
     try {
       final firestoreService = ref.read(firestoreServiceProvider);
       String categoryId = '';
+      bool isCategoryCreated = false;
 
       // If user typed custom category via "+ Other", create it in Firestore
       if (_isOtherCategory) {
@@ -382,6 +383,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           effectiveCategory,
         );
         categoryId = createdCategory.id;
+        isCategoryCreated = true;
       } else {
         // Find existing category ID or generate slug
         final matched = widget.categories
@@ -399,6 +401,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
             effectiveCategory,
           );
           categoryId = createdCategory.id;
+          isCategoryCreated = true;
         }
       }
 
@@ -439,7 +442,9 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
 
       // Invalidate Riverpod providers to refresh menu & categories instantly
       ref.invalidate(shopMenuItemsProvider(widget.shopId));
-      ref.invalidate(shopCategoriesProvider(widget.shopId));
+      if (isCategoryCreated) {
+        ref.invalidate(shopCategoriesProvider(widget.shopId));
+      }
 
       if (mounted) {
         Navigator.pop(context);

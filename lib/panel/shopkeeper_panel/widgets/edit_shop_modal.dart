@@ -1,6 +1,7 @@
 // BU Gate2Eat — Shopkeeper Panel
 // Edit Shop Modal (Auto-Compression <= 800KB & Direct Firebase Storage Upload Flow)
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -265,6 +266,20 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       return;
     }
 
+    final formattedOpen = _openTimeController.text.trim().isEmpty
+        ? '8:00 AM'
+        : Shop.format12hr(_openTimeController.text.trim());
+    final formattedClose = _closeTimeController.text.trim().isEmpty
+        ? '11:30 PM'
+        : Shop.format12hr(_closeTimeController.text.trim());
+
+    final minOrderVal = int.tryParse(_minOrderController.text.trim()) ?? 0;
+    final clampedMinOrder = minOrderVal.clamp(0, 10000);
+
+    final deliveryChargesVal =
+        int.tryParse(_deliveryChargesController.text.trim()) ?? 0;
+    final clampedDeliveryCharges = deliveryChargesVal.clamp(0, 10000);
+
     setState(() => _isLoading = true);
 
     try {
@@ -274,8 +289,30 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       String bannerUrl = widget.shop.bannerUrl;
       String logoUrl = widget.shop.shopLogoImageUrl;
 
-      // 1. If new circle photo was picked and cropped, upload optimized bytes to Firebase Storage
-      if (_selectedLogoBytes != null) {
+      // 1. Upload selected images concurrently if both were picked
+      if (_selectedLogoBytes != null && _selectedBannerBytes != null) {
+        debugPrint('[SHOP] Parallel logo & banner upload started');
+        final results = await Future.wait([
+          firestoreService.uploadImage(
+            shopId: widget.shop.id,
+            path: 'logo',
+            bytes: _selectedLogoBytes!,
+            fileName: 'shop_logo.jpg',
+          ),
+          firestoreService.uploadImage(
+            shopId: widget.shop.id,
+            path: 'banner',
+            bytes: _selectedBannerBytes!,
+            fileName: 'shop_banner.jpg',
+          ),
+        ]);
+        if (results[0] != null && results[0]!.isNotEmpty) {
+          logoUrl = results[0]!;
+        }
+        if (results[1] != null && results[1]!.isNotEmpty) {
+          bannerUrl = results[1]!;
+        }
+      } else if (_selectedLogoBytes != null) {
         debugPrint('[LOGO] upload started');
         final uploadedLogoUrl = await firestoreService.uploadImage(
           shopId: widget.shop.id,
@@ -283,15 +320,10 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
           bytes: _selectedLogoBytes!,
           fileName: 'shop_logo.jpg',
         );
-        debugPrint('[LOGO] upload completed');
         if (uploadedLogoUrl != null && uploadedLogoUrl.isNotEmpty) {
           logoUrl = uploadedLogoUrl;
-          debugPrint('[LOGO] download URL received: $logoUrl');
         }
-      }
-
-      // 2. If new banner was picked from gallery, upload optimized bytes to Firebase Storage
-      if (_selectedBannerBytes != null) {
+      } else if (_selectedBannerBytes != null) {
         debugPrint('[BANNER] upload started');
         final uploadedUrl = await firestoreService.uploadImage(
           shopId: widget.shop.id,
@@ -299,28 +331,12 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
           bytes: _selectedBannerBytes!,
           fileName: 'shop_banner.jpg',
         );
-        debugPrint('[BANNER] upload completed');
         if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
           bannerUrl = uploadedUrl;
-          debugPrint('[BANNER] download URL received: $bannerUrl');
         }
       }
 
       debugPrint('[SHOP] Firestore update started');
-      final formattedOpen = _openTimeController.text.trim().isEmpty
-          ? '8:00 AM'
-          : Shop.format12hr(_openTimeController.text.trim());
-      final formattedClose = _closeTimeController.text.trim().isEmpty
-          ? '11:30 PM'
-          : Shop.format12hr(_closeTimeController.text.trim());
-
-      final minOrderVal = int.tryParse(_minOrderController.text.trim()) ?? 0;
-      final clampedMinOrder = minOrderVal.clamp(0, 10000);
-
-      final deliveryChargesVal =
-          int.tryParse(_deliveryChargesController.text.trim()) ?? 0;
-      final clampedDeliveryCharges = deliveryChargesVal.clamp(0, 10000);
-
       await firestoreService.updateShop(widget.shop.id, {
         'name': name,
         'description': _descController.text.trim(),
@@ -340,21 +356,25 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       debugPrint('[SHOP] Firestore update completed');
       debugPrint('[SHOP] SAVE SUCCESS');
 
-      // 3. Best-effort cleanup of previous storage images ONLY after successful Firestore update
+      // 3. Best-effort background cleanup of previous storage images (non-blocking)
       if (_selectedLogoBytes != null && oldLogoUrl.isNotEmpty && oldLogoUrl != logoUrl) {
-        try {
-          await firestoreService.deleteStorageImageByUrl(oldLogoUrl);
-        } catch (e) {
-          debugPrint('⚠️ [LOGO] Best-effort old logo cleanup skipped: $e');
-        }
+        unawaited(
+          firestoreService.deleteStorageImageByUrl(oldLogoUrl).catchError(
+            (Object e) {
+              debugPrint('⚠️ [LOGO] Best-effort old logo cleanup skipped: $e');
+            },
+          ),
+        );
       }
 
       if (_selectedBannerBytes != null && oldBannerUrl.isNotEmpty && oldBannerUrl != bannerUrl) {
-        try {
-          await firestoreService.deleteStorageImageByUrl(oldBannerUrl);
-        } catch (e) {
-          debugPrint('⚠️ [BANNER] Best-effort old banner cleanup skipped: $e');
-        }
+        unawaited(
+          firestoreService.deleteStorageImageByUrl(oldBannerUrl).catchError(
+            (Object e) {
+              debugPrint('⚠️ [BANNER] Best-effort old banner cleanup skipped: $e');
+            },
+          ),
+        );
       }
 
       // Invalidate provider so home screen and shop detail refresh immediately
@@ -668,6 +688,10 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                                     fit: BoxFit.cover,
                                     memCacheWidth: 120,
                                     memCacheHeight: 120,
+                                    fadeInDuration:
+                                        const Duration(milliseconds: 150),
+                                    fadeOutDuration:
+                                        const Duration(milliseconds: 100),
                                     errorWidget: (_, __, ___) => const Icon(
                                       Icons.store_rounded,
                                       color: AppColors.textHint,
@@ -906,6 +930,10 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                         fit: BoxFit.cover,
                         memCacheWidth: 180,
                         memCacheHeight: 140,
+                        fadeInDuration:
+                            const Duration(milliseconds: 150),
+                        fadeOutDuration:
+                            const Duration(milliseconds: 100),
                         errorWidget: (_, __, ___) => const Icon(
                           Icons.store_rounded,
                           color: AppColors.textHint,

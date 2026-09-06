@@ -4,7 +4,6 @@
 
 import 'dart:async';
 
-import 'package:bugate2eat_app/core/constants/app_constants.dart';
 import 'package:bugate2eat_app/core/providers.dart';
 import 'package:bugate2eat_app/core/utils/network_error_helper.dart';
 import 'package:bugate2eat_app/core/widgets/offline_indicator_wrapper.dart';
@@ -53,8 +52,8 @@ class FakeFirestoreService extends FirestoreService {
         bannerUrl: '',
         contactNumber: '9876543210',
         orderNumber: '9876543210',
-        openTime: '09:00',
-        closeTime: '23:00',
+        openTime: '00:00',
+        closeTime: '23:59',
         isClosedOverride: false,
         isActive: true,
         sortOrder: 1,

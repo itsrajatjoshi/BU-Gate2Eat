@@ -3,6 +3,8 @@
 // Resolves live backend/Firestore menu item images dynamically.
 // Bill summary & Place Order button pinned safely at bottom via bottomNavigationBar + SafeArea.
 
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +34,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   final _specialInstructionsController = TextEditingController();
   bool _isPlacingOrder = false;
   bool _isDialogOpen = false;
+  String? _pendingOrderId;
+  int? _pendingCartHash;
 
   @override
   void dispose() {
@@ -45,8 +49,65 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
     final dateSuffix =
         '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    final microSuffix = (now.microsecond % 1000).toString().padLeft(3, '0');
-    return 'YB-$dateSuffix-$timeSuffix-$microSuffix';
+    final rand = (Random().nextInt(900) + 100).toString();
+    return 'YB-$dateSuffix-$timeSuffix-$rand';
+  }
+
+  /// Calculates authoritative current live unit price for a CartItem from the live Firestore MenuItem snapshot.
+  int _calculateLiveUnitPrice(CartItem ci, MenuItem liveItem) {
+    if (ci.selectedOptions.isEmpty) {
+      return liveItem.price;
+    }
+    int calculatedUnitPrice = 0;
+    bool hasFixed = false;
+    for (final opt in ci.selectedOptions) {
+      final group = liveItem.optionGroups
+          .where((g) => g.id == opt.groupId)
+          .firstOrNull;
+      final liveOpt = group?.options
+          .where((o) => o.id == opt.optionId)
+          .firstOrNull;
+      if (liveOpt != null) {
+        if (group?.groupType == OptionGroupType.fixed ||
+            liveOpt.pricingType == OptionPricingType.fixedPrice) {
+          hasFixed = true;
+          calculatedUnitPrice += liveOpt.price;
+        } else if (liveOpt.price > 0) {
+          calculatedUnitPrice += liveOpt.price;
+        }
+      }
+    }
+    if (!hasFixed) {
+      calculatedUnitPrice += liveItem.price;
+    }
+    return calculatedUnitPrice;
+  }
+
+  /// Verifies that all selected options in the cart item still exist and are valid in the live menu item.
+  bool _areOptionsValid(CartItem ci, MenuItem liveItem) {
+    if (ci.selectedOptions.isEmpty) {
+      if (liveItem.hasOptions && liveItem.optionGroups.any((g) => g.required)) {
+        return false;
+      }
+      return true;
+    }
+    for (final opt in ci.selectedOptions) {
+      final group = liveItem.optionGroups
+          .where((g) => g.id == opt.groupId)
+          .firstOrNull;
+      if (group == null) return false;
+      final liveOpt = group.options
+          .where((o) => o.id == opt.optionId)
+          .firstOrNull;
+      if (liveOpt == null) return false;
+    }
+    for (final group in liveItem.optionGroups) {
+      if (group.required) {
+        final hasSelection = ci.selectedOptions.any((o) => o.groupId == group.id);
+        if (!hasSelection) return false;
+      }
+    }
+    return true;
   }
 
   Future<void> _placeAppOrder() async {
@@ -206,6 +267,74 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             _isDialogOpen = false;
             return;
           }
+
+          // Verify options/variants validity against live catalog
+          if (!_areOptionsValid(ci, liveItem)) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.remove_shopping_cart_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Selected options for "${ci.menuItem.name}" are no longer available. Please update your cart.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+            _isDialogOpen = false;
+            return;
+          }
+
+          // Verify price integrity against live menu
+          final liveUnitPrice = _calculateLiveUnitPrice(ci, liveItem);
+          if (liveUnitPrice != ci.unitPrice) {
+            ref.read(cartProvider.notifier).updateItemUnitPrice(ci.cartKey, liveUnitPrice);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.price_change_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Price for "${ci.menuItem.name}" changed from ₹${ci.unitPrice} to ₹$liveUnitPrice. Cart updated, please review.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFFE58500),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+            _isDialogOpen = false;
+            return;
+          }
         }
       }
     } catch (_) {}
@@ -279,10 +408,46 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return;
     }
 
+    // 4. Validate Customer Identity & Phone Number
+    final localStorage = ref.read(localStorageServiceProvider);
+    final customerIdentity = ref.read(customerIdentityProvider);
+    final currentStoragePhone =
+        AppAuthRoles.normalizeCleanPhone(localStorage.userPhone);
+    final customerPhone = customerIdentity.phone.trim().isNotEmpty
+        ? customerIdentity.phone.trim()
+        : currentStoragePhone;
+    final cleanDigits = customerPhone.replaceAll(RegExp(r'\D'), '');
+    if (cleanDigits.length < 10) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.phone_android_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Please enter a valid 10-digit phone number in your Profile before placing an order.',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+      _isDialogOpen = false;
+      return;
+    }
+
     final deliveryCharges = shop.deliveryCharges.toDouble();
     final itemsSubtotal = grandTotal;
     final finalOrderTotal = itemsSubtotal + deliveryCharges;
 
+    if (!mounted) return;
     bool? confirmed;
     try {
       confirmed = await showDialog<bool>(
@@ -368,7 +533,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           : 'Bennett University • Gate No. 3';
 
       final now = DateTime.now();
-      final orderId = _generateOrderId();
+      final currentCartHash =
+          Object.hash(shopId, cartItems.length, grandTotal);
+      if (_pendingCartHash != currentCartHash) {
+        _pendingOrderId = null;
+      }
+      final orderId = _pendingOrderId ?? _generateOrderId();
+      _pendingOrderId = orderId;
+      _pendingCartHash = currentCartHash;
 
       final currentStoragePhone =
           AppAuthRoles.normalizeCleanPhone(localStorage.userPhone);
@@ -420,6 +592,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       try {
         ref.read(notificationServiceProvider).syncCurrentSessionToken(localStorage: localStorage);
       } catch (_) {}
+
+      // Reset idempotency state on confirmed creation
+      _pendingOrderId = null;
+      _pendingCartHash = null;
 
       // 4. Temporary UI bridge: update local dummy state so existing screens reflect it
       ref.read(dummyOrdersProvider.notifier).addOrder(newOrder);
@@ -614,6 +790,72 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ],
                   ),
                   backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+
+          // Verify options/variants validity against live catalog
+          if (!_areOptionsValid(ci, liveItem)) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.remove_shopping_cart_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Selected options for "${ci.menuItem.name}" are no longer available. Please update your cart.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+
+          // Verify price integrity against live menu
+          final liveUnitPrice = _calculateLiveUnitPrice(ci, liveItem);
+          if (liveUnitPrice != ci.unitPrice) {
+            ref.read(cartProvider.notifier).updateItemUnitPrice(ci.cartKey, liveUnitPrice);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.price_change_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Price for "${ci.menuItem.name}" changed from ₹${ci.unitPrice} to ₹$liveUnitPrice. Cart updated, please review.',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFFE58500),
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -882,11 +1124,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final grandTotal = cartState.grandTotal;
     final shopId = cartState.shopId ?? '';
     final shopName = cartState.shopName ?? (cartItems.isNotEmpty ? cartItems.first.shopName : '');
-    final currentShop = ref
-        .watch(shopsProvider)
-        .valueOrNull
-        ?.where((s) => s.id == shopId)
-        .firstOrNull;
+    final currentShop = ref.watch(
+      shopsProvider.select(
+        (asyncShops) => asyncShops.valueOrNull
+            ?.where((s) => s.id == shopId)
+            .firstOrNull,
+      ),
+    );
     final deliveryCharges = currentShop?.deliveryCharges ?? 0;
     final itemsSubtotal = grandTotal;
     final finalTotal = itemsSubtotal + deliveryCharges;
@@ -1155,21 +1399,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         vertical: 9,
                       ),
                     ),
-                    Builder(
-                      builder: (context) {
-                        final currentShop = ref
-                            .watch(shopsProvider)
-                            .valueOrNull
-                            ?.where((s) => s.id == shopId)
-                            .firstOrNull;
-                        final minOrderAmount =
-                            currentShop?.minimumOrderAmount ?? 0;
-                        if (minOrderAmount > 0) {
-                          return const SizedBox(height: 12);
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
+                    if ((currentShop?.minimumOrderAmount ?? 0) > 0)
+                      const SizedBox(height: 12),
 
                     // Bill Rows
                     _BillRow(label: 'Subtotal', value: '₹${itemsSubtotal.toStringAsFixed(0)}'),
@@ -1212,11 +1443,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     // Place Order Action Button(s) based on Shop's Order Method
                     Builder(
                       builder: (context) {
-                        final currentShop = ref
-                            .watch(shopsProvider)
-                            .valueOrNull
-                            ?.where((s) => s.id == shopId)
-                            .firstOrNull;
                         final orderMethod = currentShop?.orderMethod ??
                             ShopOrderMethod.whatsapp;
 
@@ -1480,6 +1706,8 @@ class _CartItemRow extends StatelessWidget {
                     fit: BoxFit.cover,
                     memCacheWidth: 180,
                     memCacheHeight: 180,
+                    fadeInDuration: const Duration(milliseconds: 150),
+                    fadeOutDuration: const Duration(milliseconds: 100),
                     placeholder: (_, __) => Container(
                       color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
                       child: const Center(
@@ -1817,6 +2045,8 @@ class _SuggestionRow extends StatelessWidget {
                       fit: BoxFit.cover,
                       memCacheWidth: 140,
                       memCacheHeight: 140,
+                      fadeInDuration: const Duration(milliseconds: 150),
+                      fadeOutDuration: const Duration(milliseconds: 100),
                       placeholder: (_, __) => Container(
                         color: isDark ? AppColors.darkSurfaceVariant : Colors.grey.shade200,
                         child: const Center(

@@ -555,6 +555,10 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
                                       imageUrl: shop.bannerUrl,
                                       fit: BoxFit.cover,
                                       memCacheWidth: 900,
+                                      fadeInDuration:
+                                          const Duration(milliseconds: 150),
+                                      fadeOutDuration:
+                                          const Duration(milliseconds: 100),
                                       placeholder: (_, __) => Container(
                                         color: AppColors.surfaceVariant,
                                         child: const Icon(
@@ -1231,6 +1235,10 @@ class _CategoryNavWidget extends StatelessWidget {
                                   fit: BoxFit.cover,
                                   memCacheWidth: 120,
                                   memCacheHeight: 120,
+                                  fadeInDuration:
+                                      const Duration(milliseconds: 150),
+                                  fadeOutDuration:
+                                      const Duration(milliseconds: 100),
                                   placeholder: (context, url) => Container(
                                     color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                                     child: const Icon(Icons.fastfood_rounded, size: 22, color: Colors.grey),
@@ -2020,6 +2028,10 @@ class _ItemDetailBottomSheetState extends ConsumerState<_ItemDetailBottomSheet> 
                                     imageUrl: widget.displayImageUrl,
                                     fit: BoxFit.cover,
                                     memCacheWidth: 800,
+                                    fadeInDuration:
+                                        const Duration(milliseconds: 150),
+                                    fadeOutDuration:
+                                        const Duration(milliseconds: 100),
                                     placeholder: (_, __) => Container(
                                       color: isDark ? AppColors.darkSurfaceVariant : Colors.grey[200],
                                       child: const Icon(

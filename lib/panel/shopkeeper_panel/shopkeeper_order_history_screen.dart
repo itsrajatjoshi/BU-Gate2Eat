@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers.dart';
 import '../../../core/router.dart';
+import '../../../core/utils/network_error_helper.dart';
 import '../../../models/order_model.dart';
 import '../../features/orders/widgets/universal_order_card.dart';
 import 'widgets/shopkeeper_order_details_modal.dart';
@@ -124,9 +125,13 @@ class _ShopkeeperOrderHistoryScreenState
             return _EmptyOrderHistoryView(isDark: isDark);
           }
 
-          final historyOrders = allHistoryOrders
-              .where((o) => _matchesOrderSearch(o, _searchQuery))
-              .toList();
+          final seenIds = <String>{};
+          final historyOrders = <AppOrder>[];
+          for (final o in allHistoryOrders) {
+            if (_matchesOrderSearch(o, _searchQuery) && seenIds.add(o.orderId)) {
+              historyOrders.add(o);
+            }
+          }
 
           return ListView(
             physics: const BouncingScrollPhysics(),
@@ -293,7 +298,10 @@ class _ShopkeeperOrderHistoryScreenState
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  err.toString(),
+                  NetworkErrorHelper.toUserFriendlyMessage(
+                    err,
+                    defaultPrefix: "Couldn't load order history",
+                  ),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
