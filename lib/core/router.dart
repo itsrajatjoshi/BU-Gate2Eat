@@ -2,6 +2,7 @@
 // GoRouter setup with splash → onboarding → home flow
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/login_screen.dart';
@@ -25,6 +26,9 @@ import '../panel/admin_panel/admin_shop_orders_screen.dart';
 import '../panel/admin_panel/admin_shop_stats_detail_screen.dart';
 import '../panel/shopkeeper_panel/shopkeeper_main_shell.dart';
 import '../panel/shopkeeper_panel/shopkeeper_profile_screen.dart';
+import '../services/local_storage_service.dart';
+import 'constants/app_constants.dart';
+import 'providers.dart';
 
 /// App route paths.
 class AppRoutes {
@@ -53,9 +57,48 @@ class AppRoutes {
   static const String adminCustomerQueries = '/admin/customer-queries';
 }
 
+/// Central GoRouter authorization redirect guard protecting /admin* and /shopkeeper* route hierarchies.
+String? centralRouteGuard(BuildContext context, GoRouterState state) {
+  final path = state.uri.path;
+
+  final isAdminRoute = path == AppRoutes.admin || path.startsWith('${AppRoutes.admin}/');
+  final isShopkeeperRoute = path == AppRoutes.shopkeeper || path.startsWith('${AppRoutes.shopkeeper}/');
+
+  if (!isAdminRoute && !isShopkeeperRoute) {
+    return null;
+  }
+
+  LocalStorageService? storage;
+  try {
+    storage = ProviderScope.containerOf(context, listen: false).read(localStorageServiceProvider);
+  } catch (_) {
+    storage = LocalStorageService.current;
+  }
+
+  final phone = storage?.userPhone.trim() ?? '';
+  final hasSession = storage != null && phone.isNotEmpty && storage.isOnboarded;
+
+  if (isAdminRoute) {
+    if (AppAuthRoles.isAdminPhone(phone)) {
+      return null;
+    }
+    return hasSession ? AppRoutes.home : AppRoutes.onboarding;
+  }
+
+  if (isShopkeeperRoute) {
+    if (AppAuthRoles.isShopkeeperPhone(phone)) {
+      return null;
+    }
+    return hasSession ? AppRoutes.home : AppRoutes.onboarding;
+  }
+
+  return null;
+}
+
 /// GoRouter configuration for the app.
 final GoRouter appRouter = GoRouter(
   initialLocation: AppRoutes.splash,
+  redirect: centralRouteGuard,
   routes: [
     GoRoute(
       path: AppRoutes.splash,

@@ -11,12 +11,17 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/support_query_model.dart';
 import 'widgets/admin_query_details_modal.dart';
+import 'widgets/admin_unauthorized_screen.dart';
 
 class AdminCustomerQueriesScreen extends ConsumerWidget {
   const AdminCustomerQueriesScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!isAdminAuthorized(ref)) {
+      return const AdminUnauthorizedScreen();
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final queriesAsync = ref.watch(supportQueriesStreamProvider);
 

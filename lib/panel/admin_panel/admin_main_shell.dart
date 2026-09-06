@@ -3,18 +3,21 @@
 // Visual styling identical to User App HomeScreen & ShopkeeperMainShell
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'admin_home_screen.dart';
 import 'admin_order_stats_screen.dart';
 import 'admin_profile_screen.dart';
+import 'widgets/admin_unauthorized_screen.dart';
 
-class AdminMainShell extends StatefulWidget {
+class AdminMainShell extends ConsumerStatefulWidget {
   const AdminMainShell({super.key});
 
   @override
-  State<AdminMainShell> createState() => _AdminMainShellState();
+  ConsumerState<AdminMainShell> createState() => _AdminMainShellState();
 }
 
-class _AdminMainShellState extends State<AdminMainShell> {
+class _AdminMainShellState extends ConsumerState<AdminMainShell> {
   int _currentIndex = 0;
 
   void _onTabTapped(int index) {
@@ -25,6 +28,10 @@ class _AdminMainShellState extends State<AdminMainShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (!isAdminAuthorized(ref)) {
+      return const AdminUnauthorizedScreen();
+    }
+
     final screens = [
       AdminHomeScreen(onProfileTap: () => _onTabTapped(2)),
       const AdminOrderStatsScreen(),

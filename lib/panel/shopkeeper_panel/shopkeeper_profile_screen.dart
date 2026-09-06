@@ -133,6 +133,27 @@ class _ShopkeeperProfileScreenState
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final localStorage = ref.watch(localStorageServiceProvider);
+    final phone = localStorage.userPhone;
+
+    if (!AppAuthRoles.isShopkeeperPhone(phone)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          final targetRoute =
+              phone.isNotEmpty ? AppRoutes.profile : AppRoutes.onboarding;
+          try {
+            context.go(targetRoute);
+          } catch (_) {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          }
+        }
+      });
+      return const Scaffold(
+        body: SizedBox.shrink(),
+      );
+    }
+
     final activeShopId = ref.watch(currentShopkeeperShopIdProvider);
     final shopsAsync = ref.watch(shopsProvider);
     final currentShop = shopsAsync.valueOrNull

@@ -13,6 +13,7 @@ import '../../features/orders/widgets/universal_order_card.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import 'widgets/admin_order_details_modal.dart';
+import 'widgets/admin_unauthorized_screen.dart';
 
 class AdminShopOrdersScreen extends ConsumerStatefulWidget {
   const AdminShopOrdersScreen({
@@ -54,6 +55,10 @@ class _AdminShopOrdersScreenState extends ConsumerState<AdminShopOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!isAdminAuthorized(ref)) {
+      return const AdminUnauthorizedScreen();
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final shopsAsync = ref.watch(shopsProvider);
     final ordersAsync = ref.watch(shopOrdersStreamProvider(widget.shopId));

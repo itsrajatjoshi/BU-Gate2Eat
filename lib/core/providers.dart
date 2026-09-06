@@ -1,14 +1,17 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/cart/cart_provider.dart';
 import '../models/category_model.dart';
 import '../models/menu_item_model.dart';
 import '../models/order_model.dart';
 import '../models/shop_model.dart';
 import '../models/shop_stats_model.dart';
 import '../models/support_query_model.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/force_update_service.dart';
 import '../services/local_storage_service.dart';
@@ -16,10 +19,26 @@ import '../services/notification_service.dart';
 import '../services/order_service.dart';
 import '../services/report_service.dart';
 import '../services/shop_stats_service.dart';
-import '../features/cart/cart_provider.dart';
 import 'constants/app_constants.dart';
 
 export '../models/shop_model.dart' show ShopOrderMethod;
+
+/// Provider for the Authentication service (singleton).
+final authServiceProvider = Provider<AuthService>((ref) {
+  return AuthService();
+});
+
+/// Stream of authentication state changes (fires when Firebase User signs in or out).
+final authStateChangesProvider = StreamProvider<User?>((ref) {
+  final authService = ref.watch(authServiceProvider);
+  return authService.authStateChanges();
+});
+
+/// Current authenticated Firebase user (null if signed out).
+final currentFirebaseUserProvider = Provider<User?>((ref) {
+  final authState = ref.watch(authStateChangesProvider);
+  return authState.asData?.value;
+});
 
 /// Provider for the Firestore service (singleton).
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
@@ -343,6 +362,14 @@ final customerIdentityProvider =
 
 /// Completely and atomically purges all customer session state from memory and disk.
 Future<void> clearCustomerSession(dynamic ref) async {
+  // Safe Firebase Auth signOut failsafe
+  try {
+    final authService = ref.read(authServiceProvider);
+    await authService.signOut();
+  } catch (_) {
+    // Non-blocking failsafe: local session clearing must proceed even if auth service is unavailable
+  }
+
   final localStorage = ref.read(localStorageServiceProvider) as LocalStorageService;
   final notificationService = ref.read(notificationServiceProvider) as NotificationService;
   final cachedToken = notificationService.cachedToken;

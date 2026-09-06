@@ -11,6 +11,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/shop_model.dart';
 import '../../models/shop_stats_model.dart';
+import 'widgets/admin_unauthorized_screen.dart';
 
 class AdminShopStatsDetailScreen extends ConsumerStatefulWidget {
   const AdminShopStatsDetailScreen({
@@ -101,6 +102,10 @@ class _AdminShopStatsDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (!isAdminAuthorized(ref)) {
+      return const AdminUnauthorizedScreen();
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final shopsAsync = ref.watch(shopsProvider);
     final statsAsync = ref.watch(shopStatsStreamProvider(widget.shopId));

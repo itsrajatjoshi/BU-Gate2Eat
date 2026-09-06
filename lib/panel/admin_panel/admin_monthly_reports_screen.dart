@@ -15,6 +15,7 @@ import '../../models/shop_model.dart';
 import '../../models/shop_stats_model.dart';
 import '../../services/report_service.dart';
 import 'widgets/admin_order_details_modal.dart';
+import 'widgets/admin_unauthorized_screen.dart';
 
 class AdminMonthlyReportsScreen extends ConsumerStatefulWidget {
   const AdminMonthlyReportsScreen({
@@ -93,6 +94,10 @@ class _AdminMonthlyReportsScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (!isAdminAuthorized(ref)) {
+      return const AdminUnauthorizedScreen();
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final shopsAsync = ref.watch(shopsProvider);
 

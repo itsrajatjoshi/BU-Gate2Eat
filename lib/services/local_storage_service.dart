@@ -9,7 +9,12 @@ import '../core/constants/app_constants.dart';
 /// User profile is stored on-device only (no server-side accounts).
 class LocalStorageService {
   /// Creates an instance with an initialized SharedPreferences.
-  LocalStorageService(this._prefs);
+  LocalStorageService(this._prefs) {
+    current = this;
+  }
+
+  /// Globally accessible active instance for synchronous route redirects and security checks.
+  static LocalStorageService? current;
 
   static const String _keyName = 'user_name';
   static const String _keyPhone = 'user_phone';
@@ -25,7 +30,9 @@ class LocalStorageService {
   /// Factory method to create an instance with initialized SharedPreferences.
   static Future<LocalStorageService> create() async {
     final prefs = await SharedPreferences.getInstance();
-    return LocalStorageService(prefs);
+    final service = LocalStorageService(prefs);
+    current = service;
+    return service;
   }
 
   // ─── Onboarding & OTP Verification State ─────────────────────
