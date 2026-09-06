@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers.dart';
+import '../../../../core/utils/network_error_helper.dart';
 import '../../../../core/utils/order_timer_helper.dart';
 import '../../../../models/order_model.dart';
 import '../../../../services/whatsapp_service.dart';
@@ -91,7 +92,10 @@ class _ShopkeeperOrderDetailsModalState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to accept order: $e',
+              NetworkErrorHelper.toUserFriendlyMessage(
+                e,
+                defaultPrefix: "Couldn't accept order",
+              ),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             backgroundColor: AppColors.error,
@@ -164,7 +168,10 @@ class _ShopkeeperOrderDetailsModalState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to mark order as delivered: $e',
+              NetworkErrorHelper.toUserFriendlyMessage(
+                e,
+                defaultPrefix: "Couldn't mark order as delivered",
+              ),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             backgroundColor: AppColors.error,
@@ -227,7 +234,10 @@ class _ShopkeeperOrderDetailsModalState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to reject order: $e',
+              NetworkErrorHelper.toUserFriendlyMessage(
+                e,
+                defaultPrefix: "Couldn't reject order",
+              ),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             backgroundColor: AppColors.error,

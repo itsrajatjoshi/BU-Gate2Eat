@@ -130,7 +130,13 @@ class OrderService {
         data['acceptDeadline'] = Timestamp.fromDate(now.add(const Duration(minutes: 20)));
       }
 
-      await docRef.set(data);
+      await _firestore.runTransaction((transaction) async {
+        final existing = await transaction.get(docRef);
+        if (existing.exists) {
+          return; // Idempotent duplicate protection
+        }
+        transaction.set(docRef, data);
+      });
     } catch (e) {
       debugPrint('❌ OrderService createOrder error: $e');
       throw OrderServiceException('Failed to create order: $e');
@@ -184,6 +190,8 @@ class OrderService {
       query = query.where('customerId', isEqualTo: customerId);
     } else if (customerPhone != null && customerPhone.isNotEmpty) {
       query = query.where('customerPhone', isEqualTo: customerPhone);
+    } else {
+      return const Stream.empty();
     }
 
     return query
@@ -221,6 +229,8 @@ class OrderService {
       query = query.where('customerId', isEqualTo: customerId);
     } else if (customerPhone != null && customerPhone.isNotEmpty) {
       query = query.where('customerPhone', isEqualTo: customerPhone);
+    } else {
+      return const Stream.empty();
     }
 
     return query
@@ -535,21 +545,23 @@ class OrderService {
     if (!isAvailable) return;
     try {
       final docRef = _ordersRef.doc(orderId);
-      final doc = await docRef.get();
+      await _firestore.runTransaction((transaction) async {
+        final doc = await transaction.get(docRef);
 
-      if (!doc.exists || doc.data() == null) {
-        return; // Already deleted or not found
-      }
+        if (!doc.exists || doc.data() == null) {
+          return; // Already deleted or not found
+        }
 
-      final status = (doc.data()!['status'] as String?) ?? 'placed';
-      if (status != OrderStatusRules.statusPlaced) {
-        throw OrderServiceException(
-          'Cannot cancel order in "$status" status. Orders can only be cancelled while in placed status.',
-        );
-      }
+        final status = (doc.data()!['status'] as String?) ?? 'placed';
+        if (status != OrderStatusRules.statusPlaced) {
+          throw OrderServiceException(
+            'Cannot cancel order in "$status" status. Orders can only be cancelled while in placed status.',
+          );
+        }
 
-      // Complete disappearance from database
-      await docRef.delete();
+        // Complete disappearance from database
+        transaction.delete(docRef);
+      });
       debugPrint('✅ OrderService: Placed order #$orderId completely deleted');
     } on OrderServiceException {
       rethrow;

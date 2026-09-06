@@ -460,12 +460,8 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                           children: [
                             Opacity(
                               opacity: bannerOpacity,
-                              child: ImageFiltered(
-                                imageFilter: ImageFilter.blur(
-                                  sigmaX: blurSigma,
-                                  sigmaY: blurSigma,
-                                ),
-                                child: CachedNetworkImage(
+                              child: () {
+                                final imageWidget = CachedNetworkImage(
                                   imageUrl: shop.bannerUrl,
                                   fit: BoxFit.cover,
                                   memCacheWidth: 900,
@@ -485,8 +481,18 @@ class _ShopkeeperHomeScreenState extends ConsumerState<ShopkeeperHomeScreen> {
                                       color: AppColors.textHint,
                                     ),
                                   ),
-                                ),
-                              ),
+                                );
+                                if (blurSigma > 0.01) {
+                                  return ImageFiltered(
+                                    imageFilter: ImageFilter.blur(
+                                      sigmaX: blurSigma,
+                                      sigmaY: blurSigma,
+                                    ),
+                                    child: imageWidget,
+                                  );
+                                }
+                                return imageWidget;
+                              }(),
                             ),
                             Positioned.fill(
                               child: DecoratedBox(

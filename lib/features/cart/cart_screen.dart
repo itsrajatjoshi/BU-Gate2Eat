@@ -51,10 +51,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   Future<void> _placeAppOrder() async {
     if (_isPlacingOrder || _isDialogOpen) return;
+    _isDialogOpen = true;
 
     final cartState = ref.read(cartProvider);
     final cartItems = cartState.items;
-    if (cartItems.isEmpty) return;
+    if (cartItems.isEmpty) {
+      _isDialogOpen = false;
+      return;
+    }
 
     final shopName = cartState.shopName ?? cartItems.first.shopName;
     final grandTotal = cartState.grandTotal;
@@ -96,6 +100,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ),
         );
       }
+      _isDialogOpen = false;
       return;
     }
 
@@ -127,6 +132,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ),
         );
       }
+      _isDialogOpen = false;
       return;
     }
 
@@ -166,6 +172,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 ),
               );
             }
+            _isDialogOpen = false;
             return;
           }
           if (!liveItem.isAvailable) {
@@ -196,6 +203,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 ),
               );
             }
+            _isDialogOpen = false;
             return;
           }
         }
@@ -232,6 +240,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ),
         );
       }
+      _isDialogOpen = false;
       return;
     }
 
@@ -266,15 +275,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ),
         );
       }
+      _isDialogOpen = false;
       return;
     }
 
     final deliveryCharges = shop.deliveryCharges.toDouble();
     final itemsSubtotal = grandTotal;
     final finalOrderTotal = itemsSubtotal + deliveryCharges;
-
-    // 4. In-flight guard: prevent double-tap opening multiple dialogs
-    _isDialogOpen = true;
 
     bool? confirmed;
     try {
@@ -316,6 +323,40 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     }
 
     if (confirmed != true || !mounted) return;
+
+    // Optional connectivity pre-check optimization as early failure guard
+    final checkInternet = ref.read(checkHasInternetProvider);
+    final hasConnection = await checkInternet();
+    if (!hasConnection) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(
+                  Icons.wifi_off_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'No internet connection. Please check your connection and try again.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() => _isPlacingOrder = true);
 
@@ -424,6 +465,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         );
       }
     } finally {
+      _isDialogOpen = false;
       if (mounted) {
         setState(() => _isPlacingOrder = false);
       }
@@ -431,10 +473,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 
   Future<void> _placeWhatsAppOrder() async {
-    if (_isPlacingOrder) return;
-    final cartState = ref.read(cartProvider);
-    final cartItems = cartState.items;
-    if (cartItems.isEmpty) return;
+    if (_isPlacingOrder || _isDialogOpen) return;
+    setState(() => _isPlacingOrder = true);
+
+    try {
+      final cartState = ref.read(cartProvider);
+      final cartItems = cartState.items;
+      if (cartItems.isEmpty) return;
 
     final shopName = cartState.shopName ?? cartItems.first.shopName;
     final grandTotal = cartState.grandTotal;
@@ -649,11 +694,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return;
     }
 
-    // In-flight guard to prevent duplicate taps / duplicate stats increment
-    setState(() => _isPlacingOrder = true);
-
-    try {
-      final localStorage = ref.read(localStorageServiceProvider);
+    final localStorage = ref.read(localStorageServiceProvider);
       final customerIdentity = ref.read(customerIdentityProvider);
 
       final currentStoragePhone =
@@ -1187,7 +1228,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                 child: SizedBox(
                                   height: 50,
                                   child: ElevatedButton(
-                                    onPressed: _isPlacingOrder
+                                    onPressed: (_isPlacingOrder || _isDialogOpen)
                                         ? null
                                         : _placeAppOrder,
                                     style: ElevatedButton.styleFrom(
@@ -1316,8 +1357,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           height: 50,
                           child: ElevatedButton(
                             onPressed: orderMethod == ShopOrderMethod.app
-                                ? (_isPlacingOrder ? null : _placeAppOrder)
-                                : (_isPlacingOrder
+                                ? ((_isPlacingOrder || _isDialogOpen)
+                                    ? null
+                                    : _placeAppOrder)
+                                : ((_isPlacingOrder || _isDialogOpen)
                                     ? null
                                     : _placeWhatsAppOrder),
                             style: ElevatedButton.styleFrom(

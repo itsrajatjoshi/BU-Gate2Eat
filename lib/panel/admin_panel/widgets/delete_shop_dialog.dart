@@ -38,6 +38,7 @@ class _DeleteShopDialogState extends ConsumerState<DeleteShopDialog> {
       await firestoreService.deleteShopCascade(
         widget.shop.id,
         bannerUrl: widget.shop.bannerUrl,
+        logoUrl: widget.shop.shopLogoImageUrl,
       );
 
       ref.invalidate(shopsProvider);

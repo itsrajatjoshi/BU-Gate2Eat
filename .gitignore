@@ -38,6 +38,8 @@ desktop.ini
 **/android/**/GeneratedPluginRegistrant.java
 **/android/key.properties
 *.jks
+*.apk
+*.aab
 .kotlin/
 
 # iOS
@@ -83,6 +85,7 @@ doc/api/
 .log
 *.log
 Unwanted files/
+delete/
 testsprite_tests/tmp/
 testsprite_tests/tmp/config.json
 functions/node_modules/

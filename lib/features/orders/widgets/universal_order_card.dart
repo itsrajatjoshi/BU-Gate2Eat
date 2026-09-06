@@ -197,8 +197,9 @@ class UniversalOrderCard extends StatelessWidget {
     final hasRejectionReason = (order.isRejected || order.isCancelled) &&
         order.rejectionReason.trim().isNotEmpty;
 
-    return Container(
-      decoration: BoxDecoration(
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
@@ -391,6 +392,7 @@ class UniversalOrderCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

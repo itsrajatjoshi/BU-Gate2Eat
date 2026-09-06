@@ -1,8 +1,17 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
+}
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -35,11 +44,39 @@ android {
             enableV1Signing = true
             enableV2Signing = true
         }
+        create("release") {
+            val storeFilePath = keystoreProperties.getProperty("storeFile")
+            if (storeFilePath != null) {
+                val resolvedStoreFile = if (rootProject.file(storeFilePath).exists()) {
+                    rootProject.file(storeFilePath)
+                } else if (file(storeFilePath).exists()) {
+                    file(storeFilePath)
+                } else {
+                    null
+                }
+
+                if (resolvedStoreFile != null) {
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("keyPassword")
+                    storeFile = resolvedStoreFile
+                    storePassword = keystoreProperties.getProperty("storePassword")
+                    enableV1Signing = true
+                    enableV2Signing = true
+                }
+            }
+        }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseSigning = signingConfigs.getByName("release")
+            // Use release keystore when key.properties and keystore file exist;
+            // otherwise fallback to debug signing for local/CI development builds.
+            signingConfig = if (releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
+                releaseSigning
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

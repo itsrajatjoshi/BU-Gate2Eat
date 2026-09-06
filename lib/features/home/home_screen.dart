@@ -40,8 +40,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cartState = ref.watch(cartProvider);
-    final cartItemCount = cartState.totalItemCount;
+    final cartItemCount = ref.watch(
+      cartProvider.select((s) => s.totalItemCount),
+    );
 
     return PopScope(
       canPop: _currentIndex == 0,
@@ -181,8 +182,11 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
     final isCatalogLoading = _needsGlobalCatalog &&
         ((ref.watch(allShopMenuItemsProvider).isLoading) ||
             (ref.watch(allShopCategoriesProvider).isLoading));
-    final activeOrders =
-        ref.watch(customerActiveOrdersStreamProvider).valueOrNull ?? [];
+    final hasActiveOrders = ref.watch(
+      customerActiveOrdersStreamProvider.select(
+        (s) => s.valueOrNull?.isNotEmpty ?? false,
+      ),
+    );
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -190,29 +194,7 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
 
     return Scaffold(
       floatingActionButton: widget.floatingActionButton ??
-          (activeOrders.isNotEmpty
-              ? FloatingActionButton.extended(
-                  onPressed: () {
-                    context.push(AppRoutes.activeOrders);
-                  },
-                  backgroundColor: AppColors.primary,
-                  elevation: 4,
-                  icon: const Icon(
-                    Icons.delivery_dining_rounded,
-                    color: Colors.white,
-                  ),
-                  label: Text(
-                    activeOrders.length > 1
-                        ? 'Active Orders (${activeOrders.length})'
-                        : 'Track Your Order',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                )
-              : null),
+          (hasActiveOrders ? const _HomeActiveOrdersFab() : null),
       appBar: AppBar(
         title: Image.asset(
           'assets/images/yummbu_wordmark.png',
@@ -589,6 +571,43 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HomeActiveOrdersFab extends ConsumerWidget {
+  const _HomeActiveOrdersFab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeOrdersCount = ref.watch(
+      customerActiveOrdersStreamProvider.select(
+        (s) => s.valueOrNull?.length ?? 0,
+      ),
+    );
+
+    if (activeOrdersCount == 0) return const SizedBox.shrink();
+
+    return FloatingActionButton.extended(
+      onPressed: () {
+        context.push(AppRoutes.activeOrders);
+      },
+      backgroundColor: AppColors.primary,
+      elevation: 4,
+      icon: const Icon(
+        Icons.delivery_dining_rounded,
+        color: Colors.white,
+      ),
+      label: Text(
+        activeOrdersCount > 1
+            ? 'Active Orders ($activeOrdersCount)'
+            : 'Track Your Order',
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }

@@ -11,6 +11,7 @@ import '../../core/router.dart';
 import '../../models/cart_item_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../models/order_model.dart';
+import '../../models/shop_model.dart';
 import '../cart/cart_provider.dart';
 
 class ReorderHelper {
@@ -30,6 +31,48 @@ class ReorderHelper {
         currentIdentity.customerId.isNotEmpty &&
         order.customerId != currentIdentity.customerId) {
       debugPrint('⛔ [Reorder] Blocked reorder of order belonging to another customer.');
+      return;
+    }
+
+    // Verify shop availability upfront before touching cart
+    Shop? targetShop;
+    try {
+      final shops = ref.read(shopsProvider).valueOrNull;
+      targetShop = shops?.where((s) => s.id == order.shopId).firstOrNull ??
+          await ref.read(firestoreServiceProvider).getShop(order.shopId);
+    } catch (_) {}
+
+    if (targetShop != null && (!targetShop.isActive || !targetShop.isOpen)) {
+      final statusMessage = !targetShop.isActive
+          ? '${order.shopName} is currently unavailable.'
+          : '${order.shopName} is currently closed.';
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.store_mall_directory_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    statusMessage,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
       return;
     }
 

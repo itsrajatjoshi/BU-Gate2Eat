@@ -1046,7 +1046,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                             ),
                             Switch(
                               value: _isVeg,
-                              activeColor: AppColors.vegGreen,
+                              activeThumbColor: AppColors.vegGreen,
                               inactiveThumbColor: AppColors.nonVegRed,
                               inactiveTrackColor: AppColors.nonVegRed
                                   .withValues(alpha: 0.3),
@@ -1135,7 +1135,7 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
                   ),
                   Switch(
                     value: _hasOptions,
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                     onChanged: _isLoading
                         ? null
                         : (val) {

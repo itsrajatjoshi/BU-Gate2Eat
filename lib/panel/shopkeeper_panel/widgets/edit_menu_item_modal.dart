@@ -1,7 +1,6 @@
 // BU Gate2Eat — Shopkeeper Panel
 // Edit Menu Item Modal (Client-Side Auto-Compression <= 300KB & Universal Options Support)
 
-import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -1259,7 +1258,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                             ),
                             Switch(
                               value: _isVeg,
-                              activeColor: AppColors.vegGreen,
+                              activeThumbColor: AppColors.vegGreen,
                               inactiveThumbColor: AppColors.nonVegRed,
                               inactiveTrackColor: AppColors.nonVegRed
                                   .withValues(alpha: 0.3),
@@ -1422,7 +1421,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                   ),
                   Switch(
                     value: _hasOptions,
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                     onChanged: _isLoading
                         ? null
                         : (val) {

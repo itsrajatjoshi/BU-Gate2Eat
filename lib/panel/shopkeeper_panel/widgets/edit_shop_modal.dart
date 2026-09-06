@@ -1342,7 +1342,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
                   ),
                   Switch(
                     value: !_isClosedOverride,
-                    activeColor: AppColors.success,
+                    activeThumbColor: AppColors.success,
                     inactiveThumbColor: AppColors.error,
                     inactiveTrackColor: AppColors.error.withValues(alpha: 0.3),
                     onChanged: _isLoading

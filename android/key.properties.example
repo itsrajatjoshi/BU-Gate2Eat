@@ -1,0 +1,23 @@
+# ==============================================================================
+# YummBU - Android Release Signing Configuration (Template)
+# ==============================================================================
+# Instructions:
+# 1. Copy this file to 'android/key.properties':
+#    cp android/key.properties.example android/key.properties
+# 2. Fill in the values for your production keystore below.
+# 3. Ensure your keystore file (e.g., upload-keystore.jks) is located in android/
+#    or specify its absolute/relative path.
+#
+# SECURITY RULES:
+# - NEVER commit 'key.properties' or your keystore (*.jks) to version control!
+# - Both 'android/key.properties' and '*.jks' are already ignored in .gitignore.
+# - Keep your keystore file and passwords in a secure password manager.
+#
+# To generate a new upload key (if not already created):
+# keytool -genkey -v -keystore android/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+# ==============================================================================
+
+storePassword=YOUR_KEYSTORE_PASSWORD_HERE
+keyPassword=YOUR_KEY_PASSWORD_HERE
+keyAlias=upload
+storeFile=upload-keystore.jks

@@ -12,6 +12,7 @@ import 'core/constants/app_constants.dart';
 import 'core/providers.dart';
 import 'core/router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/offline_indicator_wrapper.dart';
 import 'firebase_options.dart';
 import 'services/local_storage_service.dart';
 import 'services/notification_router_bridge.dart';
@@ -19,6 +20,10 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Bound Flutter decoded image cache in RAM to prevent memory bloat on low-end devices
+  PaintingBinding.instance.imageCache.maximumSize = 100;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024; // 50 MB
 
   // Lock orientation to portrait (Mobile only)
   if (!kIsWeb) {
@@ -38,11 +43,19 @@ void main() async {
     );
   }
 
-  // Initialize Firebase
+  // Initialize Firebase and LocalStorage concurrently to overlap disk I/O with native SDK bootstrap
+  late final LocalStorageService localStorageService;
+  final localStorageFuture = LocalStorageService.create();
+
   try {
-    final firebaseApp = await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    final results = await Future.wait([
+      Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ),
+      localStorageFuture,
+    ]);
+    final firebaseApp = results[0] as FirebaseApp;
+    localStorageService = results[1] as LocalStorageService;
     debugPrint('🔥 Firebase Initialized Successfully! App Name: ${firebaseApp.name}');
 
     if (!kIsWeb) {
@@ -56,10 +69,8 @@ void main() async {
     }
   } catch (e, stack) {
     debugPrint('❌ Firebase Initialization Note: $e\n$stack');
+    localStorageService = await localStorageFuture;
   }
-
-  // Initialize local storage
-  final localStorageService = await LocalStorageService.create();
 
   // Initialize Notification Service foundation asynchronously
   final notificationService = NotificationService();
@@ -149,6 +160,8 @@ class _BUGate2EatAppState extends ConsumerState<BUGate2EatApp> {
       theme: AppTheme.light,
       themeMode: ThemeMode.light,
       routerConfig: appRouter,
+      builder: (context, child) =>
+          OfflineIndicatorWrapper(child: child ?? const SizedBox.shrink()),
     );
   }
 }

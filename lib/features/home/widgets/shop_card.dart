@@ -104,8 +104,9 @@ class _ShopCardState extends ConsumerState<ShopCard> {
       }
     });
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+    return RepaintBoundary(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.surface,
         borderRadius: BorderRadius.circular(16),
@@ -333,8 +334,9 @@ class _ShopCardState extends ConsumerState<ShopCard> {
           },
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Builds the main banner image area supporting multi-image auto & manual swipe slideshow.
   Widget _buildBannerSlideshow(List<String> images, bool isDark) {

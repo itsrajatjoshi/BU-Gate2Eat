@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
+import '../../core/utils/network_error_helper.dart';
 import '../../core/utils/order_timer_helper.dart';
 import '../../models/order_model.dart';
 import '../../services/local_storage_service.dart';
@@ -1182,7 +1183,13 @@ class OrderDetailScreen extends ConsumerWidget {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Failed to cancel order: $e'),
+                      content: Text(
+                        NetworkErrorHelper.toUserFriendlyMessage(
+                          e,
+                          defaultPrefix: "Couldn't cancel order",
+                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       backgroundColor: AppColors.error,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(

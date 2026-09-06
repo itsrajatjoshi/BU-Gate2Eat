@@ -138,11 +138,11 @@ void main() {
           child: MaterialApp(
             theme: ThemeData.light(),
             home: Scaffold(
-              body: Builder(
-                builder: (context) => ElevatedButton(
+              body: Consumer(
+                builder: (context, ref, _) => ElevatedButton(
                   onPressed: () => handleCustomerAddToCart(
                     context: context,
-                    ref: ProviderContainer().read as dynamic,
+                    ref: ref,
                     item: simpleItem,
                     shop: testShop,
                   ),
