@@ -448,3 +448,79 @@ exports.auth = {
   SERVER_SHOPKEEPER_PHONE_MAP,
 };
 
+// ─── PART 6: DATA CLEANUP & STORAGE MANAGEMENT (CHECKPOINT 5) ───────────────
+const { getStorage } = require("firebase-admin/storage");
+const { cleanupOldOrders } = require("./order_cleanup");
+const { auditAndCleanStorageOrphans } = require("./storage_cleanup");
+
+/**
+ * Scheduled Cloud Function (Runs daily at 03:00 UTC).
+ * Automatically purges terminal orders older than 45 days.
+ * Strictly preserves active orders ('placed', 'accepted') and recent orders (<= 45 days).
+ */
+exports.scheduledOrderCleanup = functions.pubsub
+  .schedule("0 3 * * *")
+  .timeZone("UTC")
+  .onRun(async (context) => {
+    console.log("🧹 [Scheduled Cleanup] Starting daily 45-day order retention job...");
+    try {
+      const summary = await cleanupOldOrders(db);
+      console.log("✅ [Scheduled Cleanup] Completed successfully:", JSON.stringify(summary));
+      return summary;
+    } catch (err) {
+      console.error("❌ [Scheduled Cleanup] Error during daily order cleanup:", err);
+      throw err;
+    }
+  });
+
+/**
+ * Callable Cloud Function for Admin manual order cleanup or dry-run execution.
+ * Restricted to verified administrator callers.
+ */
+exports.manualOrderCleanup = functions.https.onCall(async (data, context) => {
+  // Validate admin authorization
+  const callerPhone = context.auth && context.auth.token ? context.auth.token.phone_number : null;
+  const isAdmin = (context.auth && context.auth.token && context.auth.token.admin === true) ||
+                  (callerPhone && SERVER_ADMIN_PHONES.includes(normalizeCanonicalPhone(callerPhone)));
+
+  if (!isAdmin && process.env.FUNCTIONS_EMULATOR !== "true") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only authorized administrators can run order cleanup."
+    );
+  }
+
+  const dryRun = data && data.dryRun === true;
+  const batchSize = data && typeof data.batchSize === "number" ? data.batchSize : 400;
+  return await cleanupOldOrders(db, { dryRun, batchSize });
+});
+
+/**
+ * Callable Cloud Function for Reference-Aware Storage Orphan Audit.
+ * Restricted to verified administrator callers.
+ * Default is dryRun: true (reports orphans without deleting).
+ */
+exports.storageOrphanAudit = functions.https.onCall(async (data, context) => {
+  const callerPhone = context.auth && context.auth.token ? context.auth.token.phone_number : null;
+  const isAdmin = (context.auth && context.auth.token && context.auth.token.admin === true) ||
+                  (callerPhone && SERVER_ADMIN_PHONES.includes(normalizeCanonicalPhone(callerPhone)));
+
+  if (!isAdmin && process.env.FUNCTIONS_EMULATOR !== "true") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only authorized administrators can audit storage orphans."
+    );
+  }
+
+  const bucket = getStorage().bucket();
+  const dryRun = data ? data.dryRun !== false : true;
+  const minAgeHours = data && typeof data.minAgeHours === "number" ? data.minAgeHours : 24;
+  return await auditAndCleanStorageOrphans(bucket, db, { dryRun, minAgeHours });
+});
+
+exports.dataCleanup = {
+  cleanupOldOrders,
+  auditAndCleanStorageOrphans,
+};
+
+

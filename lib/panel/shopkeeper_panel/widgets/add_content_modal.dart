@@ -263,6 +263,10 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
         _showErrorSnackBar('Please enter a valid price greater than 0.');
         return;
       }
+      if (parsedPrice > 100000) {
+        _showErrorSnackBar('Price cannot exceed ₹1,00,000.');
+        return;
+      }
       effectivePrice = parsedPrice;
     } else {
       // Options are ON: validate groups and options
@@ -301,6 +305,10 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
           if (group.groupType == OptionGroupType.choice) {
             final parsed = int.tryParse(optPriceText);
             if (parsed != null && parsed > 0) {
+              if (parsed > 100000) {
+                _showErrorSnackBar('Option price cannot exceed ₹1,00,000.');
+                return;
+              }
               pricingType = OptionPricingType.priceAdjustment;
               optPrice = parsed;
             } else {
@@ -313,6 +321,10 @@ class _AddContentModalState extends ConsumerState<AddContentModal> {
             final parsed = int.tryParse(optPriceText);
             if (parsed == null || parsed <= 0) {
               _showErrorSnackBar('Fixed price for "$optName" in "$groupName" must be greater than 0.');
+              return;
+            }
+            if (parsed > 100000) {
+              _showErrorSnackBar('Option price cannot exceed ₹1,00,000.');
               return;
             }
             optPrice = parsed;

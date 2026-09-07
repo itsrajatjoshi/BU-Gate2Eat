@@ -53,7 +53,7 @@ class SelectedMenuItemOption {
         (e) => e.name == map['pricingType'],
         orElse: () => OptionPricingType.fixedPrice,
       ),
-      price: (map['price'] as num?)?.toInt() ?? 0,
+      price: ((map['price'] as num?)?.toInt() ?? 0).clamp(0, 100000),
     );
   }
 
@@ -99,10 +99,10 @@ class CartItem {
   final int? unitPriceOverride;
 
   /// Effective unit price for 1 quantity of this item/variant.
-  int get unitPrice => unitPriceOverride ?? menuItem.price;
+  int get unitPrice => (unitPriceOverride ?? menuItem.price).clamp(0, 100000);
 
   /// Total price for this cart item (unitPrice × quantity).
-  double get totalPrice => (unitPrice * quantity).toDouble();
+  double get totalPrice => (unitPrice * quantity.clamp(1, 99)).toDouble();
 
   /// Formatted total price string.
   String get formattedTotalPrice => '₹${totalPrice.toStringAsFixed(0)}';

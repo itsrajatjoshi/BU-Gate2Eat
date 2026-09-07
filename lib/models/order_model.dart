@@ -50,19 +50,27 @@ class OrderItem {
   }
 
   factory OrderItem.fromMap(Map<String, dynamic> map) {
-    final rawOptions = map['selectedOptions'] as List<dynamic>? ?? [];
-    final selectedOptions = rawOptions
-        .map((o) =>
-            SelectedMenuItemOption.fromMap(Map<String, dynamic>.from(o as Map)),)
-        .toList();
+    final rawOptions = map['selectedOptions'];
+    final selectedOptions = <SelectedMenuItemOption>[];
+    if (rawOptions is List) {
+      for (final o in rawOptions) {
+        if (o is Map<String, dynamic>) {
+          selectedOptions.add(SelectedMenuItemOption.fromMap(o));
+        } else if (o is Map) {
+          selectedOptions.add(
+            SelectedMenuItemOption.fromMap(Map<String, dynamic>.from(o)),
+          );
+        }
+      }
+    }
 
     return OrderItem(
       menuItemId: (map['itemId'] as String?) ??
           (map['menuItemId'] as String?) ??
           '',
       name: (map['name'] as String?) ?? '',
-      price: ((map['price'] as num?)?.toInt() ?? 0).clamp(0, 1000000),
-      quantity: ((map['quantity'] as num?)?.toInt() ?? 1).clamp(1, 999),
+      price: ((map['price'] as num?)?.toInt() ?? 0).clamp(0, 100000),
+      quantity: ((map['quantity'] as num?)?.toInt() ?? 1).clamp(1, 99),
       imageUrl: (map['imageUrl'] as String?) ?? '',
       optionsDescription: (map['optionsDescription'] as String?) ?? '',
       selectedOptions: selectedOptions,
@@ -268,11 +276,17 @@ class AppOrder {
   }
 
   factory AppOrder.fromMap(Map<String, dynamic> map, [String? docId]) {
-    final rawItems = map['items'] as List<dynamic>? ?? [];
-    final items = rawItems
-        .map((item) =>
-            OrderItem.fromMap(Map<String, dynamic>.from(item as Map)),)
-        .toList();
+    final rawItems = map['items'];
+    final items = <OrderItem>[];
+    if (rawItems is List) {
+      for (final item in rawItems) {
+        if (item is Map<String, dynamic>) {
+          items.add(OrderItem.fromMap(item));
+        } else if (item is Map) {
+          items.add(OrderItem.fromMap(Map<String, dynamic>.from(item)));
+        }
+      }
+    }
 
     return AppOrder(
       orderId: (map['orderId'] as String?) ?? docId ?? '',

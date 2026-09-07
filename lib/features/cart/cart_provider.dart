@@ -47,10 +47,12 @@ class CartNotifier extends StateNotifier<CartState> {
     );
 
     if (existingIndex >= 0) {
-      // Increment quantity for the exact matching variant/item
+      // Increment quantity for the exact matching variant/item (up to 99)
       final updated = [...state.items];
+      final currentQty = updated[existingIndex].quantity;
+      if (currentQty >= 99) return false;
       updated[existingIndex] = updated[existingIndex].copyWith(
-        quantity: updated[existingIndex].quantity + 1,
+        quantity: (currentQty + 1).clamp(1, 99),
       );
       state = state.copyWith(items: updated);
     } else {
@@ -121,11 +123,11 @@ class CartNotifier extends StateNotifier<CartState> {
         items: itemsToAdd
             .map((entry) => CartItem(
                   menuItem: entry.item,
-                  quantity: entry.quantity,
+                  quantity: entry.quantity.clamp(1, 99),
                   shopId: shopId,
                   shopName: shopName,
                   selectedOptions: List.unmodifiable(entry.selectedOptions),
-                  unitPriceOverride: entry.unitPrice,
+                  unitPriceOverride: entry.unitPrice?.clamp(0, 100000),
                 ),)
             .toList(),
       );
@@ -139,17 +141,17 @@ class CartNotifier extends StateNotifier<CartState> {
         );
         if (idx >= 0) {
           currentList[idx] = currentList[idx].copyWith(
-            quantity: currentList[idx].quantity + entry.quantity,
+            quantity: (currentList[idx].quantity + entry.quantity).clamp(1, 99),
           );
         } else {
           currentList.add(
             CartItem(
               menuItem: entry.item,
-              quantity: entry.quantity,
+              quantity: entry.quantity.clamp(1, 99),
               shopId: shopId,
               shopName: shopName,
               selectedOptions: List.unmodifiable(entry.selectedOptions),
-              unitPriceOverride: entry.unitPrice,
+              unitPriceOverride: entry.unitPrice?.clamp(0, 100000),
             ),
           );
         }
@@ -229,7 +231,7 @@ class CartNotifier extends StateNotifier<CartState> {
 
     final updated = [...state.items];
     updated[existingIndex] = updated[existingIndex].copyWith(
-      quantity: quantity,
+      quantity: quantity.clamp(1, 99),
     );
     state = state.copyWith(items: updated);
     _enforceInvariant();
@@ -247,7 +249,7 @@ class CartNotifier extends StateNotifier<CartState> {
 
     final updated = [...state.items];
     updated[existingIndex] = updated[existingIndex].copyWith(
-      unitPriceOverride: newUnitPrice,
+      unitPriceOverride: newUnitPrice.clamp(0, 100000),
     );
     state = state.copyWith(items: updated);
     _enforceInvariant();

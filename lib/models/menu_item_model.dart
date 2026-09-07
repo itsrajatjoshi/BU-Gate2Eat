@@ -78,7 +78,7 @@ class MenuItemOption {
       name: (map['name'] as String?) ?? '',
       price: pricingType == OptionPricingType.selectionOnly
           ? 0
-          : ((map['price'] as num?) ?? 0).toInt(),
+          : ((map['price'] as num?) ?? 0).toInt().clamp(0, 100000),
       pricingType: pricingType,
       isDefault: (map['isDefault'] as bool?) ?? false,
     );
@@ -210,13 +210,13 @@ class MenuItem {
       id: doc.id,
       name: (data['name'] as String?) ?? '',
       details: (data['details'] as String?) ?? (data['description'] as String?) ?? '',
-      price: ((data['price'] as num?) ?? 0).toInt(),
+      price: (((data['price'] as num?) ?? 0).toInt()).clamp(0, 100000),
       imageUrl: (data['imageUrl'] as String?) ?? '',
       categoryId: (data['categoryId'] as String?) ?? '',
       isVeg: (data['isVeg'] as bool?) ?? true,
       isAvailable: (data['isAvailable'] as bool?) ?? true,
       isRecommended: (data['isRecommended'] as bool?) ?? false,
-      sortOrder: (data['sortOrder'] as int?) ?? 0,
+      sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
       optionGroups: groupsList,
     );
   }

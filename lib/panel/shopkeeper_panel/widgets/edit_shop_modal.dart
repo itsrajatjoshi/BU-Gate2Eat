@@ -255,6 +255,8 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
   }
 
   Future<void> _onSave() async {
+    if (_isLoading) return;
+
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -274,6 +276,47 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Shop Address cannot be empty.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    final contact = _contactController.text.trim();
+    if (contact.isNotEmpty) {
+      final cleanDigits = contact.replaceAll(RegExp(r'\D'), '');
+      if (cleanDigits.length < 10) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please enter a valid 10-digit contact number.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+    }
+
+    final rawOpen = _openTimeController.text.trim();
+    final rawClose = _closeTimeController.text.trim();
+    final openMinutes = Shop.parseTimeToMinutes(
+      rawOpen.isEmpty ? '8:00 AM' : rawOpen,
+      defaultMinutes: 8 * 60,
+    );
+    final closeMinutes = Shop.parseTimeToMinutes(
+      rawClose.isEmpty ? '11:30 PM' : rawClose,
+      defaultMinutes: 23 * 60 + 30,
+    );
+
+    if (openMinutes == closeMinutes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Open time and close time cannot be identical.'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
           shape:

@@ -218,25 +218,49 @@ class FirestoreService {
           .collection('menuItems')
           .get();
 
-      for (final doc in menuSnapshot.docs) {
-        final data = doc.data();
-        final imageUrl = data['imageUrl'] as String?;
-        if (imageUrl != null && imageUrl.isNotEmpty) {
-          await deleteStorageImageByUrl(imageUrl);
+      if (menuSnapshot.docs.isNotEmpty) {
+        for (final doc in menuSnapshot.docs) {
+          final data = doc.data();
+          final imageUrl = data['imageUrl'] as String?;
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+            await deleteStorageImageByUrl(imageUrl);
+          }
         }
-        await doc.reference.delete();
+
+        // Commit document deletions in bounded batches of 400 (Firestore limit is 500)
+        const chunkSize = 400;
+        for (int i = 0; i < menuSnapshot.docs.length; i += chunkSize) {
+          final end = (i + chunkSize < menuSnapshot.docs.length)
+              ? i + chunkSize
+              : menuSnapshot.docs.length;
+          final batch = _firestore.batch();
+          for (int j = i; j < end; j++) {
+            batch.delete(menuSnapshot.docs[j].reference);
+          }
+          await batch.commit();
+        }
       }
       debugPrint('✅ Deleted ${menuSnapshot.docs.length} menu items for shops/$shopId');
 
-      // 2. Delete all categories
+      // 2. Delete all categories in bounded batches
       final catSnapshot = await _firestore
           .collection('shops')
           .doc(shopId)
           .collection('categories')
           .get();
 
-      for (final doc in catSnapshot.docs) {
-        await doc.reference.delete();
+      if (catSnapshot.docs.isNotEmpty) {
+        const catChunkSize = 400;
+        for (int i = 0; i < catSnapshot.docs.length; i += catChunkSize) {
+          final end = (i + catChunkSize < catSnapshot.docs.length)
+              ? i + catChunkSize
+              : catSnapshot.docs.length;
+          final batch = _firestore.batch();
+          for (int j = i; j < end; j++) {
+            batch.delete(catSnapshot.docs[j].reference);
+          }
+          await batch.commit();
+        }
       }
       debugPrint('✅ Deleted ${catSnapshot.docs.length} categories for shops/$shopId');
 
@@ -250,7 +274,7 @@ class FirestoreService {
         await deleteStorageImageByUrl(logoUrl);
       }
 
-      // 5. Delete the parent shop document
+      // 5. Delete the parent shop document (Historical orders in 'orders' are strictly preserved!)
       await _firestore.collection('shops').doc(shopId).delete();
       debugPrint('✅ FirestoreService.deleteShopCascade -> SUCCESS for shops/$shopId');
     } catch (e, stack) {

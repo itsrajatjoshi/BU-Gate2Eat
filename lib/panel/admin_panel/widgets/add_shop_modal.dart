@@ -218,6 +218,8 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
   }
 
   Future<void> _onCreateShop() async {
+    if (_isLoading) return;
+
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -246,6 +248,65 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
       return;
     }
 
+    final contact = _contactController.text.trim();
+    if (contact.isNotEmpty) {
+      final cleanDigits = contact.replaceAll(RegExp(r'\D'), '');
+      if (cleanDigits.length < 10) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please enter a valid 10-digit contact number.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+    }
+
+    final rawOpen = _openTimeController.text.trim();
+    final rawClose = _closeTimeController.text.trim();
+    final openMinutes = Shop.parseTimeToMinutes(
+      rawOpen.isEmpty ? '8:00 AM' : rawOpen,
+      defaultMinutes: 8 * 60,
+    );
+    final closeMinutes = Shop.parseTimeToMinutes(
+      rawClose.isEmpty ? '11:30 PM' : rawClose,
+      defaultMinutes: 23 * 60 + 30,
+    );
+
+    if (openMinutes == closeMinutes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Open time and close time cannot be identical.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    // Check duplicate shop by name against existing shops
+    final existingShops = ref.read(shopsProvider).valueOrNull ?? [];
+    final nameExists = existingShops.any(
+      (s) => s.name.trim().toLowerCase() == name.toLowerCase(),
+    );
+    if (nameExists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('A shop named "$name" already exists. Please choose a different name.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -254,9 +315,13 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
           .toLowerCase()
           .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
           .replaceAll(RegExp(r'^_+|_+$'), '');
-      final shopId = cleanId.isNotEmpty
+      String shopId = cleanId.isNotEmpty
           ? cleanId
           : 'shop_${DateTime.now().millisecondsSinceEpoch}';
+
+      if (existingShops.any((s) => s.id == shopId)) {
+        shopId = '${shopId}_${DateTime.now().millisecondsSinceEpoch}';
+      }
 
       final formattedOpen = _openTimeController.text.trim().isEmpty
           ? '8:00 AM'

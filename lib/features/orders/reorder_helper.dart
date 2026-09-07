@@ -35,35 +35,93 @@ class ReorderHelper {
     }
 
     // Verify shop availability upfront before touching cart
-    Shop? targetShop;
+    List<Shop>? shops;
     try {
-      final shops = ref.read(shopsProvider).valueOrNull;
-      targetShop = shops?.where((s) => s.id == order.shopId).firstOrNull ??
-          await ref.read(firestoreServiceProvider).getShop(order.shopId);
-    } catch (_) {}
+      shops = ref.read(shopsProvider).valueOrNull ??
+          await ref.read(shopsProvider.future);
+    } catch (_) {
+      // In offline or restricted test environments where shopsProvider is not loaded, fallback to null
+    }
 
-    if (targetShop != null && (!targetShop.isActive || !targetShop.isOpen)) {
-      final statusMessage = !targetShop.isActive
-          ? '${order.shopName} is currently unavailable.'
-          : '${order.shopName} is currently closed.';
+    if (shops != null) {
+      final targetShop = shops.where((s) => s.id == order.shopId).firstOrNull;
+      if (targetShop == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(
+                    Icons.store_mall_directory_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${order.shopName} is no longer available.',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!targetShop.isActive || !targetShop.isOpen) {
+        final statusMessage = !targetShop.isActive
+            ? '${order.shopName} is currently unavailable.'
+            : '${order.shopName} is currently closed.';
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(
+                    Icons.store_mall_directory_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      statusMessage,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    // 1. Fetch current live menu for order.shopId (reusing cached provider future if available)
+    List<MenuItem> currentMenu = const [];
+    try {
+      currentMenu = await ref.read(shopMenuItemsProvider(order.shopId).future);
+    } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
-              children: [
-                const Icon(
-                  Icons.store_mall_directory_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    statusMessage,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
+            content: Text(
+              'Unable to load menu for ${order.shopName}. Please check your connection.',
+              style: const TextStyle(fontWeight: FontWeight.w500),
             ),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
@@ -75,9 +133,6 @@ class ReorderHelper {
       }
       return;
     }
-
-    // 1. Fetch current live menu for order.shopId (reusing cached provider future if available)
-    final currentMenu = await ref.read(shopMenuItemsProvider(order.shopId).future);
 
     // 2. Map previous order items to current live available items (with exact options & updated prices)
     final List<({
@@ -119,9 +174,9 @@ class ReorderHelper {
         }
         availableItems.add((
           item: matchingItem,
-          quantity: orderItem.quantity,
+          quantity: orderItem.quantity.clamp(1, 99),
           selectedOptions: const [],
-          unitPrice: matchingItem.price,
+          unitPrice: matchingItem.price.clamp(0, 100000),
         ));
       } else {
         // Variant item with selected options: Validate each option against current live menu
@@ -192,9 +247,9 @@ class ReorderHelper {
 
         availableItems.add((
           item: matchingItem,
-          quantity: orderItem.quantity,
+          quantity: orderItem.quantity.clamp(1, 99),
           selectedOptions: resolvedOptions,
-          unitPrice: calculatedUnitPrice,
+          unitPrice: calculatedUnitPrice.clamp(0, 100000),
         ));
       }
     }

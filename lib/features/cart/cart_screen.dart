@@ -337,7 +337,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('⚠️ [Cart] Note during live menu availability check: $e');
+    }
 
     final unavailableItem =
         cartItems.where((ci) => !ci.menuItem.isAvailable).firstOrNull;
@@ -867,7 +869,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('⚠️ [Cart] Note during WhatsApp live menu check: $e');
+    }
 
     final unavailableItem =
         cartItems.where((ci) => !ci.menuItem.isAvailable).firstOrNull;

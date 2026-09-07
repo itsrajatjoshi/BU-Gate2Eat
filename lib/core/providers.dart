@@ -497,8 +497,11 @@ class FavoriteNotifier extends StateNotifier<Set<String>> {
         ? buildFavoriteKey(shopId, itemId)
         : itemId;
     final updated = Set<String>.from(state);
-    if (updated.contains(key)) {
+    if (updated.contains(key) || (shopId != null && updated.contains(itemId))) {
       updated.remove(key);
+      if (shopId != null) {
+        updated.remove(itemId);
+      }
     } else {
       updated.add(key);
     }
@@ -540,6 +543,7 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
 
   final shops = await ref.watch(shopsProvider.future);
   final List<FavoriteItemData> results = [];
+  final Set<String> addedKeys = {};
 
   // Identify target shop IDs if keys contain "shopId:itemId" or legacy "shopId_itemId"
   final Set<String> targetShopIds = {};
@@ -562,10 +566,17 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
       : shops;
 
   for (final shop in shopsToInspect) {
-    final menuItems = await ref.watch(shopMenuItemsProvider(shop.id).future);
+    List<MenuItem> menuItems = const [];
+    try {
+      menuItems = await ref.watch(shopMenuItemsProvider(shop.id).future);
+    } catch (_) {
+      // Isolate failures in one deleted/inaccessible shop so other favorites continue loading
+      continue;
+    }
     for (final item in menuItems) {
       final key = FavoriteNotifier.buildFavoriteKey(shop.id, item.id);
-      if (favoriteKeys.contains(key) || favoriteKeys.contains(item.id)) {
+      if ((favoriteKeys.contains(key) || favoriteKeys.contains(item.id)) && !addedKeys.contains(key)) {
+        addedKeys.add(key);
         results.add(FavoriteItemData(item: item, shop: shop));
       }
     }

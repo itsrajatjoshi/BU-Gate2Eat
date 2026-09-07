@@ -65,7 +65,8 @@ service cloud.firestore {
     function isValidMenuItemWrite() {
       let data = request.resource.data;
       return data.get('name', '') is string && data.get('name', '').size() > 0
-          && data.get('price', 0) is number && data.get('price', 0) >= 0;
+          && data.get('price', 0) is number && data.get('price', 0) >= 0
+          && data.get('price', 0) <= 100000;
     }
 
     function isValidShopStatsWrite(shopId) {

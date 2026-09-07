@@ -351,6 +351,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         _showErrorSnackBar('Please enter a valid price greater than 0.');
         return;
       }
+      if (parsedPrice > 100000) {
+        _showErrorSnackBar('Price cannot exceed ₹1,00,000.');
+        return;
+      }
       effectivePrice = parsedPrice;
     } else {
       // Options are ON: validate groups and options
@@ -389,6 +393,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
           if (group.groupType == OptionGroupType.choice) {
             final parsed = int.tryParse(optPriceText);
             if (parsed != null && parsed > 0) {
+              if (parsed > 100000) {
+                _showErrorSnackBar('Option price cannot exceed ₹1,00,000.');
+                return;
+              }
               pricingType = OptionPricingType.priceAdjustment;
               optPrice = parsed;
             } else {
@@ -401,6 +409,10 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             final parsed = int.tryParse(optPriceText);
             if (parsed == null || parsed <= 0) {
               _showErrorSnackBar('Fixed price for "$optName" in "$groupName" must be greater than 0.');
+              return;
+            }
+            if (parsed > 100000) {
+              _showErrorSnackBar('Option price cannot exceed ₹1,00,000.');
               return;
             }
             optPrice = parsed;
@@ -614,6 +626,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
   }
 
   Future<void> _onDelete() async {
+    if (_isLoading) return;
     final confirmed = await DeleteItemDialog.show(
       context,
       widget.item,

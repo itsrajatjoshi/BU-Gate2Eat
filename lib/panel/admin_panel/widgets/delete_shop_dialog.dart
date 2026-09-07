@@ -31,6 +31,7 @@ class _DeleteShopDialogState extends ConsumerState<DeleteShopDialog> {
   bool _isDeleting = false;
 
   Future<void> _onDelete() async {
+    if (_isDeleting) return;
     setState(() => _isDeleting = true);
 
     try {

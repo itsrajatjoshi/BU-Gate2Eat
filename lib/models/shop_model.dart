@@ -67,15 +67,11 @@ class Shop {
       closeTime: (data['closeTime'] as String?) ?? '23:30',
       isClosedOverride: (data['isClosedOverride'] as bool?) ?? false,
       isActive: (data['isActive'] as bool?) ?? true,
-      sortOrder: (data['sortOrder'] as int?) ?? 0,
+      sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
       searchKeywords: keywords,
       deliveryNote: (data['deliveryNote'] as String?) ?? 'Pickup from Gate 3',
-      createdAt: (data['createdAt'] is Timestamp)
-          ? (data['createdAt'] as Timestamp).toDate()
-          : (data['createdAt'] is DateTime ? data['createdAt'] as DateTime : DateTime.now()),
-      updatedAt: (data['updatedAt'] is Timestamp)
-          ? (data['updatedAt'] as Timestamp).toDate()
-          : (data['updatedAt'] is DateTime ? data['updatedAt'] as DateTime : DateTime.now()),
+      createdAt: _parseDateTime(data['createdAt']),
+      updatedAt: _parseDateTime(data['updatedAt']),
       orderMethod: ShopOrderMethod.fromString(data['orderMethod']),
       minimumOrderAmount: (data['minimumOrderAmount'] as num?)?.toInt() ?? 0,
       deliveryCharges: ((data['deliveryCharges'] as num?)?.toInt() ??
@@ -84,6 +80,20 @@ class Shop {
               0)
           .clamp(0, 100000),
     );
+  }
+
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is DateTime) {
+      return value;
+    } else if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    } else if (value is String) {
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    return DateTime.now();
   }
 
   /// Creates a Shop from a Firestore document snapshot.
@@ -228,20 +238,38 @@ class Shop {
     };
   }
 
-  /// Checks if the shop is currently open based on device time and override.
-  bool get isOpen {
-    if (isClosedOverride) return false;
+  /// Checks if a shop is open at a specific DateTime [time].
+  static bool isShopOpenAt({
+    required String openTime,
+    required String closeTime,
+    required DateTime time,
+    bool isClosedOverride = false,
+    bool isActive = true,
+  }) {
+    if (isClosedOverride || !isActive) return false;
 
-    final now = DateTime.now();
-    final currentMinutes = now.hour * 60 + now.minute;
-
+    final currentMinutes = time.hour * 60 + time.minute;
     final openMinutes = parseTimeToMinutes(openTime, defaultMinutes: 8 * 60);
     final closeMinutes = parseTimeToMinutes(closeTime, defaultMinutes: 23 * 60 + 30);
 
+    if (openMinutes == closeMinutes) {
+      return false;
+    }
+
     if (closeMinutes < openMinutes) {
+      // Midnight-crossing (e.g. 20:00 -> 02:00)
       return currentMinutes >= openMinutes || currentMinutes < closeMinutes;
     }
 
     return currentMinutes >= openMinutes && currentMinutes < closeMinutes;
   }
+
+  /// Checks if the shop is currently open based on device time and override.
+  bool get isOpen => isShopOpenAt(
+        openTime: openTime,
+        closeTime: closeTime,
+        time: DateTime.now(),
+        isClosedOverride: isClosedOverride,
+        isActive: isActive,
+      );
 }
