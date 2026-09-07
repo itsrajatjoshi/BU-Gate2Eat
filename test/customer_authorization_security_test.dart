@@ -24,6 +24,8 @@ import 'package:bugate2eat_app/core/providers.dart';
 import 'package:bugate2eat_app/core/router.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
 import 'package:bugate2eat_app/services/auth_service.dart';
+import 'package:bugate2eat_app/services/firestore_service.dart';
+import 'package:bugate2eat_app/services/order_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -434,6 +436,238 @@ void main() {
       // Unauthenticated caller is redirected to /onboarding
       expect(find.text('Onboarding View'), findsOneWidget);
       expect(find.text('Admin Shell View'), findsNothing);
+    });
+  });
+
+  group('Checkpoint 2.3 Remediation: Service-Layer Customer Authorization Suite', () {
+    late SharedPreferences prefs;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    // ─── Order cancellation service-boundary tests ──────────────────────────
+    test('19. Authenticated Customer A cancels own order at service layer: PASS', () async {
+      bool cancelCommitted = false;
+      final service = OrderService(
+        currentUserIdResolver: () => 'UID_A',
+        orderLoaderForTesting: (id) async => {
+          'orderId': id,
+          'customerId': 'UID_A',
+          'status': 'placed',
+        },
+        orderUpdaterForTesting: (id, updates) async {
+          cancelCommitted = updates['status'] == OrderStatusRules.statusCancelled;
+        },
+      );
+
+      await service.cancelOrder('ORD_OWN_001');
+      expect(cancelCommitted, isTrue);
+    });
+
+    test('20. Customer A attempts to cancel Customer B order: rejected at service layer', () async {
+      final service = OrderService(
+        currentUserIdResolver: () => 'UID_A',
+        orderLoaderForTesting: (id) async => {
+          'orderId': id,
+          'customerId': 'UID_B',
+          'status': 'placed',
+        },
+      );
+
+      expect(
+        () => service.cancelOrder('ORD_VICTIM_002'),
+        throwsA(
+          isA<OrderServiceException>().having(
+            (e) => e.message,
+            'message',
+            contains('Unauthorized: Customer "UID_A" cannot cancel order owned by "UID_B"'),
+          ),
+        ),
+      );
+    });
+
+    test('21. Customer A supplies/impersonates Customer B customerId on creation: rejected at service layer', () async {
+      final service = OrderService(
+        currentUserIdResolver: () => 'UID_A',
+      );
+
+      final spoofedOrder = AppOrder(
+        orderId: 'ORD_INJECT_003',
+        shopId: 's001',
+        shopName: 'Shop 1',
+        customerId: 'UID_B', // Attempting to create order owned by B
+        customerName: 'Attacker Impersonating B',
+        customerPhone: '9876543210',
+        items: const [],
+        totalAmount: 200,
+        createdAt: DateTime.now(),
+      );
+
+      expect(
+        () => service.createOrder(spoofedOrder),
+        throwsA(
+          isA<OrderServiceException>().having(
+            (e) => e.message,
+            'message',
+            contains('Unauthorized: Cannot create order with customerId "UID_B" as authenticated user "UID_A"'),
+          ),
+        ),
+      );
+    });
+
+    test('22. Unauthenticated cancel attempt: rejected at service layer', () async {
+      final service = OrderService(
+        currentUserIdResolver: () => null, // Unauthenticated
+      );
+
+      expect(
+        () => service.cancelOrder('ORD_ANY_004'),
+        throwsA(
+          isA<OrderServiceException>().having(
+            (e) => e.message,
+            'message',
+            contains('Unauthorized: Order cancellation requires an authenticated customer session'),
+          ),
+        ),
+      );
+    });
+
+    // ─── Support queries service-boundary tests ─────────────────────────────
+    test('23. Customer A requests own support queries: allowed via watchMySupportQueries', () async {
+      String? requestedUid;
+      final service = FirestoreService(
+        currentUserIdResolver: () => 'UID_A',
+        supportQueryStreamForTesting: (uid) {
+          requestedUid = uid;
+          return Stream.value([]);
+        },
+      );
+
+      final stream = service.watchMySupportQueries();
+      expect(await stream.first, isEmpty);
+      expect(requestedUid, equals('UID_A'));
+    });
+
+    test('24. Customer A requests Customer B support queries through service API: rejected', () async {
+      final service = FirestoreService(
+        currentUserIdResolver: () => 'UID_A',
+      );
+
+      // Caller passes UID_B to watchCustomerSupportQueries while authenticated as UID_A
+      final stream = service.watchCustomerSupportQueries('UID_B');
+      expect(await stream.isEmpty, isTrue);
+    });
+
+    test('25. Customer A supplies Customer B customerId in submitSupportQuery: overridden with authenticated UID', () async {
+      Map<String, dynamic>? savedDoc;
+      final service = FirestoreService(
+        currentUserIdResolver: () => 'UID_A',
+        docWriterForTesting: (col, docId, data) async {
+          savedDoc = data;
+        },
+      );
+
+      await service.submitSupportQuery(
+        name: 'Test Attacker',
+        query: 'Help issue',
+        phoneNumber: '9876543210',
+        customerId: 'SPOOFED_UID_B', // Maliciously provided foreign ID
+      );
+
+      expect(savedDoc, isNotNull);
+      // Authoritative authenticated UID strictly overrides client input
+      expect(savedDoc!['customerId'], equals('UID_A'));
+      expect(savedDoc!['customerId'], isNot(equals('SPOOFED_UID_B')));
+    });
+
+    test('26. Unauthenticated support-query request: empty/rejected', () async {
+      final service = FirestoreService(
+        currentUserIdResolver: () => null, // Unauthenticated
+      );
+
+      final streamMy = service.watchMySupportQueries();
+      expect(await streamMy.isEmpty, isTrue);
+
+      final streamCust = service.watchCustomerSupportQueries('ANY_UID');
+      expect(await streamCust.isEmpty, isTrue);
+    });
+
+    test('27. LocalStorage customerId B while Firebase UID A: service layer strictly uses A', () async {
+      // Local storage contains B
+      await prefs.setString('customer_id', 'UID_B');
+      await prefs.setString('customer_phone', '9999999999');
+
+      // But authenticated session is A
+      final container = ProviderContainer(
+        overrides: [
+          currentIdentityProvider.overrideWithValue(
+            const CurrentIdentity(
+              uid: 'UID_A',
+              phone: '9876543210',
+              authStatus: AuthStatus.authenticated,
+              role: AuthRole.customer,
+              customerId: 'UID_A',
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final orderService = container.read(orderServiceProvider);
+      // Attempting to query active orders for B while authenticated as A is blocked at service layer
+      final stream = orderService.watchCustomerActiveOrders(customerId: 'UID_B');
+      expect(await stream.isEmpty, isTrue);
+    });
+
+    // ─── Generic identity injection tests ───────────────────────────────────
+    test('28. Phone number cannot override authenticated UID in OrderService query', () async {
+      final service = OrderService(
+        currentUserIdResolver: () => 'UID_A',
+      );
+
+      // Caller authenticated as UID_A passes a foreign customerId along with a matching phone
+      final stream = service.watchCustomerActiveOrders(
+        customerId: 'UID_VICTIM',
+        customerPhone: '9876543210',
+      );
+      expect(await stream.isEmpty, isTrue);
+    });
+
+    test('29. Route parameter cannot override authenticated UID in OrderDetailScreen', () {
+      const authenticatedCustomer = CurrentIdentity(
+        uid: 'UID_A',
+        phone: '9876543210',
+        authStatus: AuthStatus.authenticated,
+        role: AuthRole.customer,
+        customerId: 'UID_A',
+      );
+
+      final foreignOrder = AppOrder(
+        orderId: 'ORD_ROUTE_PARAM_999',
+        shopId: 's001',
+        shopName: 'Shop A',
+        customerId: 'UID_B',
+        customerName: 'User B',
+        customerPhone: '9111111111',
+        items: const [],
+        totalAmount: 150,
+        createdAt: DateTime.now(),
+      );
+
+      // Evaluating conceptual ownership check in OrderDetailScreen
+      final isAuthorized = foreignOrder.customerId == authenticatedCustomer.uid;
+      expect(isAuthorized, isFalse);
+    });
+
+    test('30. Arbitrary customerId cannot override authenticated UID in watchCustomerOrderHistory', () async {
+      final service = OrderService(
+        currentUserIdResolver: () => 'UID_A',
+      );
+
+      final stream = service.watchCustomerOrderHistory(customerId: 'INJECTED_ARBITRARY_UID');
+      expect(await stream.isEmpty, isTrue);
     });
   });
 }

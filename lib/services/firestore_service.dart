@@ -2,6 +2,8 @@
 // Firestore service for reading and writing shop & menu data + Firebase Storage
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' hide Category;
 
@@ -17,11 +19,49 @@ class FirestoreService {
   FirestoreService({
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
+    FirebaseAuth? auth,
+    String? Function()? currentUserIdResolver,
+    Future<void> Function(String collection, String docId, Map<String, dynamic> data)? docWriterForTesting,
+    Stream<List<SupportQuery>> Function(String customerId)? supportQueryStreamForTesting,
   })  : _customFirestore = firestore,
-        _customStorage = storage;
+        _customStorage = storage,
+        _customAuth = auth,
+        _customUserIdResolver = currentUserIdResolver,
+        _docWriterForTesting = docWriterForTesting,
+        _supportQueryStreamForTesting = supportQueryStreamForTesting;
 
   final FirebaseFirestore? _customFirestore;
   final FirebaseStorage? _customStorage;
+  final FirebaseAuth? _customAuth;
+  final String? Function()? _customUserIdResolver;
+  final Future<void> Function(String collection, String docId, Map<String, dynamic> data)? _docWriterForTesting;
+  final Stream<List<SupportQuery>> Function(String customerId)? _supportQueryStreamForTesting;
+
+  /// Checks if Firebase is initialized or custom firestore instance is provided.
+  bool get isAvailable {
+    try {
+      if (_customFirestore != null) return true;
+      return Firebase.apps.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Resolves the authoritative authenticated Firebase Auth UID.
+  String? get _currentAuthUid {
+    if (_customUserIdResolver != null) {
+      return _customUserIdResolver!();
+    }
+    try {
+      if (_customAuth != null) {
+        return _customAuth!.currentUser?.uid;
+      }
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseAuth.instance.currentUser?.uid;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   FirebaseFirestore get _firestore =>
       _customFirestore ?? FirebaseFirestore.instance;
@@ -705,17 +745,32 @@ class FirestoreService {
       throw ArgumentError('Query text cannot be empty.');
     }
 
-    final docRef = _firestore.collection('supportQueries').doc();
+    final authUid = _currentAuthUid;
+    final effectiveCustomerId = (authUid != null && authUid.isNotEmpty)
+        ? authUid
+        : customerId.trim();
+
     final data = {
-      'id': docRef.id,
       'name': cleanName,
       'query': cleanQuery,
       'phoneNumber': cleanPhone,
       'phone': cleanPhone,
-      'customerId': customerId.trim(),
+      'customerId': effectiveCustomerId,
       'status': 'unread',
       'createdAt': FieldValue.serverTimestamp(),
     };
+
+    if (_docWriterForTesting != null) {
+      const mockId = 'mock_query_id_test';
+      data['id'] = mockId;
+      await _docWriterForTesting!('supportQueries', mockId, data);
+      return mockId;
+    }
+
+    if (!isAvailable) return 'offline_support_query';
+
+    final docRef = _firestore.collection('supportQueries').doc();
+    data['id'] = docRef.id;
 
     debugPrint(
       '📝 FirestoreService.submitSupportQuery -> creating supportQueries/${docRef.id}',
@@ -732,12 +787,20 @@ class FirestoreService {
     }
   }
 
-  /// Real-time stream of a customer's own support queries matching their authenticated UID.
-  Stream<List<SupportQuery>> watchCustomerSupportQueries(String customerId) {
-    if (customerId.trim().isEmpty) return const Stream.empty();
+  /// Real-time stream of the authenticated customer's own support queries.
+  /// Derives customer identity directly from authenticated Firebase Auth session.
+  Stream<List<SupportQuery>> watchMySupportQueries() {
+    final authUid = _currentAuthUid;
+    if (authUid == null || authUid.isEmpty) {
+      return const Stream.empty();
+    }
+    if (_supportQueryStreamForTesting != null) {
+      return _supportQueryStreamForTesting!(authUid);
+    }
+    if (!isAvailable) return const Stream.empty();
     return _firestore
         .collection('supportQueries')
-        .where('customerId', isEqualTo: customerId.trim())
+        .where('customerId', isEqualTo: authUid)
         .snapshots()
         .map((snapshot) {
       final queries = snapshot.docs
@@ -746,6 +809,25 @@ class FirestoreService {
       queries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return queries;
     });
+  }
+
+  /// Real-time stream of a customer's support queries.
+  /// If [customerId] is provided, independently verifies it against authenticated Firebase UID.
+  /// If unauthenticated or [customerId] does not match authenticated UID, returns empty stream.
+  Stream<List<SupportQuery>> watchCustomerSupportQueries([String? customerId]) {
+    final authUid = _currentAuthUid;
+    if (authUid == null || authUid.isEmpty) {
+      return const Stream.empty();
+    }
+    if (customerId != null &&
+        customerId.isNotEmpty &&
+        customerId.trim() != authUid) {
+      debugPrint(
+        '⛔ [FirestoreService] Blocked unauthorized query: Caller "$authUid" cannot access queries of "$customerId".',
+      );
+      return const Stream.empty();
+    }
+    return watchMySupportQueries();
   }
 
   /// Real-time stream of customer support queries for Admin, sorted newest first.

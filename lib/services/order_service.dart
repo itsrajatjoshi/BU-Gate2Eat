@@ -3,6 +3,7 @@
 // Handles order creation, retrieval, real-time streams, status transitions, and lifecycle validation.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
@@ -85,9 +86,39 @@ class OrderStatusRules {
 
 /// Service class for Firestore `orders` collection operations and lifecycle transitions.
 class OrderService {
-  OrderService({FirebaseFirestore? firestore}) : _customFirestore = firestore;
+  OrderService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    String? Function()? currentUserIdResolver,
+    Future<Map<String, dynamic>?> Function(String orderId)? orderLoaderForTesting,
+    Future<void> Function(String orderId, Map<String, dynamic> updates)? orderUpdaterForTesting,
+  })  : _customFirestore = firestore,
+        _customAuth = auth,
+        _customUserIdResolver = currentUserIdResolver,
+        _orderLoaderForTesting = orderLoaderForTesting,
+        _orderUpdaterForTesting = orderUpdaterForTesting;
 
   final FirebaseFirestore? _customFirestore;
+  final FirebaseAuth? _customAuth;
+  final String? Function()? _customUserIdResolver;
+  final Future<Map<String, dynamic>?> Function(String orderId)? _orderLoaderForTesting;
+  final Future<void> Function(String orderId, Map<String, dynamic> updates)? _orderUpdaterForTesting;
+
+  /// Resolves the authoritative authenticated Firebase Auth UID.
+  String? get _currentAuthUid {
+    if (_customUserIdResolver != null) {
+      return _customUserIdResolver!();
+    }
+    try {
+      if (_customAuth != null) {
+        return _customAuth!.currentUser?.uid;
+      }
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseAuth.instance.currentUser?.uid;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   /// Checks if Firebase is initialized or custom firestore instance is provided.
   bool get isAvailable {
@@ -118,6 +149,15 @@ class OrderService {
   /// NOTE: Does NOT increment any shopStats counter yet — pre-accept cancel deletes the order completely.
   Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
     try {
+      final authUid = _currentAuthUid;
+      if (authUid != null && authUid.isNotEmpty) {
+        if (order.customerId.isNotEmpty && order.customerId != authUid) {
+          throw OrderServiceException(
+            'Unauthorized: Cannot create order with customerId "${order.customerId}" as authenticated user "$authUid".',
+          );
+        }
+      }
+
       final docRef = _ordersRef.doc(order.orderId);
       final data = order.toFirestore();
       final now = customNow ?? DateTime.now();
@@ -177,12 +217,45 @@ class OrderService {
 
   // ─── Customer Streams ──────────────────────────────────────────────────────
 
+  /// Real-time stream of the authenticated customer's own active orders (placed, accepted).
+  /// Excludes expired orders immediately from active output and triggers atomic background expiry.
+  /// Derives customer identity directly from authenticated Firebase Auth session.
+  Stream<List<AppOrder>> watchMyActiveOrders() {
+    final authUid = _currentAuthUid;
+    if (authUid == null || authUid.isEmpty) {
+      return const Stream.empty();
+    }
+    return watchCustomerActiveOrders(customerId: authUid);
+  }
+
+  /// Real-time stream of the authenticated customer's completed/terminal order history.
+  /// Derives customer identity directly from authenticated Firebase Auth session.
+  Stream<List<AppOrder>> watchMyOrderHistory() {
+    final authUid = _currentAuthUid;
+    if (authUid == null || authUid.isEmpty) {
+      return const Stream.empty();
+    }
+    return watchCustomerOrderHistory(customerId: authUid);
+  }
+
   /// Real-time stream of a customer's active orders (placed, accepted).
   /// Excludes expired orders immediately from active output and triggers atomic background expiry.
   Stream<List<AppOrder>> watchCustomerActiveOrders({
     String? customerId,
     String? customerPhone,
   }) {
+    final authUid = _currentAuthUid;
+
+    // Security Invariant: If caller is authenticated, enforce that query targets authenticated UID
+    if (authUid != null && authUid.isNotEmpty) {
+      if (customerId != null && customerId.isNotEmpty && customerId != authUid) {
+        debugPrint(
+          '⛔ [OrderService] Blocked unauthorized active orders query: Caller "$authUid" cannot access orders of "$customerId".',
+        );
+        return const Stream.empty();
+      }
+    }
+
     if (!isAvailable) return const Stream.empty();
     Query<Map<String, dynamic>> query = _ordersRef;
 
@@ -222,6 +295,18 @@ class OrderService {
     String? customerId,
     String? customerPhone,
   }) {
+    final authUid = _currentAuthUid;
+
+    // Security Invariant: If caller is authenticated, enforce that query targets authenticated UID
+    if (authUid != null && authUid.isNotEmpty) {
+      if (customerId != null && customerId.isNotEmpty && customerId != authUid) {
+        debugPrint(
+          '⛔ [OrderService] Blocked unauthorized order history query: Caller "$authUid" cannot access orders of "$customerId".',
+        );
+        return const Stream.empty();
+      }
+    }
+
     if (!isAvailable) return const Stream.empty();
     Query<Map<String, dynamic>> query = _ordersRef;
 
@@ -547,7 +632,39 @@ class OrderService {
   /// Zero shopStats counters are modified.
   /// Throws [OrderServiceException] if the order is not in 'placed' status.
   Future<void> cancelOrder(String orderId) async {
+    // 1. Security Invariant: Order cancellation requires an authenticated session
+    final authUid = _currentAuthUid;
+    if (authUid == null || authUid.isEmpty) {
+      throw const OrderServiceException(
+        'Unauthorized: Order cancellation requires an authenticated customer session.',
+      );
+    }
+
+    if (_orderLoaderForTesting != null) {
+      final data = await _orderLoaderForTesting!(orderId);
+      if (data == null) return;
+      final orderCustomerId = (data['customerId'] as String?) ?? '';
+      if (orderCustomerId.isNotEmpty && orderCustomerId != authUid) {
+        throw OrderServiceException(
+          'Unauthorized: Customer "$authUid" cannot cancel order owned by "$orderCustomerId".',
+        );
+      }
+      final status = (data['status'] as String?) ?? 'placed';
+      if (status != OrderStatusRules.statusPlaced) {
+        throw OrderServiceException(
+          'Cannot cancel order in "$status" status. Orders can only be cancelled while in placed status.',
+        );
+      }
+      if (_orderUpdaterForTesting != null) {
+        await _orderUpdaterForTesting!(orderId, {
+          'status': OrderStatusRules.statusCancelled,
+        });
+      }
+      return;
+    }
+
     if (!isAvailable) return;
+
     try {
       final docRef = _ordersRef.doc(orderId);
       await _firestore.runTransaction((transaction) async {
@@ -557,7 +674,17 @@ class OrderService {
           return; // Already deleted or not found
         }
 
-        final status = (doc.data()!['status'] as String?) ?? 'placed';
+        final data = doc.data()!;
+
+        // 2. Security Invariant: Verify order.customerId == authenticated UID
+        final orderCustomerId = (data['customerId'] as String?) ?? '';
+        if (orderCustomerId.isNotEmpty && orderCustomerId != authUid) {
+          throw OrderServiceException(
+            'Unauthorized: Customer "$authUid" cannot cancel order owned by "$orderCustomerId".',
+          );
+        }
+
+        final status = (data['status'] as String?) ?? 'placed';
         if (status != OrderStatusRules.statusPlaced) {
           throw OrderServiceException(
             'Cannot cancel order in "$status" status. Orders can only be cancelled while in placed status.',

@@ -379,11 +379,10 @@ class OrderDetailScreen extends ConsumerWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : Colors.black.withValues(alpha: 0.08),
-                            width: 1,
-                          ),
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.12)
+                                  : Colors.black.withValues(alpha: 0.08),
+                            ),
                         ),
                         child: Icon(
                           Icons.call_outlined,
@@ -1183,7 +1182,11 @@ class OrderDetailScreen extends ConsumerWidget {
   }
 
   void _confirmCancelDialog(
-      BuildContext context, WidgetRef ref, String orderId, [AppOrder? order]) {
+    BuildContext context,
+    WidgetRef ref,
+    String orderId, [
+    AppOrder? order,
+  ]) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(

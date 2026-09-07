@@ -103,7 +103,17 @@ final checkHasInternetProvider = Provider<Future<bool> Function()>((ref) {
 
 /// Provider for the Firestore service (singleton).
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
-  return FirestoreService();
+  return FirestoreService(
+    currentUserIdResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated) {
+          return identity.uid;
+        }
+      } catch (_) {}
+      return null;
+    },
+  );
 });
 
 /// Provider for the Notification service (singleton).
@@ -113,7 +123,17 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
 
 /// Provider for the Order service (singleton).
 final orderServiceProvider = Provider<OrderService>((ref) {
-  return OrderService();
+  return OrderService(
+    currentUserIdResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated) {
+          return identity.uid;
+        }
+      } catch (_) {}
+      return null;
+    },
+  );
 });
 
 /// Provider for the Report service (singleton).
@@ -637,11 +657,14 @@ final customerActiveOrdersStreamProvider =
 
     if (!orderService.isAvailable) {
       yield dummyOrders
-          .where((o) =>
-              (o.status == 'placed' || o.status == 'accepted') &&
-              ((authUid.isNotEmpty && o.customerId == authUid) ||
-               (phone.isNotEmpty &&
-                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == phone)))
+          .where(
+            (o) =>
+                (o.status == 'placed' || o.status == 'accepted') &&
+                ((authUid.isNotEmpty && o.customerId == authUid) ||
+                    (phone.isNotEmpty &&
+                        AppAuthRoles.normalizeCleanPhone(o.customerPhone) ==
+                            phone)),
+          )
           .toList();
       return;
     }
@@ -688,11 +711,14 @@ final customerActiveOrdersStreamProvider =
   }
 
   yield dummyOrders
-      .where((o) =>
-          (o.status == 'placed' || o.status == 'accepted') &&
-          ((custId.isNotEmpty && o.customerId == custId) ||
-           (cleanPhone.isNotEmpty &&
-            AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone)))
+      .where(
+        (o) =>
+            (o.status == 'placed' || o.status == 'accepted') &&
+            ((custId.isNotEmpty && o.customerId == custId) ||
+                (cleanPhone.isNotEmpty &&
+                    AppAuthRoles.normalizeCleanPhone(o.customerPhone) ==
+                        cleanPhone)),
+      )
       .toList();
 });
 
@@ -744,14 +770,17 @@ final customerOrderHistoryStreamProvider =
 
     if (!orderService.isAvailable) {
       yield dummyOrders
-          .where((o) =>
-              (o.status == 'delivered' ||
-               o.status == 'rejected' ||
-               o.status == 'delivery_expired' ||
-               o.status == 'cancelled') &&
-              ((authUid.isNotEmpty && o.customerId == authUid) ||
-               (phone.isNotEmpty &&
-                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == phone)))
+          .where(
+            (o) =>
+                (o.status == 'delivered' ||
+                    o.status == 'rejected' ||
+                    o.status == 'delivery_expired' ||
+                    o.status == 'cancelled') &&
+                ((authUid.isNotEmpty && o.customerId == authUid) ||
+                    (phone.isNotEmpty &&
+                        AppAuthRoles.normalizeCleanPhone(o.customerPhone) ==
+                            phone)),
+          )
           .toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return;
@@ -793,25 +822,30 @@ final customerOrderHistoryStreamProvider =
 
   if (storage == null) {
     yield dummyOrders
-        .where((o) =>
-            o.status == 'delivered' ||
-            o.status == 'rejected' ||
-            o.status == 'delivery_expired' ||
-            o.status == 'cancelled')
+        .where(
+          (o) =>
+              o.status == 'delivered' ||
+              o.status == 'rejected' ||
+              o.status == 'delivery_expired' ||
+              o.status == 'cancelled',
+        )
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return;
   }
 
   yield dummyOrders
-      .where((o) =>
-          (o.status == 'delivered' ||
-           o.status == 'rejected' ||
-           o.status == 'delivery_expired' ||
-           o.status == 'cancelled') &&
-          ((custId.isNotEmpty && o.customerId == custId) ||
-           (cleanPhone.isNotEmpty &&
-            AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone)))
+      .where(
+        (o) =>
+            (o.status == 'delivered' ||
+                o.status == 'rejected' ||
+                o.status == 'delivery_expired' ||
+                o.status == 'cancelled') &&
+            ((custId.isNotEmpty && o.customerId == custId) ||
+                (cleanPhone.isNotEmpty &&
+                    AppAuthRoles.normalizeCleanPhone(o.customerPhone) ==
+                        cleanPhone)),
+      )
       .toList()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 });
@@ -854,9 +888,11 @@ final shopActiveOrdersStreamProvider =
 
   if (!orderService.isAvailable) {
     yield dummyOrders
-        .where((o) =>
-            o.shopId == effectiveShopId &&
-            (o.status == 'placed' || o.status == 'accepted'))
+        .where(
+          (o) =>
+              o.shopId == effectiveShopId &&
+              (o.status == 'placed' || o.status == 'accepted'),
+        )
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return;
@@ -881,12 +917,14 @@ final shopOrderHistoryStreamProvider =
 
   if (!orderService.isAvailable) {
     yield dummyOrders
-        .where((o) =>
-            o.shopId == effectiveShopId &&
-            (o.status == 'delivered' ||
-                o.status == 'rejected' ||
-                o.status == 'delivery_expired' ||
-                o.status == 'cancelled'))
+        .where(
+          (o) =>
+              o.shopId == effectiveShopId &&
+              (o.status == 'delivered' ||
+                  o.status == 'rejected' ||
+                  o.status == 'delivery_expired' ||
+                  o.status == 'cancelled'),
+        )
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return;
@@ -1026,16 +1064,12 @@ final customerSupportQueriesStreamProvider =
     currentIdentity = ref.watch(currentIdentityProvider);
   } catch (_) {}
 
-  final customerId = (currentIdentity != null && currentIdentity.isAuthenticated)
-      ? currentIdentity.uid
-      : null;
-
-  if (customerId == null || customerId.isEmpty) {
+  if (currentIdentity == null || !currentIdentity.isAuthenticated) {
     return const Stream.empty();
   }
 
   final firestoreService = ref.watch(firestoreServiceProvider);
-  return firestoreService.watchCustomerSupportQueries(customerId);
+  return firestoreService.watchMySupportQueries();
 });
 
 
