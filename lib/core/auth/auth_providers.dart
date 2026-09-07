@@ -3,6 +3,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../services/auth_service.dart';
 import '../providers.dart' show authServiceProvider;
 import 'auth_provider_interface.dart';
 import 'auth_status.dart';
@@ -21,8 +22,12 @@ final currentIdentityStreamProvider = StreamProvider<CurrentIdentity>((ref) {
 
 /// Reactive provider exposing the current snapshot of [CurrentIdentity].
 final currentIdentityProvider = Provider<CurrentIdentity>((ref) {
+  final auth = ref.watch(authProvider);
+  if (auth is AuthService && auth.firebaseAuth == null) {
+    return auth.currentIdentity;
+  }
   final streamState = ref.watch(currentIdentityStreamProvider);
-  return streamState.asData?.value ?? ref.watch(authProvider).currentIdentity;
+  return streamState.asData?.value ?? auth.currentIdentity;
 });
 
 /// Reactive provider exposing the current [AuthStatus].

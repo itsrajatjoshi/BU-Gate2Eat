@@ -11,6 +11,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../core/auth/current_identity.dart';
 import '../core/constants/app_constants.dart';
 import 'local_storage_service.dart';
 
@@ -538,6 +539,7 @@ class NotificationService {
   /// Anonymous sessions (empty phone) are NOT registered in Firestore and any existing token doc is purged.
   Future<void> syncCurrentSessionToken({
     required LocalStorageService localStorage,
+    CurrentIdentity? currentIdentity,
     String? explicitRole,
     String? explicitShopId,
   }) async {
@@ -547,6 +549,26 @@ class NotificationService {
       return;
     }
 
+    // 1. Authoritative: Prioritize CurrentIdentity from Firebase Auth
+    if (currentIdentity != null && currentIdentity.isAuthenticated) {
+      final role = explicitRole ?? currentIdentity.role.name;
+      final shopId = explicitShopId ?? currentIdentity.shopId;
+      final customerId = currentIdentity.uid;
+      final phone = currentIdentity.phone.isNotEmpty
+          ? currentIdentity.phone
+          : localStorage.userPhone.trim();
+
+      await registerDeviceToken(
+        token: token,
+        phone: phone,
+        role: role,
+        shopId: shopId,
+        customerId: customerId,
+      );
+      return;
+    }
+
+    // 2. Unauthenticated / offline test fallback
     final phone = localStorage.userPhone.trim();
     if (phone.isEmpty) {
       debugPrint('ℹ️ [FCM] Phone is empty (anonymous user). Skipping Firestore registration and purging stale doc.');

@@ -170,8 +170,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       ),
     );
 
-    // Navigate to home, shopkeeper, admin, name input (if OTP verified), or onboarding
+    // 1. Authoritative: Prioritize canonical Firebase Auth identity
+    CurrentIdentity? currentIdentity;
+    try {
+      currentIdentity = ref.read(currentIdentityProvider);
+    } catch (_) {}
+
     final localStorage = ref.read(localStorageServiceProvider);
+
+    if (currentIdentity != null && currentIdentity.isAuthenticated) {
+      if (currentIdentity.isAdmin) {
+        context.go(AppRoutes.admin);
+      } else if (currentIdentity.isShopkeeper) {
+        context.go(AppRoutes.shopkeeper);
+      } else {
+        context.go(AppRoutes.home);
+      }
+      return;
+    }
+
+    // 2. Unauthenticated / offline test mock fallback
     if (localStorage.isOnboarded) {
       final phone = localStorage.userPhone;
       if (AppAuthRoles.isAdminPhone(phone)) {

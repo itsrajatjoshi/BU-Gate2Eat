@@ -546,19 +546,35 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
       final currentStoragePhone =
           AppAuthRoles.normalizeCleanPhone(localStorage.userPhone);
-      final customerPhone = customerIdentity.phone.trim().isNotEmpty
-          ? customerIdentity.phone.trim()
-          : currentStoragePhone;
-      final customerId = customerIdentity.customerId.trim().isNotEmpty
-          ? customerIdentity.customerId.trim()
-          : (customerPhone.isNotEmpty
-              ? 'cust_$customerPhone'
-              : localStorage.customerId);
-      final customerName = customerIdentity.name.trim().isNotEmpty
-          ? customerIdentity.name.trim()
-          : (localStorage.userName.isNotEmpty
-              ? localStorage.userName
-              : 'Student');
+
+      CurrentIdentity? currentAuthIdentity;
+      try {
+        currentAuthIdentity = ref.read(currentIdentityProvider);
+      } catch (_) {}
+
+      // Authoritative customerId: strictly Firebase UID when authenticated
+      final String customerId;
+      if (currentAuthIdentity != null && currentAuthIdentity.isAuthenticated) {
+        customerId = currentAuthIdentity.uid;
+      } else {
+        customerId = customerIdentity.customerId.trim().isNotEmpty
+            ? customerIdentity.customerId.trim()
+            : localStorage.customerId;
+      }
+
+      final customerPhone = (currentAuthIdentity != null && currentAuthIdentity.phone.isNotEmpty)
+          ? currentAuthIdentity.phone
+          : (customerIdentity.phone.trim().isNotEmpty
+              ? customerIdentity.phone.trim()
+              : currentStoragePhone);
+
+      final customerName = (currentAuthIdentity != null && currentAuthIdentity.displayName?.isNotEmpty == true)
+          ? currentAuthIdentity.displayName!
+          : (customerIdentity.name.trim().isNotEmpty
+              ? customerIdentity.name.trim()
+              : (localStorage.userName.isNotEmpty
+                  ? localStorage.userName
+                  : 'Student'));
 
       // 2. Build immutable Order Snapshot
       final newOrder = AppOrder(

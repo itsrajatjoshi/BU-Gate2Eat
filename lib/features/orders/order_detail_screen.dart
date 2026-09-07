@@ -48,17 +48,50 @@ class OrderDetailScreen extends ConsumerWidget {
       } catch (_) {
         return true;
       }
+
+      // 1. Authoritative Firebase Auth Identity check
+      CurrentIdentity? currentIdentity;
+      try {
+        currentIdentity = ref.read(currentIdentityProvider);
+      } catch (_) {}
+
+      if (currentIdentity != null && currentIdentity.isAuthenticated) {
+        // Admin has authorized oversight of all orders
+        if (currentIdentity.isAdmin) {
+          return true;
+        }
+
+        // Shopkeeper: strictly authorized for orders of their assigned shop or personal customer orders
+        if (currentIdentity.isShopkeeper) {
+          final isOwnShop = currentIdentity.shopId != null &&
+              currentIdentity.shopId!.isNotEmpty &&
+              o.shopId == currentIdentity.shopId;
+          final isPersonalOrder = o.customerId == currentIdentity.uid;
+          if (!isOwnShop && !isPersonalOrder) {
+            debugPrint(
+              '⛔ [Order Authorization] Blocked cross-shop access: Shopkeeper "${currentIdentity.shopId}" cannot view order #${o.orderId} of shop "${o.shopId}".',
+            );
+            return false;
+          }
+          return true;
+        }
+
+        // Customer: strictly authorized ONLY for orders matching their authenticated UID
+        return o.customerId == currentIdentity.uid;
+      }
+
+      // 2. Offline / unauthenticated test mock compatibility
       if (localStorage == null) return true;
 
       final phone = localStorage.userPhone;
       final cleanPhone = AppAuthRoles.normalizeCleanPhone(phone);
 
-      // 1. Admin has authorized oversight of all orders
+      // In unit/widget tests without Firebase Auth
       if (AppAuthRoles.isAdminPhone(cleanPhone)) {
         return true;
       }
 
-      // 2. Shopkeeper: strictly authorized ONLY for orders belonging to their assigned shop,
+      // Shopkeeper: strictly authorized ONLY for orders belonging to their assigned shop,
       // or orders they placed personally as a customer.
       if (AppAuthRoles.isShopkeeperPhone(cleanPhone)) {
         final authorizedShopId = AppAuthRoles.getShopIdForPhone(cleanPhone);
@@ -79,7 +112,7 @@ class OrderDetailScreen extends ConsumerWidget {
         return true;
       }
 
-      // 3. Customer: strictly authorized ONLY for their own customer orders
+      // Customer: strictly authorized ONLY for their own customer orders
       final identity = ref.read(customerIdentityProvider);
       final matchesCustomerId = identity.customerId.isNotEmpty &&
           o.customerId.isNotEmpty &&

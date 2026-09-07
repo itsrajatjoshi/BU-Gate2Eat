@@ -64,7 +64,11 @@ class AuthService implements IAuthenticationProvider {
   /// Stream of raw authentication status changes.
   @override
   Stream<AuthStatus> get authStatusChanges {
-    return authStateChanges().map((user) {
+    final auth = _auth;
+    if (auth == null) {
+      return Stream<AuthStatus>.value(AuthStatus.unauthenticated);
+    }
+    return auth.authStateChanges().map((user) {
       if (user == null) return AuthStatus.unauthenticated;
       return AuthStatus.authenticated;
     });

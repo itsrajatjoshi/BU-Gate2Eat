@@ -25,11 +25,19 @@ class ReorderHelper {
     required WidgetRef ref,
     required AppOrder order,
   }) async {
-    // Verify customer ownership before reordering
-    final currentIdentity = ref.read(customerIdentityProvider);
+    // Verify customer ownership before reordering using authoritative CurrentIdentity
+    CurrentIdentity? authIdentity;
+    try {
+      authIdentity = ref.read(currentIdentityProvider);
+    } catch (_) {}
+
+    final currentCustomerId = (authIdentity != null && authIdentity.isAuthenticated)
+        ? authIdentity.uid
+        : ref.read(customerIdentityProvider).customerId;
+
     if (order.customerId.isNotEmpty &&
-        currentIdentity.customerId.isNotEmpty &&
-        order.customerId != currentIdentity.customerId) {
+        currentCustomerId.isNotEmpty &&
+        order.customerId != currentCustomerId) {
       debugPrint('⛔ [Reorder] Blocked reorder of order belonging to another customer.');
       return;
     }

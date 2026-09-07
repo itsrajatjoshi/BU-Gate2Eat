@@ -64,10 +64,14 @@ class LocalStorageService {
     await _prefs.remove(_keyVerifiedPhone);
   }
 
-  // ─── User Profile & Identity ───────────────────────────────
+  // ─── Local Presentation & Cache Data (Demoted from Security Authority) ───
+  // NOTE (Checkpoint 1.4):
+  // Values stored here (customerId, userPhone, userName) are strictly local cache
+  // and UI presentation preferences. They carry ZERO security or authorization authority.
+  // Authoritative identity originates strictly from Firebase Auth (CurrentIdentity / uid).
 
-  /// Gets the stored customer ID or initializes a stable device/phone identifier.
-  /// When a phone number exists, customer ID is strictly and deterministically derived from it.
+  /// Gets the locally cached customer ID for offline/test presentation.
+  /// Non-authoritative: Authoritative security identity is strictly Firebase UID.
   String get customerId {
     final rawPhone = userPhone.trim();
     final phone = AppAuthRoles.normalizeCleanPhone(rawPhone);

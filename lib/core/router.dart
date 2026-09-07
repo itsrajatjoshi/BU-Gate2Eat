@@ -68,6 +68,29 @@ String? centralRouteGuard(BuildContext context, GoRouterState state) {
     return null;
   }
 
+  // 1. Authoritative Firebase Auth Identity check
+  CurrentIdentity? currentIdentity;
+  try {
+    currentIdentity = ProviderScope.containerOf(context, listen: false).read(currentIdentityProvider);
+  } catch (_) {}
+
+  if (currentIdentity != null && currentIdentity.isAuthenticated) {
+    if (isAdminRoute) {
+      if (currentIdentity.isAdmin) {
+        return null; // Authorized
+      }
+      return AppRoutes.home; // Customer or shopkeeper blocked from /admin
+    }
+
+    if (isShopkeeperRoute) {
+      if (currentIdentity.isShopkeeper) {
+        return null; // Authorized
+      }
+      return AppRoutes.home; // Customer or admin blocked from /shopkeeper
+    }
+  }
+
+  // 2. Unauthenticated / test mock fallback
   LocalStorageService? storage;
   try {
     storage = ProviderScope.containerOf(context, listen: false).read(localStorageServiceProvider);

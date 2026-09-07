@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,6 +21,8 @@ import '../services/notification_service.dart';
 import '../services/order_service.dart';
 import '../services/report_service.dart';
 import '../services/shop_stats_service.dart';
+import 'auth/auth_providers.dart';
+import 'auth/current_identity.dart';
 import 'constants/app_constants.dart';
 
 export '../models/shop_model.dart' show ShopOrderMethod;
@@ -355,13 +358,35 @@ class CustomerIdentity {
 }
 
 /// Reactive notifier for current customer identity.
+/// Canonical Rule: When authenticated, `customerId == uid` originating from Firebase Auth.
+/// Local storage and phone numbers carry ZERO security or authorization authority.
 class CustomerIdentityNotifier extends StateNotifier<CustomerIdentity> {
-  CustomerIdentityNotifier(this._localStorage)
-      : super(_resolveIdentity(_localStorage));
+  CustomerIdentityNotifier(this._localStorage, {CurrentIdentity? currentIdentity})
+      : _currentIdentity = currentIdentity,
+        super(_resolveIdentity(_localStorage, currentIdentity));
 
   final LocalStorageService? _localStorage;
+  final CurrentIdentity? _currentIdentity;
 
-  static CustomerIdentity _resolveIdentity(LocalStorageService? storage) {
+  static CustomerIdentity _resolveIdentity(
+    LocalStorageService? storage,
+    CurrentIdentity? currentIdentity,
+  ) {
+    // 1. Authoritative: Prioritize authenticated Firebase Auth session
+    if (currentIdentity != null && currentIdentity.isAuthenticated) {
+      final name = currentIdentity.displayName != null && currentIdentity.displayName!.isNotEmpty
+          ? currentIdentity.displayName!
+          : (storage?.userName.isNotEmpty == true ? storage!.userName : 'Student');
+      final phone = currentIdentity.phone.isNotEmpty
+          ? currentIdentity.phone
+          : (storage?.userPhone ?? '');
+      return CustomerIdentity(
+        customerId: currentIdentity.uid, // Canonical rule: customerId == uid
+        name: name,
+        phone: phone,
+      );
+    }
+
     if (storage == null) {
       // In test or development environments where localStorage may not be overridden
       return const CustomerIdentity(
@@ -370,30 +395,25 @@ class CustomerIdentityNotifier extends StateNotifier<CustomerIdentity> {
         phone: '9876543210',
       );
     }
-    try {
-      final rawPhone = storage.userPhone.trim();
-      final cleanPhone = AppAuthRoles.normalizeCleanPhone(rawPhone);
-      final name = storage.userName.trim();
-      final id = cleanPhone.isNotEmpty
-          ? 'cust_$cleanPhone'
-          : storage.customerId;
-      return CustomerIdentity(
-        customerId: id,
-        name: name.isNotEmpty ? name : 'Student',
-        phone: cleanPhone,
-      );
-    } catch (_) {
-      return const CustomerIdentity(
-        customerId: '',
-        name: 'Student',
-        phone: '',
-      );
-    }
+
+    // 2. Unauthenticated state: strictly unauthenticated / empty customerId
+    // Never manufacture cust_<phone> as a security authority.
+    // For offline widget tests where storage has a mock customerId:
+    final name = storage.userName.trim();
+    final rawPhone = storage.userPhone.trim();
+    final cleanPhone = AppAuthRoles.normalizeCleanPhone(rawPhone);
+    final fallbackId = storage.customerId;
+
+    return CustomerIdentity(
+      customerId: fallbackId,
+      name: name.isNotEmpty ? name : 'Student',
+      phone: cleanPhone,
+    );
   }
 
-  /// Refreshes in-memory identity directly from latest LocalStorage state.
-  void refresh() {
-    state = _resolveIdentity(_localStorage);
+  /// Refreshes in-memory identity directly from latest LocalStorage and CurrentIdentity state.
+  void refresh({CurrentIdentity? currentIdentity}) {
+    state = _resolveIdentity(_localStorage, currentIdentity ?? _currentIdentity);
   }
 
   /// Resets in-memory identity to empty state (used on logout/delete account).
@@ -415,7 +435,11 @@ final customerIdentityProvider =
   } catch (_) {
     // UnimplementedError in widget tests where localStorage is not overridden
   }
-  return CustomerIdentityNotifier(localStorage);
+  CurrentIdentity? currentIdentity;
+  try {
+    currentIdentity = ref.watch(currentIdentityProvider);
+  } catch (_) {}
+  return CustomerIdentityNotifier(localStorage, currentIdentity: currentIdentity);
 });
 
 /// Completely and atomically purges all customer session state from memory and disk.
@@ -590,39 +614,65 @@ final favoriteItemsProvider = FutureProvider<List<FavoriteItemData>>((ref) async
 });
 
 // shopOrderMethodProvider REMOVED — shop.orderMethod from Firestore is the single source of truth.
+/// Test/environment hook to simulate production fail-closed security in test environments.
+/// In production, [Firebase.apps.isNotEmpty] is always true and enforces fail-closed behavior.
+final enforceFailClosedSecurityProvider = Provider<bool>((ref) => false);
 
-/// Real-time stream provider for current customer's active orders (placed, accepted).
+/// Real-time stream provider for watching the current customer's active orders (placed, accepted).
 final customerActiveOrdersStreamProvider =
-    StreamProvider<List<AppOrder>>((ref) async* {
+    StreamProvider.autoDispose<List<AppOrder>>((ref) async* {
   final orderService = ref.watch(orderServiceProvider);
   final identity = ref.watch(customerIdentityProvider);
   final dummyOrders = ref.watch(dummyOrdersProvider);
 
-  LocalStorageService? storage;
+  CurrentIdentity? currentIdentity;
   try {
-    storage = ref.watch(localStorageServiceProvider);
+    currentIdentity = ref.watch(currentIdentityProvider);
   } catch (_) {}
 
-  // If a real storage session exists, enforce strict session boundaries
-  if (storage != null) {
-    if (storage.userPhone.isEmpty && storage.customerId.isEmpty) {
-      yield const <AppOrder>[];
-      return;
-    }
-    final cleanPhone = AppAuthRoles.normalizeCleanPhone(storage.userPhone);
-    final custId = storage.customerId.isNotEmpty ? storage.customerId : 'cust_$cleanPhone';
+  // 1. Authoritative Firebase Auth Identity path
+  if (currentIdentity != null && currentIdentity.isAuthenticated) {
+    final authUid = currentIdentity.uid;
+    final phone = currentIdentity.phone;
 
     if (!orderService.isAvailable) {
       yield dummyOrders
           .where((o) =>
               (o.status == 'placed' || o.status == 'accepted') &&
-              ((custId.isNotEmpty && o.customerId == custId) ||
-               (cleanPhone.isNotEmpty &&
-                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone)))
+              ((authUid.isNotEmpty && o.customerId == authUid) ||
+               (phone.isNotEmpty &&
+                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == phone)))
           .toList();
       return;
     }
 
+    yield* orderService.watchCustomerActiveOrders(
+      customerId: authUid,
+      customerPhone: phone,
+    );
+    return;
+  }
+
+  // 2. Fail-Closed Security Invariant:
+  // When running against live Firebase (Firebase.apps.isNotEmpty) or when fail-closed
+  // is strictly enforced, an unauthenticated session yields an empty stream.
+  // LocalStorage phone cannot authorize access to real orders!
+  final enforceFailClosed = ref.watch(enforceFailClosedSecurityProvider);
+  if (Firebase.apps.isNotEmpty || enforceFailClosed) {
+    yield const <AppOrder>[];
+    return;
+  }
+
+  // 3. Test-compatibility fallback ONLY when Firebase is NOT initialized (Firebase.apps.isEmpty):
+  LocalStorageService? storage;
+  try {
+    storage = ref.watch(localStorageServiceProvider);
+  } catch (_) {}
+
+  final cleanPhone = storage != null ? AppAuthRoles.normalizeCleanPhone(storage.userPhone) : identity.phone;
+  final custId = storage != null && storage.customerId.isNotEmpty ? storage.customerId : identity.customerId;
+
+  if (orderService.isAvailable) {
     yield* orderService.watchCustomerActiveOrders(
       customerId: custId,
       customerPhone: cleanPhone,
@@ -630,18 +680,20 @@ final customerActiveOrdersStreamProvider =
     return;
   }
 
-  // Fallback for widget/unit tests where LocalStorageService is not overridden
-  if (!orderService.isAvailable) {
+  if (storage == null) {
     yield dummyOrders
         .where((o) => o.status == 'placed' || o.status == 'accepted')
         .toList();
     return;
   }
 
-  yield* orderService.watchCustomerActiveOrders(
-    customerId: identity.customerId,
-    customerPhone: identity.phone,
-  );
+  yield dummyOrders
+      .where((o) =>
+          (o.status == 'placed' || o.status == 'accepted') &&
+          ((custId.isNotEmpty && o.customerId == custId) ||
+           (cleanPhone.isNotEmpty &&
+            AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone)))
+      .toList();
 });
 
 /// Auto-ticking 1-second stream provider for live order countdowns and active order reconciliation.
@@ -675,24 +727,20 @@ final orderReconciliationTickerProvider = StreamProvider.autoDispose<DateTime>((
 
 /// Real-time stream provider for current customer's order history (delivered, rejected, delivery_expired).
 final customerOrderHistoryStreamProvider =
-    StreamProvider<List<AppOrder>>((ref) async* {
+    StreamProvider.autoDispose<List<AppOrder>>((ref) async* {
   final orderService = ref.watch(orderServiceProvider);
   final identity = ref.watch(customerIdentityProvider);
   final dummyOrders = ref.watch(dummyOrdersProvider);
 
-  LocalStorageService? storage;
+  CurrentIdentity? currentIdentity;
   try {
-    storage = ref.watch(localStorageServiceProvider);
+    currentIdentity = ref.watch(currentIdentityProvider);
   } catch (_) {}
 
-  // If a real storage session exists, enforce strict session boundaries
-  if (storage != null) {
-    if (storage.userPhone.isEmpty && storage.customerId.isEmpty) {
-      yield const <AppOrder>[];
-      return;
-    }
-    final cleanPhone = AppAuthRoles.normalizeCleanPhone(storage.userPhone);
-    final custId = storage.customerId.isNotEmpty ? storage.customerId : 'cust_$cleanPhone';
+  // 1. Authoritative Firebase Auth Identity path
+  if (currentIdentity != null && currentIdentity.isAuthenticated) {
+    final authUid = currentIdentity.uid;
+    final phone = currentIdentity.phone;
 
     if (!orderService.isAvailable) {
       yield dummyOrders
@@ -701,14 +749,41 @@ final customerOrderHistoryStreamProvider =
                o.status == 'rejected' ||
                o.status == 'delivery_expired' ||
                o.status == 'cancelled') &&
-              ((custId.isNotEmpty && o.customerId == custId) ||
-               (cleanPhone.isNotEmpty &&
-                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone)))
+              ((authUid.isNotEmpty && o.customerId == authUid) ||
+               (phone.isNotEmpty &&
+                AppAuthRoles.normalizeCleanPhone(o.customerPhone) == phone)))
           .toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return;
     }
 
+    yield* orderService.watchCustomerOrderHistory(
+      customerId: authUid,
+      customerPhone: phone,
+    );
+    return;
+  }
+
+  // 2. Fail-Closed Security Invariant:
+  // When running against live Firebase (Firebase.apps.isNotEmpty) or when fail-closed
+  // is strictly enforced, an unauthenticated session yields an empty stream.
+  // LocalStorage phone cannot authorize access to real orders!
+  final enforceFailClosed = ref.watch(enforceFailClosedSecurityProvider);
+  if (Firebase.apps.isNotEmpty || enforceFailClosed) {
+    yield const <AppOrder>[];
+    return;
+  }
+
+  // 3. Test-compatibility fallback ONLY when Firebase is NOT initialized (Firebase.apps.isEmpty):
+  LocalStorageService? storage;
+  try {
+    storage = ref.watch(localStorageServiceProvider);
+  } catch (_) {}
+
+  final cleanPhone = storage != null ? AppAuthRoles.normalizeCleanPhone(storage.userPhone) : identity.phone;
+  final custId = storage != null && storage.customerId.isNotEmpty ? storage.customerId : identity.customerId;
+
+  if (orderService.isAvailable) {
     yield* orderService.watchCustomerOrderHistory(
       customerId: custId,
       customerPhone: cleanPhone,
@@ -716,8 +791,7 @@ final customerOrderHistoryStreamProvider =
     return;
   }
 
-  // Fallback for widget/unit tests where LocalStorageService is not overridden
-  if (!orderService.isAvailable) {
+  if (storage == null) {
     yield dummyOrders
         .where((o) =>
             o.status == 'delivered' ||
@@ -729,10 +803,17 @@ final customerOrderHistoryStreamProvider =
     return;
   }
 
-  yield* orderService.watchCustomerOrderHistory(
-    customerId: identity.customerId,
-    customerPhone: identity.phone,
-  );
+  yield dummyOrders
+      .where((o) =>
+          (o.status == 'delivered' ||
+           o.status == 'rejected' ||
+           o.status == 'delivery_expired' ||
+           o.status == 'cancelled') &&
+          ((custId.isNotEmpty && o.customerId == custId) ||
+           (cleanPhone.isNotEmpty &&
+            AppAuthRoles.normalizeCleanPhone(o.customerPhone) == cleanPhone)))
+      .toList()
+    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 });
 
 /// Real-time stream provider for watching a single order by orderId.
@@ -879,11 +960,30 @@ class DummyOrdersNotifier extends StateNotifier<List<AppOrder>> {
 
 // shopMinimumOrderProvider REMOVED — shop.minimumOrderAmount from Firestore is the single source of truth.
 
-/// Provider for resolving active shopkeeper's shopId based on logged-in phone number.
-/// Returns null if phone number is not linked to any registered shopkeeper.
+/// Provider for resolving active shopkeeper's shopId.
+/// Authoritative: Derives shopId from authenticated CurrentIdentity claims.
+/// Legacy phone-to-shop map is restricted to test-fallback only.
 final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
   try {
-    // 1. Prioritize reactive customerIdentity phone
+    // 1. Authoritative: Prioritize CurrentIdentity from Firebase Auth
+    CurrentIdentity? currentIdentity;
+    try {
+      currentIdentity = ref.watch(currentIdentityProvider);
+    } catch (_) {}
+
+    if (currentIdentity != null && currentIdentity.isAuthenticated) {
+      if (currentIdentity.isShopkeeper &&
+          currentIdentity.shopId != null &&
+          currentIdentity.shopId!.isNotEmpty) {
+        return currentIdentity.shopId;
+      }
+      // If authenticated as customer or admin, return null (fail-closed, not authorized as shopkeeper)
+      return null;
+    }
+
+    // 2. Test-compatibility fallback only:
+    // In unit/widget tests where Firebase Auth is not initialized or mocked,
+    // allow resolving from test identity
     final customerIdentity = ref.watch(customerIdentityProvider);
     if (customerIdentity.phone.isNotEmpty) {
       final resolved = AppAuthRoles.getShopIdForPhone(customerIdentity.phone);
@@ -892,7 +992,6 @@ final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
       }
     }
 
-    // 2. Fallback to persisted disk profile via localStorage
     final localStorage = ref.watch(localStorageServiceProvider);
     final phone = localStorage.userPhone;
     final resolvedShopId = AppAuthRoles.getShopIdForPhone(phone);

@@ -114,9 +114,19 @@ class _HelpAndSupportScreenState extends ConsumerState<HelpAndSupportScreen> {
         cleanPhone = '9876543210';
       }
 
-      final customerId = customerIdentity.customerId.trim().isNotEmpty
-          ? customerIdentity.customerId.trim()
-          : localStorage.customerId.trim();
+      CurrentIdentity? currentAuthIdentity;
+      try {
+        currentAuthIdentity = ref.read(currentIdentityProvider);
+      } catch (_) {}
+
+      final String customerId;
+      if (currentAuthIdentity != null && currentAuthIdentity.isAuthenticated) {
+        customerId = currentAuthIdentity.uid;
+      } else {
+        customerId = customerIdentity.customerId.trim().isNotEmpty
+            ? customerIdentity.customerId.trim()
+            : localStorage.customerId.trim();
+      }
 
       final firestoreService = ref.read(firestoreServiceProvider);
 
