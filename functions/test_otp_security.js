@@ -434,6 +434,65 @@ async function runTests() {
     assert.strictEqual(replayRes.code, OtpErrorCode.CHALLENGE_ALREADY_CONSUMED);
   });
 
+  // 14. Privileged Token Gate: Knowing admin, shopkeeper, or customer phone ALONE cannot issue Custom Token without verified OTP
+  await test("14. Privileged Token Gate: Knowing admin, shopkeeper, or customer phone ALONE cannot issue Custom Token without verified OTP", async () => {
+    const sharedStore = new SharedTransactionalStore();
+    const delivery = new MockDeliveryProvider();
+    let mintCount = 0;
+    const guardedMinter = async (phone) => {
+      mintCount++;
+      return { customToken: `token_for_${phone}`, uid: `uid_${phone}` };
+    };
+
+    const service = new OtpService({
+      deliveryProvider: delivery,
+      storage: sharedStore,
+      tokenMinter: guardedMinter,
+    });
+
+    const adminPhone = "8078643910";
+    const shopkeeperPhone = "8000383993";
+    const customerPhone = "9876543210";
+
+    // Scenario A: Attacker attempts to verify without an existing challenge (knowing phone only)
+    const noChallengeRes = await service.verifyOtp(adminPhone, "123456");
+    assert.strictEqual(noChallengeRes.success, false);
+    assert.strictEqual(noChallengeRes.code, OtpErrorCode.CHALLENGE_NOT_FOUND);
+    assert.strictEqual(mintCount, 0, "Token minter must NEVER be called when challenge does not exist");
+
+    // Scenario B: Attacker requests challenge for admin phone, but submits incorrect OTP
+    await service.requestOtp(adminPhone);
+    const wrongOtpRes = await service.verifyOtp(adminPhone, "000000");
+    assert.strictEqual(wrongOtpRes.success, false);
+    assert.strictEqual(wrongOtpRes.code, OtpErrorCode.INVALID_OTP);
+    assert.strictEqual(mintCount, 0, "Token minter must NEVER be called on invalid OTP");
+
+    // Scenario C: Attacker attempts to verify shopkeeper phone with invalid OTP
+    await service.requestOtp(shopkeeperPhone);
+    const shopWrongRes = await service.verifyOtp(shopkeeperPhone, "999999");
+    assert.strictEqual(shopWrongRes.success, false);
+    assert.strictEqual(shopWrongRes.code, OtpErrorCode.INVALID_OTP);
+    assert.strictEqual(mintCount, 0, "Token minter must NEVER be called on shopkeeper phone without correct OTP");
+
+    // Scenario D: Attacker attempts brute-force on customer phone until locked
+    await service.requestOtp(customerPhone);
+    for (let i = 0; i < 5; i++) {
+      await service.verifyOtp(customerPhone, `wrong_${i}`);
+    }
+    const lockedRes = await service.verifyOtp(customerPhone, "123456");
+    assert.strictEqual(lockedRes.success, false);
+    assert.strictEqual(lockedRes.code, OtpErrorCode.MAX_ATTEMPTS_EXCEEDED);
+    assert.strictEqual(mintCount, 0, "Token minter must NEVER be called on locked challenge");
+
+    // Scenario E: Legitimate verification with correct OTP issues exactly 1 token
+    const legitAdminDispatch = delivery.dispatches.find(d => d.destinationPhone === `+91${adminPhone}` || d.destinationPhone === adminPhone);
+    const legitOtp = legitAdminDispatch.otpCode;
+    const legitRes = await service.verifyOtp(adminPhone, legitOtp);
+    assert.strictEqual(legitRes.success, true);
+    assert.strictEqual(legitRes.customToken, `token_for_${adminPhone}`);
+    assert.strictEqual(mintCount, 1, "Token minter called exactly once for legitimate verification");
+  });
+
   console.log("==================================================");
   console.log(`ALL ${passed}/${total} CHECKPOINT 1.3 REMEDIATION TESTS PASSED!`);
   console.log("==================================================");

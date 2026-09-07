@@ -415,5 +415,31 @@ void main() {
       expect(adminClaims.containsKey('shopId'), isFalse);
       expect(adminClaims.containsKey('customerId'), isFalse);
     });
+
+    // ─── 17. Privileged Token Gate: Phone Alone Cannot Impersonate Roles ────────
+    test('17. Privileged token gate: Knowing admin/shopkeeper phone alone cannot grant elevated identity without verified server claims', () {
+      // Attacker presents an unverified user object with admin phone, but zero server claims
+      final fakeAdminUser = _FakeFirebaseUser(uid: 'unverified_caller', phoneNumber: '+918078643910');
+
+      // Without server custom claims issued after OTP verification, mapUserToIdentity defaults to customer
+      final identityNoClaims = AuthService.mapUserToIdentity(fakeAdminUser, const {});
+      expect(identityNoClaims.role, equals(AuthRole.customer));
+      expect(identityNoClaims.isAdmin, isFalse);
+      expect(identityNoClaims.isShopkeeper, isFalse);
+      expect(identityNoClaims.shopId, isNull);
+
+      // Even for a known shopkeeper phone, without trusted claims it never becomes shopkeeper
+      final fakeShopUser = _FakeFirebaseUser(uid: 'unverified_caller_2', phoneNumber: '+918000383993');
+      final identityShopNoClaims = AuthService.mapUserToIdentity(fakeShopUser, const {});
+      expect(identityShopNoClaims.role, equals(AuthRole.customer));
+      expect(identityShopNoClaims.isShopkeeper, isFalse);
+      expect(identityShopNoClaims.shopId, isNull);
+
+      // Null user (unauthenticated) with injected claims fails closed
+      final identityNullUser = AuthService.mapUserToIdentity(null, const {'role': 'admin'});
+      expect(identityNullUser.isAuthenticated, isFalse);
+      expect(identityNullUser.role, equals(AuthRole.none));
+      expect(identityNullUser.isAdmin, isFalse);
+    });
   });
 }
