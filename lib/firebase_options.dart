@@ -3,8 +3,26 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
+import 'core/config/app_environment.dart';
+
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
+    // ── STRICT FAIL-CLOSED ENVIRONMENT SAFETY GATE ──
+    // Prevent non-production environments (DEV / STAGING) from silently connecting to live Production.
+    if (AppEnvironment.isDev && !AppEnvironment.useFirebaseEmulator) {
+      throw UnsupportedError(
+        'SECURITY SAFETY BLOCK: APP_ENV is set to "dev", but cloud project "bu-gate2eat-dev" is not provisioned. '
+        'To develop safely without touching live production, run with local emulators: '
+        'flutter run --dart-define=APP_ENV=dev --dart-define=USE_FIREBASE_EMULATOR=true',
+      );
+    }
+    if (AppEnvironment.isStaging && !AppEnvironment.useFirebaseEmulator) {
+      throw UnsupportedError(
+        'SECURITY SAFETY BLOCK: APP_ENV is set to "staging", but cloud project "bu-gate2eat-staging" is not provisioned. '
+        'Run with emulators or provision the cloud staging project before running staging builds.',
+      );
+    }
+
     if (kIsWeb) {
       return web;
     }

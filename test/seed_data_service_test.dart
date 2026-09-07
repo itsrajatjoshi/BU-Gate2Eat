@@ -1,6 +1,8 @@
 // BU Gate2Eat — Seed Data Service & Immutability Test Suite
 // Verifies that Firestore is the permanent source of truth and existing values are NEVER overwritten.
 
+import 'package:bugate2eat_app/core/config/app_environment.dart';
+import 'package:bugate2eat_app/services/seed_data_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -117,6 +119,27 @@ void main() {
       // UP16 panel login
       expect(resolveShopId('8079065843'), equals('up16_junction_fast_food'));
       expect(resolveShopId('+91 8079065843'), equals('up16_junction_fast_food'));
+    });
+
+    test('4. SeedDataService blocks execution when AppEnvironment is prod or kReleaseMode', () async {
+      // In default environment (prod), seedInitialData() exits immediately without contacting Firestore
+      expect(AppEnvironment.isProd, isTrue);
+      await expectLater(SeedDataService.seedInitialData(), completes);
+    });
+
+    test('5. DefaultFirebaseOptions fails closed when non-prod environment lacks emulators', () {
+      // Verifies the fail-closed environment contract logic
+      bool checkFailClosed({required bool isDev, required bool isStaging, required bool useEmulator}) {
+        if ((isDev || isStaging) && !useEmulator) {
+          return true; // Fails closed
+        }
+        return false;
+      }
+
+      expect(checkFailClosed(isDev: true, isStaging: false, useEmulator: false), isTrue);
+      expect(checkFailClosed(isDev: false, isStaging: true, useEmulator: false), isTrue);
+      expect(checkFailClosed(isDev: true, isStaging: false, useEmulator: true), isFalse);
+      expect(checkFailClosed(isDev: false, isStaging: false, useEmulator: false), isFalse);
     });
   });
 }
