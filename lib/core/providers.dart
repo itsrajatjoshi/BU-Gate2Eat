@@ -22,6 +22,7 @@ import '../services/order_service.dart';
 import '../services/report_service.dart';
 import '../services/shop_stats_service.dart';
 import 'auth/auth_providers.dart';
+import 'auth/auth_status.dart';
 import 'auth/current_identity.dart';
 import 'constants/app_constants.dart';
 
@@ -113,6 +114,24 @@ final firestoreServiceProvider = Provider<FirestoreService>((ref) {
       } catch (_) {}
       return null;
     },
+    currentShopIdResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated && identity.isShopkeeper) {
+          return identity.shopId;
+        }
+      } catch (_) {}
+      return null;
+    },
+    currentUserRoleResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated) {
+          return identity.role;
+        }
+      } catch (_) {}
+      return AuthRole.none;
+    },
   );
 });
 
@@ -132,6 +151,24 @@ final orderServiceProvider = Provider<OrderService>((ref) {
         }
       } catch (_) {}
       return null;
+    },
+    currentShopIdResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated && identity.isShopkeeper) {
+          return identity.shopId;
+        }
+      } catch (_) {}
+      return null;
+    },
+    currentUserRoleResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated) {
+          return identity.role;
+        }
+      } catch (_) {}
+      return AuthRole.none;
     },
   );
 });
@@ -173,7 +210,35 @@ final monthlyReportDataProvider = FutureProvider.family<MonthlyReportData, ({Str
 
 /// Provider for the Shop Statistics service (singleton).
 final shopStatsServiceProvider = Provider<ShopStatsService>((ref) {
-  return ShopStatsService();
+  return ShopStatsService(
+    currentUserIdResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated) {
+          return identity.uid;
+        }
+      } catch (_) {}
+      return null;
+    },
+    currentShopIdResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated && identity.isShopkeeper) {
+          return identity.shopId;
+        }
+      } catch (_) {}
+      return null;
+    },
+    currentUserRoleResolver: () {
+      try {
+        final identity = ref.watch(currentIdentityProvider);
+        if (identity.isAuthenticated) {
+          return identity.role;
+        }
+      } catch (_) {}
+      return AuthRole.none;
+    },
+  );
 });
 
 /// Real-time stream of all shops' statistics for admin dashboard.
@@ -1019,9 +1084,14 @@ final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
       return null;
     }
 
-    // 2. Test-compatibility fallback only:
-    // In unit/widget tests where Firebase Auth is not initialized or mocked,
-    // allow resolving from test identity
+    // Fail-closed in runtime if Firebase is initialized and user is unauthenticated
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return null;
+      }
+    } catch (_) {}
+
+    // 2. Test-compatibility fallback only (uninitialized local test harness):
     final customerIdentity = ref.watch(customerIdentityProvider);
     if (customerIdentity.phone.isNotEmpty) {
       final resolved = AppAuthRoles.getShopIdForPhone(customerIdentity.phone);

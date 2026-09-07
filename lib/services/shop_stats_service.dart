@@ -4,20 +4,89 @@
 // Every operation is strictly shop-wise — no global/cross-shop mutations.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
+import '../core/auth/auth_status.dart';
 import '../models/shop_stats_model.dart';
+
+/// Exception thrown for ShopStats operations, including security and tenant boundary violations.
+class ShopStatsServiceException implements Exception {
+  const ShopStatsServiceException(this.message);
+  final String message;
+
+  @override
+  String toString() => 'ShopStatsServiceException: $message';
+}
 
 /// Service class for Firestore `shopStats` collection operations.
 ///
 /// All counter operations use [FieldValue.increment] for atomic safety.
 /// Every method requires an explicit [shopId] — no implicit global state.
 class ShopStatsService {
-  ShopStatsService({FirebaseFirestore? firestore}) : _customFirestore = firestore;
+  ShopStatsService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    String? Function()? currentUserIdResolver,
+    String? Function()? currentShopIdResolver,
+    AuthRole Function()? currentUserRoleResolver,
+    Stream<ShopStats?> Function(String shopId)? statsStreamForTesting,
+    Future<ShopStats?> Function(String shopId)? statsLoaderForTesting,
+    Future<void> Function(String shopId)? statsResetForTesting,
+  })  : _customFirestore = firestore,
+        _customAuth = auth,
+        _customUserIdResolver = currentUserIdResolver,
+        _customShopIdResolver = currentShopIdResolver,
+        _customUserRoleResolver = currentUserRoleResolver,
+        _statsStreamForTesting = statsStreamForTesting,
+        _statsLoaderForTesting = statsLoaderForTesting,
+        _statsResetForTesting = statsResetForTesting;
 
   final FirebaseFirestore? _customFirestore;
+  final FirebaseAuth? _customAuth;
+  final String? Function()? _customUserIdResolver;
+  final String? Function()? _customShopIdResolver;
+  final AuthRole Function()? _customUserRoleResolver;
+  final Stream<ShopStats?> Function(String shopId)? _statsStreamForTesting;
+  final Future<ShopStats?> Function(String shopId)? _statsLoaderForTesting;
+  final Future<void> Function(String shopId)? _statsResetForTesting;
+
+  /// Resolves the authoritative authenticated Firebase Auth UID.
+  String? get _currentAuthUid {
+    if (_customUserIdResolver != null) {
+      return _customUserIdResolver!();
+    }
+    try {
+      if (_customAuth != null) {
+        return _customAuth!.currentUser?.uid;
+      }
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseAuth.instance.currentUser?.uid;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Resolves the authoritative authenticated role.
+  AuthRole get _currentAuthRole {
+    if (_customUserRoleResolver != null) {
+      return _customUserRoleResolver!();
+    }
+    if (_currentAuthUid == null) {
+      return AuthRole.none;
+    }
+    return AuthRole.customer;
+  }
+
+  /// Resolves the authoritative authenticated shopId.
+  String? get _currentAuthShopId {
+    if (_customShopIdResolver != null) {
+      return _customShopIdResolver!();
+    }
+    return null;
+  }
 
   /// Checks if Firebase is initialized or custom firestore instance is provided.
   bool get isAvailable {
@@ -63,8 +132,47 @@ class ShopStatsService {
 
   // ─── Read ───────────────────────────────────────────────────────────────────
 
+  /// Real-time stream of the authenticated shopkeeper's assigned shop stats.
+  Stream<ShopStats?> watchMyShopStats() {
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || trustedShopId == null || trustedShopId.isEmpty) {
+      return const Stream.empty();
+    }
+    return watchShopStats(trustedShopId);
+  }
+
+  /// Fetches the authenticated shopkeeper's assigned shop stats (one-shot).
+  Future<ShopStats?> getMyShopStats() async {
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || trustedShopId == null || trustedShopId.isEmpty) {
+      return null;
+    }
+    return getShopStats(trustedShopId);
+  }
+
   /// Returns a real-time stream of a single shop's stats.
   Stream<ShopStats?> watchShopStats(String shopId) {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      debugPrint('🚫 [SECURITY] Blocked customer access to shop stats for shopId: $shopId');
+      return const Stream.empty();
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        debugPrint(
+          '🚫 [SECURITY] Blocked unauthorized shop stats access for shopId: $shopId by shopkeeper of: $trustedShopId',
+        );
+        return const Stream.empty();
+      }
+    }
+
+    if (_statsStreamForTesting != null) {
+      return _statsStreamForTesting!(shopId);
+    }
     if (!isAvailable) return const Stream.empty();
     return _statsRef.doc(shopId).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) return null;
@@ -72,8 +180,13 @@ class ShopStatsService {
     });
   }
 
-  /// Returns a real-time stream of all shops' stats.
+  /// Returns a real-time stream of all shops' stats (Admin-only).
   Stream<List<ShopStats>> watchAllShopStats() {
+    final role = _currentAuthRole;
+    if (role != AuthRole.admin) {
+      debugPrint('🚫 [SECURITY] Blocked non-admin access to watchAllShopStats');
+      return const Stream.empty();
+    }
     if (!isAvailable) return const Stream.empty();
     return _statsRef.snapshots().map((snapshot) {
       return snapshot.docs
@@ -85,6 +198,25 @@ class ShopStatsService {
 
   /// Fetches a single shop's stats document (one-shot).
   Future<ShopStats?> getShopStats(String shopId) async {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const ShopStatsServiceException(
+        'Unauthorized: Customer cannot access shop statistics',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw ShopStatsServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot access stats for shop "$shopId"',
+        );
+      }
+    }
+
+    if (_statsLoaderForTesting != null) {
+      return _statsLoaderForTesting!(shopId);
+    }
     if (!isAvailable) return null;
     try {
       final doc = await _statsRef.doc(shopId).get();
@@ -254,6 +386,17 @@ class ShopStatsService {
   /// `lifetimeWhatsappOrders` is NEVER wiped on reset! It preserves cumulative metrics.
   /// Only statement counters (`whatsappOrders`, `appOrders`, etc.) reset to 0.
   Future<void> resetShopStats(String shopId) async {
+    // ── Security Check: Admin Authorization ──
+    final role = _currentAuthRole;
+    if (role != AuthRole.admin) {
+      throw const ShopStatsServiceException(
+        'Unauthorized: Only administrators can reset shop statistics',
+      );
+    }
+    if (_statsResetForTesting != null) {
+      await _statsResetForTesting!(shopId);
+      return;
+    }
     if (!isAvailable) return;
     try {
       await _statsRef.doc(shopId).set(
@@ -280,6 +423,9 @@ class ShopStatsService {
     }
   }
 
+  /// Admin-only reset of monthly statement statistics.
+  Future<void> resetMonthlyStats(String shopId) => resetShopStats(shopId);
+
   /// Deletes ONLY TERMINAL (historical) order documents belonging to a specific shop.
   /// Terminal statuses: 'delivered', 'rejected', 'delivery_expired', 'cancelled'.
   ///
@@ -291,6 +437,13 @@ class ShopStatsService {
   /// Uses single-field shopId query to guarantee immediate execution without requiring
   /// composite Firestore indexes.
   Future<int> deleteTerminalShopOrders(String shopId) async {
+    // ── Security Check: Admin Authorization ──
+    final role = _currentAuthRole;
+    if (role != AuthRole.admin) {
+      throw const ShopStatsServiceException(
+        'Unauthorized: Only administrators can delete terminal shop orders',
+      );
+    }
     if (!isAvailable) return 0;
     int totalDeleted = 0;
     try {
@@ -345,6 +498,13 @@ class ShopStatsService {
   /// ACTIVE orders ('placed', 'accepted') are strictly preserved.
   /// Returns the number of deleted terminal order documents.
   Future<int> fullShopReset(String shopId) async {
+    // ── Security Check: Admin Authorization ──
+    final role = _currentAuthRole;
+    if (role != AuthRole.admin) {
+      throw const ShopStatsServiceException(
+        'Unauthorized: Only administrators can perform full shop reset',
+      );
+    }
     final deletedCount = await deleteTerminalShopOrders(shopId);
     await resetShopStats(shopId);
     return deletedCount;

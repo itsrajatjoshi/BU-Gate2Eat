@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/auth/auth_status.dart';
 import '../core/utils/order_timer_helper.dart';
 import '../models/order_model.dart';
 
@@ -90,17 +91,23 @@ class OrderService {
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
     String? Function()? currentUserIdResolver,
+    String? Function()? currentShopIdResolver,
+    AuthRole Function()? currentUserRoleResolver,
     Future<Map<String, dynamic>?> Function(String orderId)? orderLoaderForTesting,
     Future<void> Function(String orderId, Map<String, dynamic> updates)? orderUpdaterForTesting,
   })  : _customFirestore = firestore,
         _customAuth = auth,
         _customUserIdResolver = currentUserIdResolver,
+        _customShopIdResolver = currentShopIdResolver,
+        _customUserRoleResolver = currentUserRoleResolver,
         _orderLoaderForTesting = orderLoaderForTesting,
         _orderUpdaterForTesting = orderUpdaterForTesting;
 
   final FirebaseFirestore? _customFirestore;
   final FirebaseAuth? _customAuth;
   final String? Function()? _customUserIdResolver;
+  final String? Function()? _customShopIdResolver;
+  final AuthRole Function()? _customUserRoleResolver;
   final Future<Map<String, dynamic>?> Function(String orderId)? _orderLoaderForTesting;
   final Future<void> Function(String orderId, Map<String, dynamic> updates)? _orderUpdaterForTesting;
 
@@ -117,6 +124,25 @@ class OrderService {
         return FirebaseAuth.instance.currentUser?.uid;
       }
     } catch (_) {}
+    return null;
+  }
+
+  /// Resolves the authoritative authenticated role.
+  AuthRole get _currentAuthRole {
+    if (_customUserRoleResolver != null) {
+      return _customUserRoleResolver!();
+    }
+    if (_currentAuthUid == null) {
+      return AuthRole.none;
+    }
+    return AuthRole.customer;
+  }
+
+  /// Resolves the authoritative authenticated shopId.
+  String? get _currentAuthShopId {
+    if (_customShopIdResolver != null) {
+      return _customShopIdResolver!();
+    }
     return null;
   }
 
@@ -331,9 +357,53 @@ class OrderService {
 
   // ─── Shopkeeper Streams ────────────────────────────────────────────────────
 
+  /// Real-time stream of the authenticated shopkeeper's active orders (placed, accepted).
+  Stream<List<AppOrder>> watchMyShopActiveOrders() {
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || trustedShopId == null || trustedShopId.isEmpty) {
+      return const Stream.empty();
+    }
+    return watchShopActiveOrders(trustedShopId);
+  }
+
+  /// Real-time stream of the authenticated shopkeeper's order history (delivered, rejected, cancelled).
+  Stream<List<AppOrder>> watchMyShopOrderHistory() {
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || trustedShopId == null || trustedShopId.isEmpty) {
+      return const Stream.empty();
+    }
+    return watchShopOrderHistory(trustedShopId);
+  }
+
+  /// Real-time stream of all in-app orders for the authenticated shopkeeper's assigned shop.
+  Stream<List<AppOrder>> watchMyShopOrders() {
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || trustedShopId == null || trustedShopId.isEmpty) {
+      return const Stream.empty();
+    }
+    return watchShopOrders(trustedShopId);
+  }
+
   /// Real-time stream of a shop's active orders (placed, accepted).
   /// Excludes expired orders immediately from active output and triggers atomic background expiry.
   Stream<List<AppOrder>> watchShopActiveOrders(String shopId) {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      debugPrint('🚫 [SECURITY] Blocked customer access to shop active orders for shopId: $shopId');
+      return const Stream.empty();
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        debugPrint('🚫 [SECURITY] Blocked unauthorized shop active orders for shopId: $shopId by shopkeeper of: $trustedShopId');
+        return const Stream.empty();
+      }
+    }
+
     if (!isAvailable) return const Stream.empty();
     return _ordersRef
         .where('shopId', isEqualTo: shopId)
@@ -361,6 +431,20 @@ class OrderService {
 
   /// Real-time stream of a shop's order history (delivered, rejected, cancelled).
   Stream<List<AppOrder>> watchShopOrderHistory(String shopId) {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      debugPrint('🚫 [SECURITY] Blocked customer access to shop order history for shopId: $shopId');
+      return const Stream.empty();
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        debugPrint('🚫 [SECURITY] Blocked unauthorized shop order history for shopId: $shopId by shopkeeper of: $trustedShopId');
+        return const Stream.empty();
+      }
+    }
+
     if (!isAvailable) return const Stream.empty();
     return _ordersRef
         .where('shopId', isEqualTo: shopId)
@@ -377,6 +461,20 @@ class OrderService {
   /// Real-time stream of all in-app orders for a specific shop (newest first).
   /// Strictly isolated by [shopId]. Used by Admin Panel.
   Stream<List<AppOrder>> watchShopOrders(String shopId) {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      debugPrint('🚫 [SECURITY] Blocked customer access to shop orders for shopId: $shopId');
+      return const Stream.empty();
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        debugPrint('🚫 [SECURITY] Blocked unauthorized shop orders for shopId: $shopId by shopkeeper of: $trustedShopId');
+        return const Stream.empty();
+      }
+    }
+
     if (!isAvailable) return const Stream.empty();
     return _ordersRef
         .where('shopId', isEqualTo: shopId)
@@ -400,6 +498,36 @@ class OrderService {
     String? deliveryPersonName,
     DateTime? customNow,
   }) async {
+    // Check testing loader hook if set
+    if (_orderLoaderForTesting != null) {
+      final data = await _orderLoaderForTesting!(orderId);
+      if (data == null) {
+        throw OrderNotFoundException(orderId);
+      }
+      final orderShopId = data['shopId'] as String? ?? '';
+      final role = _currentAuthRole;
+      final trustedShopId = _currentAuthShopId;
+      if (role == AuthRole.customer) {
+        throw const OrderServiceException(
+          'Unauthorized: Customer cannot update shop order status',
+        );
+      }
+      if (role == AuthRole.shopkeeper) {
+        if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != orderShopId) {
+          throw OrderServiceException(
+            'Unauthorized: Shopkeeper of "$trustedShopId" cannot update order for shop "$orderShopId"',
+          );
+        }
+      }
+      if (_orderUpdaterForTesting != null) {
+        await _orderUpdaterForTesting!(orderId, {
+          'status': newStatus,
+          if (rejectionReason != null) 'rejectionReason': rejectionReason,
+        });
+        return;
+      }
+    }
+
     if (!isAvailable) return;
     try {
       await _firestore.runTransaction((transaction) async {
@@ -415,6 +543,22 @@ class OrderService {
         final shopId = (data['shopId'] as String?) ?? '';
         final statsDocRef = _statsRef.doc(shopId);
         final now = customNow ?? DateTime.now();
+
+        // ── Security Check: Tenant Authorization ──
+        final role = _currentAuthRole;
+        final trustedShopId = _currentAuthShopId;
+        if (role == AuthRole.customer) {
+          throw const OrderServiceException(
+            'Unauthorized: Customer cannot update shop order status',
+          );
+        }
+        if (role == AuthRole.shopkeeper) {
+          if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+            throw OrderServiceException(
+              'Unauthorized: Shopkeeper of "$trustedShopId" cannot update order for shop "$shopId"',
+            );
+          }
+        }
 
         // ── Idempotency Check ──
         if (currentStatus == newStatus) {

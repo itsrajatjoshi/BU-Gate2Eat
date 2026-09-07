@@ -7,11 +7,21 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' hide Category;
 
+import '../core/auth/auth_status.dart';
 import '../models/category_model.dart';
 import '../models/menu_item_model.dart';
 import '../models/shop_model.dart';
 import '../models/support_query_model.dart';
 import 'image_optimization_service.dart';
+
+/// Exception thrown for Firestore operations, including security and tenant boundary violations.
+class FirestoreServiceException implements Exception {
+  const FirestoreServiceException(this.message);
+  final String message;
+
+  @override
+  String toString() => 'FirestoreServiceException: $message';
+}
 
 /// Service class for all Firestore operations.
 /// Handles shops, categories, menu items, and storage assets.
@@ -21,21 +31,42 @@ class FirestoreService {
     FirebaseStorage? storage,
     FirebaseAuth? auth,
     String? Function()? currentUserIdResolver,
+    String? Function()? currentShopIdResolver,
+    AuthRole Function()? currentUserRoleResolver,
     Future<void> Function(String collection, String docId, Map<String, dynamic> data)? docWriterForTesting,
     Stream<List<SupportQuery>> Function(String customerId)? supportQueryStreamForTesting,
+    Future<void> Function(String shopId, Map<String, dynamic> data)? shopUpdaterForTesting,
+    Future<void> Function(String shopId, String itemId, Map<String, dynamic> data)? menuItemUpdaterForTesting,
+    Future<void> Function(String shopId, String itemId)? menuItemDeleterForTesting,
+    Future<String?> Function(String path, Uint8List bytes)? storageUploaderForTesting,
+    Stream<List<Category>> Function(String shopId)? categoriesStreamForTesting,
   })  : _customFirestore = firestore,
         _customStorage = storage,
         _customAuth = auth,
         _customUserIdResolver = currentUserIdResolver,
+        _customShopIdResolver = currentShopIdResolver,
+        _customUserRoleResolver = currentUserRoleResolver,
         _docWriterForTesting = docWriterForTesting,
-        _supportQueryStreamForTesting = supportQueryStreamForTesting;
+        _supportQueryStreamForTesting = supportQueryStreamForTesting,
+        _shopUpdaterForTesting = shopUpdaterForTesting,
+        _menuItemUpdaterForTesting = menuItemUpdaterForTesting,
+        _menuItemDeleterForTesting = menuItemDeleterForTesting,
+        _storageUploaderForTesting = storageUploaderForTesting,
+        _categoriesStreamForTesting = categoriesStreamForTesting;
 
   final FirebaseFirestore? _customFirestore;
   final FirebaseStorage? _customStorage;
   final FirebaseAuth? _customAuth;
   final String? Function()? _customUserIdResolver;
+  final String? Function()? _customShopIdResolver;
+  final AuthRole Function()? _customUserRoleResolver;
   final Future<void> Function(String collection, String docId, Map<String, dynamic> data)? _docWriterForTesting;
   final Stream<List<SupportQuery>> Function(String customerId)? _supportQueryStreamForTesting;
+  final Future<void> Function(String shopId, Map<String, dynamic> data)? _shopUpdaterForTesting;
+  final Future<void> Function(String shopId, String itemId, Map<String, dynamic> data)? _menuItemUpdaterForTesting;
+  final Future<void> Function(String shopId, String itemId)? _menuItemDeleterForTesting;
+  final Future<String?> Function(String path, Uint8List bytes)? _storageUploaderForTesting;
+  final Stream<List<Category>> Function(String shopId)? _categoriesStreamForTesting;
 
   /// Checks if Firebase is initialized or custom firestore instance is provided.
   bool get isAvailable {
@@ -60,6 +91,25 @@ class FirestoreService {
         return FirebaseAuth.instance.currentUser?.uid;
       }
     } catch (_) {}
+    return null;
+  }
+
+  /// Resolves the authoritative authenticated role.
+  AuthRole get _currentAuthRole {
+    if (_customUserRoleResolver != null) {
+      return _customUserRoleResolver!();
+    }
+    if (_currentAuthUid == null) {
+      return AuthRole.none;
+    }
+    return AuthRole.customer;
+  }
+
+  /// Resolves the authoritative authenticated shopId.
+  String? get _currentAuthShopId {
+    if (_customShopIdResolver != null) {
+      return _customShopIdResolver!();
+    }
     return null;
   }
 
@@ -128,13 +178,69 @@ class FirestoreService {
     });
   }
 
+  /// Fetches the authenticated shopkeeper's assigned shop document.
+  Future<Shop?> getMyShop() async {
+    final role = _currentAuthRole;
+    final shopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || shopId == null || shopId.isEmpty) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Caller is not an authenticated shopkeeper with an assigned shop',
+      );
+    }
+    return getShop(shopId);
+  }
+
+  /// Updates the authenticated shopkeeper's assigned shop document.
+  Future<void> updateMyShop(Map<String, dynamic> data) async {
+    final role = _currentAuthRole;
+    final shopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || shopId == null || shopId.isEmpty) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Caller is not an authenticated shopkeeper with an assigned shop',
+      );
+    }
+    return updateShop(shopId, data);
+  }
+
+  /// Updates the authenticated shopkeeper's assigned shop open/closed override.
+  Future<void> updateMyShopOpenOverride(bool isClosedOverride) async {
+    final role = _currentAuthRole;
+    final shopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || shopId == null || shopId.isEmpty) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Caller is not an authenticated shopkeeper with an assigned shop',
+      );
+    }
+    return updateShopOpenOverride(shopId, isClosedOverride);
+  }
+
   /// Updates shop details (name, description, timings, bannerUrl, etc.).
   Future<void> updateShop(String shopId, Map<String, dynamic> data) async {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Customer cannot update shop configuration',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot modify shop "$shopId"',
+        );
+      }
+    }
+
     final updateData = Map<String, dynamic>.from(data);
     updateData['updatedAt'] = FieldValue.serverTimestamp();
     debugPrint(
       '📝 FirestoreService.updateShop -> updating shops/$shopId with: $updateData',
     );
+    if (_shopUpdaterForTesting != null) {
+      await _shopUpdaterForTesting!(shopId, updateData);
+      return;
+    }
     try {
       await _firestore
           .collection('shops')
@@ -152,9 +258,29 @@ class FirestoreService {
     String shopId,
     bool isClosedOverride,
   ) async {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Customer cannot update shop open status',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot modify open status for shop "$shopId"',
+        );
+      }
+    }
+
     debugPrint(
       '📝 FirestoreService.updateShopOpenOverride -> shops/$shopId => isClosedOverride: $isClosedOverride',
     );
+    if (_shopUpdaterForTesting != null) {
+      await _shopUpdaterForTesting!(shopId, {'isClosedOverride': isClosedOverride});
+      return;
+    }
     try {
       await _firestore.collection('shops').doc(shopId).set(
         {
@@ -349,6 +475,10 @@ class FirestoreService {
 
   /// Stream of active categories for a shop.
   Stream<List<Category>> watchCategories(String shopId) {
+    if (_categoriesStreamForTesting != null) {
+      return _categoriesStreamForTesting!(shopId);
+    }
+    if (!isAvailable) return const Stream.empty();
     return _firestore
         .collection('shops')
         .doc(shopId)
@@ -364,12 +494,38 @@ class FirestoreService {
     });
   }
 
+  /// Stream of active categories for the authenticated shopkeeper's assigned shop.
+  Stream<List<Category>> watchMyShopCategories() {
+    final role = _currentAuthRole;
+    final shopId = _currentAuthShopId;
+    if (role != AuthRole.shopkeeper || shopId == null || shopId.isEmpty) {
+      return const Stream.empty();
+    }
+    return watchCategories(shopId);
+  }
+
   /// Creates a new custom category for a shop with a fixed neutral image.
   /// (Existing categories cannot be edited/deleted).
   Future<Category> createCustomCategory(
     String shopId,
     String categoryName,
   ) async {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Customer cannot create categories',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot create category for shop "$shopId"',
+        );
+      }
+    }
+
     final trimmed = categoryName.trim();
     final catId = trimmed
         .toLowerCase()
@@ -489,9 +645,29 @@ class FirestoreService {
 
   /// Adds a new menu item to a shop.
   Future<void> addMenuItem(String shopId, MenuItem item) async {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Customer cannot add menu items',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot add menu item to shop "$shopId"',
+        );
+      }
+    }
+
     debugPrint(
       '📝 FirestoreService.addMenuItem -> shops/$shopId/menuItems/${item.id}',
     );
+    if (_menuItemUpdaterForTesting != null) {
+      await _menuItemUpdaterForTesting!(shopId, item.id, item.toFirestore());
+      return;
+    }
     try {
       await _firestore
           .collection('shops')
@@ -512,9 +688,34 @@ class FirestoreService {
     String menuItemId,
     Map<String, dynamic> data,
   ) async {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Customer cannot update menu items',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot update menu item in shop "$shopId"',
+        );
+      }
+      if (data.containsKey('shopId') && data['shopId'] != trustedShopId) {
+        throw const FirestoreServiceException(
+          'Unauthorized: Cannot alter menu item shop ownership (shopId mutation prohibited)',
+        );
+      }
+    }
+
     debugPrint(
       '📝 FirestoreService.updateMenuItem -> shops/$shopId/menuItems/$menuItemId',
     );
+    if (_menuItemUpdaterForTesting != null) {
+      await _menuItemUpdaterForTesting!(shopId, menuItemId, data);
+      return;
+    }
     try {
       await _firestore
           .collection('shops')
@@ -535,9 +736,29 @@ class FirestoreService {
     String menuItemId,
     bool isAvailable,
   ) async {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Customer cannot update menu item availability',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot update availability for shop "$shopId"',
+        );
+      }
+    }
+
     debugPrint(
       '📝 FirestoreService.updateMenuItemAvailability -> shops/$shopId/menuItems/$menuItemId => $isAvailable',
     );
+    if (_menuItemUpdaterForTesting != null) {
+      await _menuItemUpdaterForTesting!(shopId, menuItemId, {'isAvailable': isAvailable});
+      return;
+    }
     try {
       await _firestore
           .collection('shops')
@@ -560,9 +781,29 @@ class FirestoreService {
     String menuItemId, {
     String? imageUrl,
   }) async {
+    // ── Security Check: Tenant Authorization ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Customer cannot delete menu items',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot delete menu item from shop "$shopId"',
+        );
+      }
+    }
+
     debugPrint(
       '📝 FirestoreService.deleteMenuItem -> deleting shops/$shopId/menuItems/$menuItemId',
     );
+    if (_menuItemDeleterForTesting != null) {
+      await _menuItemDeleterForTesting!(shopId, menuItemId);
+      return;
+    }
     try {
       await _firestore
           .collection('shops')
@@ -600,6 +841,37 @@ class FirestoreService {
     final uniqueName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
     final fullStoragePath = 'shops/$shopId/$path/$uniqueName';
 
+    // ── Security Check: Tenant Authorization & Strict Path Parsing ──
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role == AuthRole.customer) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Customer cannot upload shop assets',
+      );
+    }
+    if (role == AuthRole.shopkeeper) {
+      if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Shopkeeper of "$trustedShopId" cannot upload images for shop "$shopId"',
+        );
+      }
+      if (path.contains('..') ||
+          path.contains('\\') ||
+          fileName.contains('..') ||
+          fileName.contains('/') ||
+          fileName.contains('\\')) {
+        throw const FirestoreServiceException(
+          'Unauthorized: Malformed or path traversal detected in storage path',
+        );
+      }
+      final segments = fullStoragePath.split('/');
+      if (segments.length < 3 || segments[0] != 'shops' || segments[1] != trustedShopId) {
+        throw FirestoreServiceException(
+          'Unauthorized: Storage path "$fullStoragePath" violates tenant boundary for "$trustedShopId"',
+        );
+      }
+    }
+
     if (kDebugMode) {
       debugPrint('STEP 1: NEW IMAGE UPLOAD START');
       debugPrint('STORAGE PATH: $fullStoragePath');
@@ -609,6 +881,10 @@ class FirestoreService {
     if (bytes.isEmpty) {
       if (kDebugMode) debugPrint('❌ UPLOAD ERROR: Byte array is empty!');
       throw Exception('Cannot upload empty image bytes');
+    }
+
+    if (_storageUploaderForTesting != null) {
+      return _storageUploaderForTesting!(fullStoragePath, bytes);
     }
 
     try {
