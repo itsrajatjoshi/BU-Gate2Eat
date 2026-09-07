@@ -67,7 +67,9 @@ class SeedDataService {
     final doc = await shopRef.get();
 
     if (!doc.exists) {
-      debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      if (kDebugMode) {
+        debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      }
       await shopRef.set({
         'name': 'Rajat Shop',
         'description': 'Chinese, Fast Food, Snacks & Special Thalis',
@@ -154,7 +156,9 @@ class SeedDataService {
     final doc = await shopRef.get();
 
     if (!doc.exists) {
-      debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      if (kDebugMode) {
+        debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      }
       await shopRef.set({
         'name': 'Nayan Shop',
         'description': 'Momos, Chinese, Fast Food & Value Thalis',
@@ -241,7 +245,9 @@ class SeedDataService {
     final doc = await shopRef.get();
 
     if (!doc.exists) {
-      debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      if (kDebugMode) {
+        debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      }
       await shopRef.set({
         'name': 'Kivisha Shop',
         'description': 'Fresh Food, Snacks & Fast Food',
@@ -280,7 +286,9 @@ class SeedDataService {
     final doc = await shopRef.get();
 
     if (!doc.exists) {
-      debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      if (kDebugMode) {
+        debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      }
       await shopRef.set({
         'name': 'UP 16 Junction Fast Food',
         'description': 'Rolls, Momos, Chinese Starters, Noodles, Fries, Biryani, Rice & Indian Breads',
@@ -454,7 +462,9 @@ class SeedDataService {
     final doc = await shopRef.get();
 
     if (!doc.exists) {
-      debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      if (kDebugMode) {
+        debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      }
       await shopRef.set({
         'name': 'Raja Hotel',
         'description': 'North Indian, Tandoor, Mughlai & Dining',
@@ -492,7 +502,9 @@ class SeedDataService {
     final doc = await shopRef.get();
 
     if (!doc.exists) {
-      debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      if (kDebugMode) {
+        debugPrint('🌱 SeedDataService: Creating initial document for $shopId');
+      }
       await shopRef.set({
         'name': 'UP16 Coffee Queen',
         'description': 'Special Fast Food, Desserts & Beverages',
@@ -553,7 +565,9 @@ class SeedDataService {
     }
 
     if (missingFieldsPatch.isNotEmpty) {
-      debugPrint('ℹ️ SeedDataService: Backfilling missing keys for ${shopDoc.id}: $missingFieldsPatch');
+      if (kDebugMode) {
+        debugPrint('ℹ️ SeedDataService: Backfilling missing keys for ${shopDoc.id}: $missingFieldsPatch');
+      }
       await shopRef.set(missingFieldsPatch, SetOptions(merge: true));
     }
   }

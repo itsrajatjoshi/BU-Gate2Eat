@@ -44,6 +44,16 @@ class _ShopCardState extends ConsumerState<ShopCard> {
   }
 
   @override
+  void didUpdateWidget(ShopCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.autoSlideInterval != widget.autoSlideInterval ||
+        oldWidget.shop.id != widget.shop.id ||
+        oldWidget.slideshowImages != widget.slideshowImages) {
+      _lastResolvedImageCount = -1;
+    }
+  }
+
+  @override
   void dispose() {
     _autoSlideTimer?.cancel();
     _autoSlideTimer = null;
@@ -97,12 +107,15 @@ class _ShopCardState extends ConsumerState<ShopCard> {
     final List<String> images = widget.slideshowImages ??
         ref.watch(shopSlideshowImagesProvider(shop));
 
-    // Post-frame check to manage auto-sliding timer safely
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _syncAutoSlide(images.length);
-      }
-    });
+    // Only schedule auto-slide sync when image count changed or timer needs re-arming
+    if (images.length != _lastResolvedImageCount ||
+        (images.length > 1 && (_autoSlideTimer == null || !_autoSlideTimer!.isActive))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _syncAutoSlide(images.length);
+        }
+      });
+    }
 
     return RepaintBoundary(
       child: Container(

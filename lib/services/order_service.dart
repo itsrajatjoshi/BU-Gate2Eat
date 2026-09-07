@@ -571,7 +571,9 @@ class OrderService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }).timeout(const Duration(seconds: 15));
-      debugPrint('✅ OrderService: Placed order #$orderId cancelled successfully');
+      if (kDebugMode) {
+        debugPrint('✅ OrderService: Placed order #$orderId cancelled successfully');
+      }
     } on OrderServiceException {
       rethrow;
     } catch (e) {
@@ -628,7 +630,9 @@ class OrderService {
               },
               SetOptions(merge: true),
             );
-            debugPrint('⏱️ OrderService.checkAndExpireOrder: Order #$orderId auto-expired (placed 20m timeout)');
+            if (kDebugMode) {
+              debugPrint('⏱️ OrderService.checkAndExpireOrder: Order #$orderId auto-expired (placed 20m timeout)');
+            }
             return true;
           }
         } else if (status == OrderStatusRules.statusAccepted) {
@@ -658,7 +662,9 @@ class OrderService {
               },
               SetOptions(merge: true),
             );
-            debugPrint('⏱️ OrderService.checkAndExpireOrder: Order #$orderId auto-expired (delivery 90m timeout)');
+            if (kDebugMode) {
+              debugPrint('⏱️ OrderService.checkAndExpireOrder: Order #$orderId auto-expired (delivery 90m timeout)');
+            }
             return true;
           }
         }

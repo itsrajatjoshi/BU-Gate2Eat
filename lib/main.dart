@@ -21,6 +21,11 @@ import 'services/notification_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // In release mode, discard debug logs to eliminate CPU and string serialization overhead
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
+
   // Bound Flutter decoded image cache in RAM to prevent memory bloat on low-end devices
   PaintingBinding.instance.imageCache.maximumSize = 150;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 60 * 1024 * 1024; // 60 MB
@@ -61,7 +66,7 @@ void main() async {
     if (!kIsWeb) {
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: true,
-        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+        cacheSizeBytes: 100 * 1024 * 1024, // 100 MB bounded disk cache
       );
 
       // Register top-level background message handler for FCM

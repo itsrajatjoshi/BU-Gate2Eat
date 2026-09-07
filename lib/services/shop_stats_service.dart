@@ -52,7 +52,9 @@ class ShopStatsService {
       if (!doc.exists) {
         final stats = ShopStats.zero(shopId: shopId, shopName: shopName);
         await docRef.set(stats.toFirestore());
-        debugPrint('✅ ShopStatsService: Initialized stats for $shopId');
+        if (kDebugMode) {
+          debugPrint('✅ ShopStatsService: Initialized stats for $shopId');
+        }
       }
     } catch (e) {
       debugPrint('❌ ShopStatsService initializeShopStats error: $e');
@@ -175,9 +177,11 @@ class ShopStatsService {
         SetOptions(merge: true),
       );
 
-      debugPrint(
-        '✅ ShopStatsService: Atomically incremented WhatsApp orders (+1 statement, +1 lifetime) for shop $shopId',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '✅ ShopStatsService: Atomically incremented WhatsApp orders (+1 statement, +1 lifetime) for shop $shopId',
+        );
+      }
     } catch (e) {
       debugPrint('❌ ShopStatsService incrementWhatsappOrders error for $shopId: $e');
       rethrow;
@@ -232,7 +236,9 @@ class ShopStatsService {
         },
         SetOptions(merge: true),
       );
-      debugPrint('✅ ShopStatsService: Atomically incremented $field (+1) for shop $shopId');
+      if (kDebugMode) {
+        debugPrint('✅ ShopStatsService: Atomically incremented $field (+1) for shop $shopId');
+      }
     } catch (e) {
       debugPrint('❌ ShopStatsService _incrementField error ($field) for $shopId: $e');
       rethrow;
@@ -265,7 +271,9 @@ class ShopStatsService {
         },
         SetOptions(merge: true),
       );
-      debugPrint('✅ ShopStatsService: Reset statement stats for $shopId (lifetime WA preserved)');
+      if (kDebugMode) {
+        debugPrint('✅ ShopStatsService: Reset statement stats for $shopId (lifetime WA preserved)');
+      }
     } catch (e) {
       debugPrint('❌ ShopStatsService resetShopStats error: $e');
       rethrow;
@@ -318,9 +326,11 @@ class ShopStatsService {
         totalDeleted += chunk.length;
       }
 
-      debugPrint(
-        '✅ ShopStatsService: Deleted $totalDeleted terminal orders for $shopId from Firestore (Active placed/accepted orders preserved)',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '✅ ShopStatsService: Deleted $totalDeleted terminal orders for $shopId from Firestore (Active placed/accepted orders preserved)',
+        );
+      }
       return totalDeleted;
     } catch (e) {
       debugPrint('❌ ShopStatsService deleteTerminalShopOrders error: $e');

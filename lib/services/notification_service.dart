@@ -19,9 +19,11 @@ import 'local_storage_service.dart';
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    debugPrint(
-      '🌙 [FCM Background] Message received in background isolate: type=${message.data['type'] ?? 'unknown'}, orderId=${message.data['orderId'] ?? 'none'}',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '🌙 [FCM Background] Message received in background isolate: type=${message.data['type'] ?? 'unknown'}, orderId=${message.data['orderId'] ?? 'none'}',
+      );
+    }
   } catch (e) {
     debugPrint('⚠️ [FCM Background] Note handling background message: $e');
   }
@@ -174,7 +176,9 @@ class NotificationService {
   /// Does NOT block app startup if FCM is unavailable or permission is pending.
   Future<void> initialize({LocalStorageService? localStorage}) async {
     try {
-      debugPrint('🔔 [FCM] NotificationService initialization started...');
+      if (kDebugMode) {
+        debugPrint('🔔 [FCM] NotificationService initialization started...');
+      }
       
       // 1. Initialize Android local notification plugin & create notification channels
       await _initializeLocalNotifications();
@@ -254,7 +258,9 @@ class NotificationService {
                 rawData: Map<String, dynamic>.unmodifiable(map),
               );
 
-              debugPrint('📲 [LocalNotification Tap] Order #${pending.orderId}');
+              if (kDebugMode) {
+                debugPrint('📲 [LocalNotification Tap] Order #${pending.orderId}');
+              }
               _pendingNotification = pending;
               if (!_openedNotificationController.isClosed) {
                 _openedNotificationController.add(pending);
@@ -289,7 +295,9 @@ class NotificationService {
         await androidPlatform.createNotificationChannel(shopkeeperChannel);
         await androidPlatform.createNotificationChannel(customerChannel);
         _channelsCreated = true;
-        debugPrint('📣 [FCM] Android Notification Channels created successfully.');
+        if (kDebugMode) {
+          debugPrint('📣 [FCM] Android Notification Channels created successfully.');
+        }
       }
     } catch (e) {
       debugPrint('⚠️ [FCM] Local notifications init note: $e');
@@ -305,7 +313,9 @@ class NotificationService {
     try {
       // Guard: Do not pop local notification for non-order or anonymous dummy messages
       if (!pending.isValidOrderNotification && (pending.title == null || pending.title!.trim().isEmpty)) {
-        debugPrint('ℹ️ [FCM Foreground] Skipping display for non-order message without title.');
+        if (kDebugMode) {
+          debugPrint('ℹ️ [FCM Foreground] Skipping display for non-order message without title.');
+        }
         return;
       }
 
@@ -347,7 +357,9 @@ class NotificationService {
         notificationDetails: details,
         payload: rawJson,
       );
-      debugPrint('🔔 [FCM Foreground] Local Notification displayed for #${pending.orderId}');
+      if (kDebugMode) {
+        debugPrint('🔔 [FCM Foreground] Local Notification displayed for #${pending.orderId}');
+      }
     } catch (e) {
       debugPrint('⚠️ [FCM Foreground] Note presenting local notification: $e');
     }
@@ -361,7 +373,9 @@ class NotificationService {
 
       final settings = await messaging.requestPermission();
 
-      debugPrint('🔔 [FCM Permission] Status: ${settings.authorizationStatus}');
+      if (kDebugMode) {
+        debugPrint('🔔 [FCM Permission] Status: ${settings.authorizationStatus}');
+      }
       return settings;
     } catch (e) {
       debugPrint('⚠️ [FCM Permission] Request note (non-fatal): $e');

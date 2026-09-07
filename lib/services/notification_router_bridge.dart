@@ -2,6 +2,7 @@
 // Notification Router Bridge & Deep-Linking Engine (Part 6)
 // Handles validated, exact-once deep linking for Customer and Shopkeeper notifications via GoRouter.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -101,9 +102,11 @@ class NotificationRouterBridge {
 
     if (_lastHandledOrderId == orderId && _lastHandledTimestamp != null) {
       if (now.difference(_lastHandledTimestamp!) < _duplicateThrottleWindow) {
-        debugPrint(
-          '🛡️ [Notification Router] Suppressed duplicate tap for Order #$orderId',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '🛡️ [Notification Router] Suppressed duplicate tap for Order #$orderId',
+          );
+        }
         return true;
       }
     }
@@ -161,9 +164,11 @@ class NotificationRouterBridge {
             rejectionReason: 'Shopkeeper unauthorized for target shop: $shopId',
           );
         }
-        debugPrint(
-          'ℹ️ [Notification Router] Shopkeeper opening order detail: #$orderId',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            'ℹ️ [Notification Router] Shopkeeper opening order detail: #$orderId',
+          );
+        }
       }
 
       return ResolvedNotificationRoute(
@@ -241,9 +246,11 @@ class NotificationRouterBridge {
     final router = customRouter ?? GoRouter.of(context);
     final targetRoute = resolved.route!;
 
-    debugPrint(
-      '🚀 [Notification Router] Navigating to "$targetRoute" for Order #${resolved.orderId}',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '🚀 [Notification Router] Navigating to "$targetRoute" for Order #${resolved.orderId}',
+      );
+    }
 
     try {
       router.go(targetRoute);
