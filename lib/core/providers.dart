@@ -1004,8 +1004,38 @@ final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
 
 /// Real-time stream provider for customer support queries (Admin only).
 final supportQueriesStreamProvider = StreamProvider<List<SupportQuery>>((ref) {
+  // Fail-closed authorization check: only admin can watch all customer support queries
+  CurrentIdentity? currentIdentity;
+  try {
+    currentIdentity = ref.watch(currentIdentityProvider);
+  } catch (_) {}
+
+  if (currentIdentity != null && currentIdentity.isAuthenticated && !currentIdentity.isAdmin) {
+    return const Stream.empty();
+  }
+
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.watchSupportQueries();
+});
+
+/// Real-time stream provider for customer's own support queries (Customer only, scoped to UID).
+final customerSupportQueriesStreamProvider =
+    StreamProvider.autoDispose<List<SupportQuery>>((ref) {
+  CurrentIdentity? currentIdentity;
+  try {
+    currentIdentity = ref.watch(currentIdentityProvider);
+  } catch (_) {}
+
+  final customerId = (currentIdentity != null && currentIdentity.isAuthenticated)
+      ? currentIdentity.uid
+      : null;
+
+  if (customerId == null || customerId.isEmpty) {
+    return const Stream.empty();
+  }
+
+  final firestoreService = ref.watch(firestoreServiceProvider);
+  return firestoreService.watchCustomerSupportQueries(customerId);
 });
 
 

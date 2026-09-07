@@ -933,7 +933,7 @@ class OrderDetailScreen extends ConsumerWidget {
                   height: 44,
                   child: OutlinedButton(
                     onPressed: () =>
-                        _confirmCancelDialog(context, ref, order.orderId),
+                        _confirmCancelDialog(context, ref, order.orderId, order),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
                       side: const BorderSide(color: AppColors.error, width: 1.2),
@@ -1183,7 +1183,7 @@ class OrderDetailScreen extends ConsumerWidget {
   }
 
   void _confirmCancelDialog(
-      BuildContext context, WidgetRef ref, String orderId) {
+      BuildContext context, WidgetRef ref, String orderId, [AppOrder? order]) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1204,6 +1204,20 @@ class OrderDetailScreen extends ConsumerWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               try {
+                CurrentIdentity? currentIdentity;
+                try {
+                  currentIdentity = ref.read(currentIdentityProvider);
+                } catch (_) {}
+                final authUid = (currentIdentity != null && currentIdentity.isAuthenticated)
+                    ? currentIdentity.uid
+                    : null;
+
+                if (authUid != null && order != null && order.customerId.isNotEmpty) {
+                  if (order.customerId != authUid && !(currentIdentity?.isAdmin ?? false)) {
+                    throw Exception('Unauthorized: Cannot cancel order belonging to another customer.');
+                  }
+                }
+
                 // Real Firestore Cancellation
                 await ref.read(orderServiceProvider).cancelOrder(orderId);
                 // Also update local dummy state for safety in transitional phase

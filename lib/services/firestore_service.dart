@@ -732,6 +732,22 @@ class FirestoreService {
     }
   }
 
+  /// Real-time stream of a customer's own support queries matching their authenticated UID.
+  Stream<List<SupportQuery>> watchCustomerSupportQueries(String customerId) {
+    if (customerId.trim().isEmpty) return const Stream.empty();
+    return _firestore
+        .collection('supportQueries')
+        .where('customerId', isEqualTo: customerId.trim())
+        .snapshots()
+        .map((snapshot) {
+      final queries = snapshot.docs
+          .map((doc) => SupportQuery.fromFirestore(doc))
+          .toList();
+      queries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return queries;
+    });
+  }
+
   /// Real-time stream of customer support queries for Admin, sorted newest first.
   Stream<List<SupportQuery>> watchSupportQueries() {
     return _firestore
