@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -154,16 +155,20 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
 
   Future<void> _pickAndCropLogo() async {
     try {
+      final Stopwatch pickStopwatch = Stopwatch()..start();
       final picked = await _picker.pickImage(source: ImageSource.gallery);
+      final int pickMs = pickStopwatch.elapsedMilliseconds;
       if (picked != null) {
         final rawBytes = await picked.readAsBytes();
         if (!mounted) return;
 
+        final Stopwatch cropStopwatch = Stopwatch()..start();
         final croppedBytes = await CircularCropDialog.show(
           context,
           imageBytes: rawBytes,
           title: 'Crop Shop Photo (Circle)',
         );
+        final int cropMs = cropStopwatch.elapsedMilliseconds;
 
         if (croppedBytes != null && mounted) {
           setState(() {
@@ -171,10 +176,18 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
             _logoError = null;
           });
 
+          final Stopwatch optStopwatch = Stopwatch()..start();
           final optimized = await ImageOptimizationService.optimizeImageBytes(
             originalBytes: croppedBytes,
             type: ImageTargetType.shopLogo,
           );
+          final int optMs = optStopwatch.elapsedMilliseconds;
+
+          if (kDebugMode) {
+            debugPrint(
+              '⏱️ [PERF EDIT SHOP LOGO] Picker: ${pickMs}ms | Crop: ${cropMs}ms | Optimize: ${optMs}ms | Size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+            );
+          }
 
           if (mounted) {
             setState(() {
@@ -197,14 +210,16 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
 
   Future<void> _pickBanner() async {
     try {
+      final Stopwatch pickStopwatch = Stopwatch()..start();
       final picked = await _picker.pickImage(source: ImageSource.gallery);
+      final int pickMs = pickStopwatch.elapsedMilliseconds;
       if (picked != null) {
         setState(() {
           _isOptimizingImage = true;
           _bannerError = null;
         });
 
-        debugPrint('[BANNER] optimization started');
+        final Stopwatch optStopwatch = Stopwatch()..start();
         final rawBytes = await picked.readAsBytes();
 
         // Automatically resize & compress to <= 800 KB on background isolate
@@ -212,11 +227,13 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
           originalBytes: rawBytes,
           type: ImageTargetType.shopBanner,
         );
+        final int optMs = optStopwatch.elapsedMilliseconds;
 
-        debugPrint('[BANNER] optimization completed');
-        debugPrint(
-          '[BANNER] optimized size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '⏱️ [PERF EDIT SHOP BANNER] Picker: ${pickMs}ms | Preprocess: ${optMs}ms | Size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+          );
+        }
 
         if (mounted) {
           setState(() {
@@ -227,7 +244,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         }
       }
     } catch (e, stack) {
-      debugPrint('❌ [BANNER] optimization error: $e\n$stack');
+      if (kDebugMode) debugPrint('❌ [BANNER] optimization error: $e\n$stack');
       if (mounted) {
         setState(() {
           _isOptimizingImage = false;
@@ -283,6 +300,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
     setState(() => _isLoading = true);
 
     try {
+      final Stopwatch totalStopwatch = Stopwatch()..start();
       final firestoreService = ref.read(firestoreServiceProvider);
       final oldLogoUrl = widget.shop.shopLogoImageUrl.trim();
       final oldBannerUrl = widget.shop.bannerUrl.trim();
@@ -291,7 +309,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
 
       // 1. Upload selected images concurrently if both were picked
       if (_selectedLogoBytes != null && _selectedBannerBytes != null) {
-        debugPrint('[SHOP] Parallel logo & banner upload started');
+        if (kDebugMode) debugPrint('[SHOP] Parallel logo & banner upload started');
         final results = await Future.wait([
           firestoreService.uploadImage(
             shopId: widget.shop.id,
@@ -313,7 +331,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
           bannerUrl = results[1]!;
         }
       } else if (_selectedLogoBytes != null) {
-        debugPrint('[LOGO] upload started');
+        if (kDebugMode) debugPrint('[LOGO] upload started');
         final uploadedLogoUrl = await firestoreService.uploadImage(
           shopId: widget.shop.id,
           path: 'logo',
@@ -324,7 +342,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
           logoUrl = uploadedLogoUrl;
         }
       } else if (_selectedBannerBytes != null) {
-        debugPrint('[BANNER] upload started');
+        if (kDebugMode) debugPrint('[BANNER] upload started');
         final uploadedUrl = await firestoreService.uploadImage(
           shopId: widget.shop.id,
           path: 'banner',
@@ -336,7 +354,8 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         }
       }
 
-      debugPrint('[SHOP] Firestore update started');
+      final Stopwatch firestoreStopwatch = Stopwatch()..start();
+      if (kDebugMode) debugPrint('[SHOP] Firestore update started');
       await firestoreService.updateShop(widget.shop.id, {
         'name': name,
         'description': _descController.text.trim(),
@@ -353,15 +372,17 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         'minimumOrderAmount': clampedMinOrder,
         'deliveryCharges': clampedDeliveryCharges,
       });
-      debugPrint('[SHOP] Firestore update completed');
-      debugPrint('[SHOP] SAVE SUCCESS');
+      final int firestoreMs = firestoreStopwatch.elapsedMilliseconds;
+      if (kDebugMode) {
+        debugPrint('[SHOP] Firestore update completed (${firestoreMs}ms)');
+      }
 
       // 3. Best-effort background cleanup of previous storage images (non-blocking)
       if (_selectedLogoBytes != null && oldLogoUrl.isNotEmpty && oldLogoUrl != logoUrl) {
         unawaited(
           firestoreService.deleteStorageImageByUrl(oldLogoUrl).catchError(
             (Object e) {
-              debugPrint('⚠️ [LOGO] Best-effort old logo cleanup skipped: $e');
+              if (kDebugMode) debugPrint('⚠️ [LOGO] Best-effort old logo cleanup skipped: $e');
             },
           ),
         );
@@ -371,7 +392,7 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
         unawaited(
           firestoreService.deleteStorageImageByUrl(oldBannerUrl).catchError(
             (Object e) {
-              debugPrint('⚠️ [BANNER] Best-effort old banner cleanup skipped: $e');
+              if (kDebugMode) debugPrint('⚠️ [BANNER] Best-effort old banner cleanup skipped: $e');
             },
           ),
         );
@@ -379,6 +400,13 @@ class _EditShopModalState extends ConsumerState<EditShopModal> {
 
       // Invalidate provider so home screen and shop detail refresh immediately
       ref.invalidate(shopsProvider);
+
+      final int totalMs = totalStopwatch.elapsedMilliseconds;
+      if (kDebugMode) {
+        debugPrint(
+          '⏱️ [PERF EDIT SHOP TOTAL] Total edit operation: ${totalMs}ms (Firestore: ${firestoreMs}ms)',
+        );
+      }
 
       if (mounted) {
         Navigator.pop(context);

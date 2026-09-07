@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/menu_item_model.dart';
-import '../cart/cart_provider.dart';
 import '../shop/shop_detail_screen.dart';
 
 class FavouritesScreen extends ConsumerWidget {
@@ -91,7 +90,6 @@ class FavouritesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final favoriteItemsAsync = ref.watch(favoriteItemsProvider);
-    final cartState = ref.watch(cartProvider);
 
     final screenWidth = MediaQuery.of(context).size.width;
     final horizontalPadding = screenWidth < 360 ? 10.0 : (screenWidth < 400 ? 14.0 : 16.0);

@@ -1,8 +1,7 @@
 // BU Gate2Eat — Admin Panel
 // Add Shop Modal (Real Firestore Creation & Firebase Storage Banner Upload)
 
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -122,16 +121,20 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
 
   Future<void> _pickAndCropLogo() async {
     try {
+      final Stopwatch pickStopwatch = Stopwatch()..start();
       final picked = await _picker.pickImage(source: ImageSource.gallery);
+      final int pickMs = pickStopwatch.elapsedMilliseconds;
       if (picked != null) {
         final rawBytes = await picked.readAsBytes();
         if (!mounted) return;
 
+        final Stopwatch cropStopwatch = Stopwatch()..start();
         final croppedBytes = await CircularCropDialog.show(
           context,
           imageBytes: rawBytes,
           title: 'Crop Shop Photo (Circle)',
         );
+        final int cropMs = cropStopwatch.elapsedMilliseconds;
 
         if (croppedBytes != null && mounted) {
           setState(() {
@@ -139,10 +142,18 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
             _logoError = null;
           });
 
+          final Stopwatch optStopwatch = Stopwatch()..start();
           final optimized = await ImageOptimizationService.optimizeImageBytes(
             originalBytes: croppedBytes,
             type: ImageTargetType.shopLogo,
           );
+          final int optMs = optStopwatch.elapsedMilliseconds;
+
+          if (kDebugMode) {
+            debugPrint(
+              '⏱️ [PERF ADD SHOP LOGO] Picker: ${pickMs}ms | Crop: ${cropMs}ms | Optimize: ${optMs}ms | Size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+            );
+          }
 
           if (mounted) {
             setState(() {
@@ -165,18 +176,28 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
 
   Future<void> _pickBanner() async {
     try {
+      final Stopwatch pickStopwatch = Stopwatch()..start();
       final picked = await _picker.pickImage(source: ImageSource.gallery);
+      final int pickMs = pickStopwatch.elapsedMilliseconds;
       if (picked != null) {
         setState(() {
           _isOptimizingImage = true;
           _bannerError = null;
         });
 
+        final Stopwatch optStopwatch = Stopwatch()..start();
         final rawBytes = await picked.readAsBytes();
         final optimized = await ImageOptimizationService.optimizeImageBytes(
           originalBytes: rawBytes,
           type: ImageTargetType.shopBanner,
         );
+        final int optMs = optStopwatch.elapsedMilliseconds;
+
+        if (kDebugMode) {
+          debugPrint(
+            '⏱️ [PERF ADD SHOP BANNER] Picker: ${pickMs}ms | Preprocess: ${optMs}ms | Size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+          );
+        }
 
         if (mounted) {
           setState(() {
@@ -273,11 +294,18 @@ class _AddShopModalState extends ConsumerState<AddShopModal> {
         updatedAt: DateTime.now(),
       );
 
+      final Stopwatch createStopwatch = Stopwatch()..start();
       await firestoreService.createShop(
         newShop,
         bannerBytes: _selectedBannerBytes,
         logoBytes: _selectedLogoBytes,
       );
+      final int createMs = createStopwatch.elapsedMilliseconds;
+      if (kDebugMode) {
+        debugPrint(
+          '⏱️ [PERF ADD SHOP TOTAL] createShop completed in ${createMs}ms',
+        );
+      }
 
       ref.invalidate(shopsProvider);
 

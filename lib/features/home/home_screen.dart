@@ -2,6 +2,7 @@
 // Main screen featuring bottom navigation (Home → Favourites → Cart → Profile),
 // search, and horizontal category & status filter chips.
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -163,6 +164,27 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
     'Veg',
     'Non-Veg',
   ];
+
+  final Set<String> _prefetchedShopUrls = {};
+
+  void _prefetchTopShops(List<Shop> shops) {
+    if (!mounted) return;
+    int count = 0;
+    for (final shop in shops) {
+      if (count >= 2) break; // Strictly bounded: only top 2 visible shops
+      final banner = shop.bannerUrl.trim();
+      final logo = shop.shopLogoImageUrl.trim();
+      if (banner.isNotEmpty && !_prefetchedShopUrls.contains(banner)) {
+        _prefetchedShopUrls.add(banner);
+        precacheImage(CachedNetworkImageProvider(banner), context);
+      }
+      if (logo.isNotEmpty && !_prefetchedShopUrls.contains(logo)) {
+        _prefetchedShopUrls.add(logo);
+        precacheImage(CachedNetworkImageProvider(logo), context);
+      }
+      count++;
+    }
+  }
 
   @override
   void dispose() {
@@ -539,6 +561,10 @@ class _HomeTabContentState extends ConsumerState<HomeTabContent> {
                     ),
                   );
                 }
+
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _prefetchTopShops(filteredShops);
+                });
 
                 return RefreshIndicator(
                   onRefresh: () async {

@@ -115,8 +115,7 @@ class AdminOrderDetailsModal extends StatelessWidget {
                   const SizedBox(height: 16),
 
                   // 4. Special Instructions (if present)
-                  if (order.specialInstructions != null &&
-                      order.specialInstructions!.trim().isNotEmpty) ...[
+                  if (order.specialInstructions.trim().isNotEmpty) ...[
                     _buildInstructionsCard(isDark),
                     const SizedBox(height: 16),
                   ],
@@ -488,7 +487,7 @@ class AdminOrderDetailsModal extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            order.specialInstructions!,
+            order.specialInstructions,
             style: const TextStyle(fontSize: 13),
           ),
         ],
@@ -624,12 +623,12 @@ class AdminOrderDetailsModal extends StatelessWidget {
             _buildTimestampRow('Delivered At', _formatDate(order.deliveredAt!), isDark),
           if (order.rejectedAt != null)
             _buildTimestampRow('Rejected At', _formatDate(order.rejectedAt!), isDark),
-          if (order.rejectionReason != null && order.rejectionReason!.trim().isNotEmpty) ...[
+          if (order.rejectionReason.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Reason: ',
                   style: TextStyle(
                     fontSize: 12.5,
@@ -639,8 +638,8 @@ class AdminOrderDetailsModal extends StatelessWidget {
                 ),
                 Expanded(
                   child: Text(
-                    order.rejectionReason!,
-                    style: TextStyle(
+                    order.rejectionReason,
+                    style: const TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       color: AppColors.error,

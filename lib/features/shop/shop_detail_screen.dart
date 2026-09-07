@@ -63,6 +63,22 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
   String _selectedCategoryId = 'all';
   bool _isManualCategoryTap = false;
 
+  final Set<String> _prefetchedItemUrls = {};
+
+  void _prefetchTopMenuItems(List<MenuItem> items) {
+    if (!mounted) return;
+    int count = 0;
+    for (final item in items) {
+      if (count >= 2) break; // Strictly bounded: only top 2 visible items
+      final url = item.imageUrl.trim();
+      if (url.isNotEmpty && !_prefetchedItemUrls.contains(url)) {
+        _prefetchedItemUrls.add(url);
+        precacheImage(CachedNetworkImageProvider(url), context);
+      }
+      count++;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -913,6 +929,10 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
           }
           return true;
         }).toList();
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _prefetchTopMenuItems(filtered);
+        });
 
         if (searchQuery.isNotEmpty) {
           if (filtered.isEmpty) {

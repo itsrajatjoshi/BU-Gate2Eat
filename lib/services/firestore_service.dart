@@ -141,7 +141,32 @@ class FirestoreService {
     debugPrint('📝 FirestoreService.createShop -> creating shops/${shop.id}');
     try {
       String bannerUrl = shop.bannerUrl;
-      if (bannerBytes != null && bannerBytes.isNotEmpty) {
+      String logoUrl = shop.shopLogoImageUrl;
+
+      // Upload banner and logo concurrently if both provided
+      if (bannerBytes != null && bannerBytes.isNotEmpty && logoBytes != null && logoBytes.isNotEmpty) {
+        if (kDebugMode) debugPrint('[SHOP] Parallel logo & banner upload started for new shop');
+        final results = await Future.wait([
+          uploadImage(
+            shopId: shop.id,
+            path: 'banner',
+            bytes: bannerBytes,
+            fileName: 'shop_banner.jpg',
+          ),
+          uploadImage(
+            shopId: shop.id,
+            path: 'logo',
+            bytes: logoBytes,
+            fileName: 'shop_logo.jpg',
+          ),
+        ]);
+        if (results[0] != null && results[0]!.isNotEmpty) {
+          bannerUrl = results[0]!;
+        }
+        if (results[1] != null && results[1]!.isNotEmpty) {
+          logoUrl = results[1]!;
+        }
+      } else if (bannerBytes != null && bannerBytes.isNotEmpty) {
         final uploadedUrl = await uploadImage(
           shopId: shop.id,
           path: 'banner',
@@ -151,10 +176,7 @@ class FirestoreService {
         if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
           bannerUrl = uploadedUrl;
         }
-      }
-
-      String logoUrl = shop.shopLogoImageUrl;
-      if (logoBytes != null && logoBytes.isNotEmpty) {
+      } else if (logoBytes != null && logoBytes.isNotEmpty) {
         final uploadedLogoUrl = await uploadImage(
           shopId: shop.id,
           path: 'logo',
@@ -514,13 +536,14 @@ class FirestoreService {
     final uniqueName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
     final fullStoragePath = 'shops/$shopId/$path/$uniqueName';
 
-    debugPrint('STEP 1: NEW IMAGE UPLOAD START');
-    debugPrint('STORAGE PATH: $fullStoragePath');
-    debugPrint('OPTIMIZED SIZE: $sizeKb KB (${bytes.lengthInBytes} bytes)');
-    debugPrint('🪣 STORAGE BUCKET: ${_storage.bucket}');
+    if (kDebugMode) {
+      debugPrint('STEP 1: NEW IMAGE UPLOAD START');
+      debugPrint('STORAGE PATH: $fullStoragePath');
+      debugPrint('OPTIMIZED SIZE: $sizeKb KB (${bytes.lengthInBytes} bytes)');
+    }
 
     if (bytes.isEmpty) {
-      debugPrint('❌ UPLOAD ERROR: Byte array is empty!');
+      if (kDebugMode) debugPrint('❌ UPLOAD ERROR: Byte array is empty!');
       throw Exception('Cannot upload empty image bytes');
     }
 
@@ -535,52 +558,43 @@ class FirestoreService {
         },
       );
 
-      debugPrint('🚀 UPLOAD STATE: running - putData on $fullStoragePath');
+      final Stopwatch uploadStopwatch = Stopwatch()..start();
       final UploadTask uploadTask = storageRef.putData(bytes, metadata);
-
-      // Listen to progress stream
-      uploadTask.snapshotEvents.listen(
-        (TaskSnapshot snapshot) {
-          final total = snapshot.totalBytes > 0 ? snapshot.totalBytes : 1;
-          final progress = (snapshot.bytesTransferred / total) * 100;
-          debugPrint(
-            '📊 UPLOAD STATE: progress ${progress.toStringAsFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} bytes) - State: ${snapshot.state}',
-          );
-        },
-        onError: (Object error) {
-          debugPrint('❌ UPLOAD ERROR from stream: $error');
-        },
-      );
 
       // Await upload completion with safety timeout
       final TaskSnapshot snapshot = await uploadTask.timeout(
         const Duration(seconds: 40),
         onTimeout: () {
-          debugPrint(
-            '❌ UPLOAD ERROR: UploadTask timed out after 40 seconds. Check network and Firebase Storage rules.',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '❌ UPLOAD ERROR: UploadTask timed out after 40 seconds. Check network and Firebase Storage rules.',
+            );
+          }
           throw Exception(
             'Storage upload timed out. Please check network and Firebase Storage configuration.',
           );
         },
       );
+      final int uploadMs = uploadStopwatch.elapsedMilliseconds;
 
-      debugPrint('✅ STEP 2: NEW IMAGE UPLOAD COMPLETE (State: ${snapshot.state})');
-      debugPrint('🌐 STEP 3: GET NEW DOWNLOAD URL START');
-
+      final Stopwatch urlStopwatch = Stopwatch()..start();
       final downloadUrl = await snapshot.ref.getDownloadURL().timeout(
         const Duration(seconds: 15),
         onTimeout: () {
-          debugPrint('❌ UPLOAD ERROR: getDownloadURL timed out');
+          if (kDebugMode) debugPrint('❌ UPLOAD ERROR: getDownloadURL timed out');
           throw Exception('Failed to get download URL within 15 seconds.');
         },
       );
+      final int urlMs = urlStopwatch.elapsedMilliseconds;
 
-      debugPrint('✅ STEP 3: GET NEW DOWNLOAD URL COMPLETE');
-      debugPrint('NEW URL: $downloadUrl');
+      if (kDebugMode) {
+        debugPrint(
+          '⏱️ [PERF UPLOAD] File: $fileName ($sizeKb KB) | Upload: ${uploadMs}ms | getDownloadURL: ${urlMs}ms | Total: ${uploadMs + urlMs}ms',
+        );
+      }
       return downloadUrl;
     } catch (e, stack) {
-      debugPrint('❌ UPLOAD ERROR (Exception caught): $e\n$stack');
+      if (kDebugMode) debugPrint('❌ UPLOAD ERROR (Exception caught): $e\n$stack');
       rethrow;
     }
   }

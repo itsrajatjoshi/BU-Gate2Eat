@@ -5,6 +5,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -172,7 +173,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
                       : opt.price.toString(),
                   pricingType: opt.pricingType,
                   isDefault: opt.isDefault,
-                ))
+                ),)
             .toList();
         _optionGroups.add(
           _EditableOptionGroup(
@@ -266,14 +267,16 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
 
   Future<void> _pickImage() async {
     try {
+      final Stopwatch pickStopwatch = Stopwatch()..start();
       final picked = await _picker.pickImage(source: ImageSource.gallery);
+      final int pickMs = pickStopwatch.elapsedMilliseconds;
       if (picked != null) {
         setState(() {
           _isOptimizingImage = true;
           _imageError = null;
         });
 
-        debugPrint('🔄 IMAGE OPTIMIZATION START (Menu Item Edit)');
+        final Stopwatch optStopwatch = Stopwatch()..start();
         final rawBytes = await picked.readAsBytes();
 
         // Automatically resize & compress to <= 300 KB on background isolate
@@ -281,11 +284,13 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
           originalBytes: rawBytes,
           type: ImageTargetType.menuItem,
         );
+        final int optMs = optStopwatch.elapsedMilliseconds;
 
-        debugPrint('✅ IMAGE OPTIMIZATION COMPLETE');
-        debugPrint(
-          '📸 OPTIMIZED SIZE: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '⏱️ [PERF EDIT FOOD PICK] Picker: ${pickMs}ms | Preprocess: ${optMs}ms | Size: ${(optimized.lengthInBytes / 1024).toStringAsFixed(1)} KB',
+          );
+        }
 
         if (mounted) {
           setState(() {
@@ -297,7 +302,7 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
         }
       }
     } catch (e, stack) {
-      debugPrint('❌ IMAGE OPTIMIZATION ERROR: $e\n$stack');
+      if (kDebugMode) debugPrint('❌ IMAGE OPTIMIZATION ERROR: $e\n$stack');
       if (mounted) {
         setState(() {
           _isOptimizingImage = false;
@@ -457,49 +462,55 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
     setState(() => _isLoading = true);
 
     try {
+      final Stopwatch totalStopwatch = Stopwatch()..start();
       final firestoreService = ref.read(firestoreServiceProvider);
       String categoryId = '';
+      final String oldImageUrl = widget.item.imageUrl;
+      String imageUrl = oldImageUrl;
 
-      // If category was changed to custom category via "+ Other"
-      if (_isOtherCategory) {
-        final createdCategory = await firestoreService.createCustomCategory(
-          widget.shopId,
-          effectiveCategory,
-        );
-        categoryId = createdCategory.id;
-      } else {
-        final matched = widget.categories
-            .where(
-              (c) =>
-                  c.name.toLowerCase() == effectiveCategory.toLowerCase() ||
-                  c.id.toLowerCase() == effectiveCategory.toLowerCase(),
-            )
-            .firstOrNull;
-        if (matched != null) {
-          categoryId = matched.id;
-        } else {
+      Future<void> handleCategory() async {
+        if (_isOtherCategory) {
           final createdCategory = await firestoreService.createCustomCategory(
             widget.shopId,
             effectiveCategory,
           );
           categoryId = createdCategory.id;
+        } else {
+          final matched = widget.categories
+              .where(
+                (c) =>
+                    c.name.toLowerCase() == effectiveCategory.toLowerCase() ||
+                    c.id.toLowerCase() == effectiveCategory.toLowerCase(),
+              )
+              .firstOrNull;
+          if (matched != null) {
+            categoryId = matched.id;
+          } else {
+            final createdCategory = await firestoreService.createCustomCategory(
+              widget.shopId,
+              effectiveCategory,
+            );
+            categoryId = createdCategory.id;
+          }
         }
       }
 
-      final String oldImageUrl = widget.item.imageUrl;
-      String imageUrl = oldImageUrl;
-      // If new image was picked from gallery, upload optimized bytes to Firebase Storage
-      if (_selectedImageBytes != null) {
-        final uploaded = await firestoreService.uploadImage(
-          shopId: widget.shopId,
-          path: 'items',
-          bytes: _selectedImageBytes!,
-          fileName: '${name.toLowerCase().replaceAll(' ', '_')}.jpg',
-        );
-        if (uploaded != null) {
-          imageUrl = uploaded;
+      Future<void> handleUpload() async {
+        if (_selectedImageBytes != null) {
+          final uploaded = await firestoreService.uploadImage(
+            shopId: widget.shopId,
+            path: 'items',
+            bytes: _selectedImageBytes!,
+            fileName: '${name.toLowerCase().replaceAll(' ', '_')}.jpg',
+          );
+          if (uploaded != null) {
+            imageUrl = uploaded;
+          }
         }
       }
+
+      // Execute category resolution and image upload concurrently
+      await Future.wait([handleCategory(), handleUpload()]);
 
       final updateMap = <String, dynamic>{
         'name': name,
@@ -514,16 +525,22 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
             : <Map<String, dynamic>>[], // Explicitly clear optionGroups when converting back to normal item
       };
 
-      debugPrint('📝 FIRESTORE UPDATE START -> shops/${widget.shopId}/menuItems/${widget.item.id}');
+      final Stopwatch firestoreStopwatch = Stopwatch()..start();
+      if (kDebugMode) {
+        debugPrint('📝 FIRESTORE UPDATE START -> shops/${widget.shopId}/menuItems/${widget.item.id}');
+      }
       await firestoreService.updateMenuItem(widget.shopId, widget.item.id, updateMap);
-      debugPrint('✅ FIRESTORE UPDATE COMPLETE');
+      final int firestoreMs = firestoreStopwatch.elapsedMilliseconds;
+      if (kDebugMode) {
+        debugPrint('✅ FIRESTORE UPDATE COMPLETE (${firestoreMs}ms)');
+      }
 
       // Best-effort cleanup of previous storage image in background (non-blocking)
       if (oldImageUrl.isNotEmpty && oldImageUrl != imageUrl) {
         unawaited(
           firestoreService.deleteStorageImageByUrl(oldImageUrl).catchError(
             (Object e) {
-              debugPrint('⚠️ Best-effort image cleanup skipped on edit: $e');
+              if (kDebugMode) debugPrint('⚠️ Best-effort image cleanup skipped on edit: $e');
             },
           ),
         );
@@ -533,6 +550,13 @@ class _EditMenuItemModalState extends ConsumerState<EditMenuItemModal> {
       ref.invalidate(shopMenuItemsProvider(widget.shopId));
       if (categoryId.isNotEmpty && categoryId != widget.item.categoryId) {
         ref.invalidate(shopCategoriesProvider(widget.shopId));
+      }
+
+      final int totalMs = totalStopwatch.elapsedMilliseconds;
+      if (kDebugMode) {
+        debugPrint(
+          '⏱️ [PERF EDIT FOOD TOTAL] Total edit operation: ${totalMs}ms (Firestore: ${firestoreMs}ms)',
+        );
       }
 
       if (mounted) {
