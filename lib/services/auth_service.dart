@@ -1,13 +1,18 @@
 // BU Gate2Eat — Authentication Service
-// Clean Firebase Authentication foundation wrapper.
+// Clean Firebase Authentication foundation wrapper and IAuthenticationProvider implementation.
 // Encapsulates FirebaseAuth interactions for future custom-token (WhatsApp OTP) transition.
 
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
-/// Minimal, decoupled service wrapper around [FirebaseAuth].
-/// Keeps authentication foundation separate from role and Firestore state.
-class AuthService {
+import '../core/auth/auth_provider_interface.dart';
+import '../core/auth/auth_status.dart';
+import '../core/auth/current_identity.dart';
+
+/// Minimal, decoupled service wrapper around [FirebaseAuth] implementing [IAuthenticationProvider].
+/// Keeps authentication foundation separate from role, Firestore state, and specific OTP providers.
+class AuthService implements IAuthenticationProvider {
   AuthService({FirebaseAuth? firebaseAuth}) : _customAuth = firebaseAuth;
 
   final FirebaseAuth? _customAuth;
@@ -29,7 +34,24 @@ class AuthService {
   User? get currentUser => _auth?.currentUser;
 
   /// Whether a Firebase user is currently authenticated.
+  @override
   bool get isSignedIn => currentUser != null;
+
+  /// Current authentication status snapshot.
+  @override
+  AuthStatus get authStatus {
+    final user = currentUser;
+    if (user == null) return AuthStatus.unauthenticated;
+    return AuthStatus.authenticated;
+  }
+
+  /// Gets the snapshot of the current authenticated identity.
+  @override
+  CurrentIdentity get currentIdentity {
+    final user = currentUser;
+    if (user == null) return CurrentIdentity.unauthenticated;
+    return mapUserToIdentity(user, const {});
+  }
 
   /// Stream of authentication state changes (fires on login / logout).
   Stream<User?> authStateChanges() =>
@@ -38,6 +60,88 @@ class AuthService {
   /// Stream of ID token changes (fires on login, logout, or token refresh).
   Stream<User?> idTokenChanges() =>
       _auth?.idTokenChanges() ?? Stream<User?>.value(null);
+
+  /// Stream of raw authentication status changes.
+  @override
+  Stream<AuthStatus> get authStatusChanges {
+    return authStateChanges().map((user) {
+      if (user == null) return AuthStatus.unauthenticated;
+      return AuthStatus.authenticated;
+    });
+  }
+
+  /// Stream of canonical [CurrentIdentity] changes.
+  @override
+  Stream<CurrentIdentity> get identityChanges {
+    final auth = _auth;
+    if (auth == null) {
+      return Stream<CurrentIdentity>.value(CurrentIdentity.unauthenticated);
+    }
+    return auth.idTokenChanges().asyncMap((user) async {
+      if (user == null) return CurrentIdentity.unauthenticated;
+      final claims = await getCustomClaims();
+      return mapUserToIdentity(user, claims);
+    });
+  }
+
+  /// Helper to convert a Firebase [User] and Custom Claims into canonical [CurrentIdentity].
+  /// Authentication (who the caller is = uid) is strictly separated from
+  /// Authorization (what the caller can do = role & shopId claims).
+  static CurrentIdentity mapUserToIdentity(User? user, Map<String, dynamic> claims) {
+    if (user == null) {
+      return CurrentIdentity.unauthenticated;
+    }
+
+    final rawRole = claims['role']?.toString().toLowerCase().trim() ?? '';
+    final AuthRole role;
+    if (rawRole == 'admin') {
+      role = AuthRole.admin;
+    } else if (rawRole == 'shopkeeper') {
+      role = AuthRole.shopkeeper;
+    } else if (rawRole == 'customer') {
+      role = AuthRole.customer;
+    } else {
+      role = AuthRole.customer; // Default safe client role when authenticated
+    }
+
+    final rawShopId = claims['shopId']?.toString().trim();
+    final shopId = (role == AuthRole.shopkeeper && rawShopId != null && rawShopId.isNotEmpty)
+        ? rawShopId
+        : null;
+
+    final rawStatus = claims['status']?.toString().toLowerCase().trim() ?? '';
+    final AccountStatus accountStatus;
+    if (rawStatus == 'deactivated' || rawStatus == 'disabled' || rawStatus == 'revoked') {
+      accountStatus = AccountStatus.deactivated;
+    } else {
+      accountStatus = AccountStatus.active;
+    }
+
+    // Phone: prioritize claims['phone'] if present, then user.phoneNumber
+    final phone = (claims['phone'] ?? user.phoneNumber ?? '').toString().trim();
+
+    return CurrentIdentity(
+      uid: user.uid,
+      phone: phone,
+      authStatus: accountStatus == AccountStatus.deactivated
+          ? AuthStatus.deactivated
+          : AuthStatus.authenticated,
+      role: role,
+      shopId: shopId,
+      customerId: user.uid, // Canonical customerId == uid
+      accountStatus: accountStatus,
+      displayName: user.displayName,
+    );
+  }
+
+  /// Refreshes the active session and re-evaluates identity and claims.
+  @override
+  Future<CurrentIdentity> refreshIdentity() async {
+    final user = currentUser;
+    if (user == null) return CurrentIdentity.unauthenticated;
+    final claims = await getCustomClaims(forceRefresh: true);
+    return mapUserToIdentity(user, claims);
+  }
 
   /// Signs in using a server-minted Firebase Custom Token.
   /// Used when the backend verifies WhatsApp OTP and returns a custom token.
@@ -58,6 +162,7 @@ class AuthService {
   }
 
   /// Signs out of Firebase Auth.
+  @override
   Future<void> signOut() async {
     try {
       final auth = _auth;
@@ -72,6 +177,7 @@ class AuthService {
   }
 
   /// Retrieves the current user's ID token, optionally forcing a refresh.
+  @override
   Future<String?> getIdToken({bool forceRefresh = false}) async {
     final user = currentUser;
     if (user == null) return null;
@@ -80,6 +186,7 @@ class AuthService {
 
   /// Retrieves custom claims associated with the current user's ID token.
   /// Returns empty map if unauthenticated or on error.
+  @override
   Future<Map<String, dynamic>> getCustomClaims({bool forceRefresh = false}) async {
     final user = currentUser;
     if (user == null) return const {};

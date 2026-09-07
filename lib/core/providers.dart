@@ -23,6 +23,11 @@ import '../services/shop_stats_service.dart';
 import 'constants/app_constants.dart';
 
 export '../models/shop_model.dart' show ShopOrderMethod;
+export 'auth/auth_exception.dart';
+export 'auth/auth_provider_interface.dart';
+export 'auth/auth_providers.dart';
+export 'auth/auth_status.dart';
+export 'auth/current_identity.dart';
 
 /// Provider for the Authentication service (singleton).
 final authServiceProvider = Provider<AuthService>((ref) {
