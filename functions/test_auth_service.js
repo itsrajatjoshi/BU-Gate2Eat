@@ -90,12 +90,11 @@ async function runTests() {
   }
 
   // 1. Valid customer phone resolves to customer
-  test("1. Valid customer phone resolves to customer role and customerId", () => {
+  test("1. Valid customer phone resolves to customer role and deterministic UID", () => {
     const identity = resolveIdentityForPhone("9876543210");
     assert.strictEqual(identity.role, "customer");
-    assert.strictEqual(identity.customerId, "cust_9876543210");
-    assert.strictEqual(identity.shopId, undefined);
     assert.strictEqual(identity.uid, "phone_9876543210");
+    assert.strictEqual(identity.shopId, undefined);
   });
 
   // 2. Valid shopkeeper phone resolves to shopkeeper with canonical shopId
@@ -120,7 +119,7 @@ async function runTests() {
   test("4. Unknown valid 10-digit phone safely resolves to customer role", () => {
     const identity = resolveIdentityForPhone("9123456780");
     assert.strictEqual(identity.role, "customer");
-    assert.strictEqual(identity.customerId, "cust_9123456780");
+    assert.strictEqual(identity.uid, "phone_9123456780");
   });
 
   // 5. Malformed phone numbers are rejected
@@ -140,11 +139,10 @@ async function runTests() {
   });
 
   // 6. Customer receives customer role claim
-  test("6. Customer receives customer role claim and customerId claim", () => {
+  test("6. Customer receives customer role claim strictly without redundant customerId", () => {
     const identity = resolveIdentityForPhone("9876543210");
     assert.deepStrictEqual(identity.claims, {
       role: "customer",
-      customerId: "cust_9876543210",
     });
   });
 
@@ -229,11 +227,9 @@ async function runTests() {
     const custResult = await createCustomTokenForPhone("9876543210", { authInstance: mockAuth });
     assert.strictEqual(custResult.uid, "phone_9876543210");
     assert.strictEqual(custResult.role, "customer");
-    assert.strictEqual(custResult.customerId, "cust_9876543210");
     assert(custResult.customToken.startsWith("mock_custom_token_phone_9876543210"));
     assert.deepStrictEqual(mockAuth.customClaims.get("phone_9876543210"), {
       role: "customer",
-      customerId: "cust_9876543210",
     });
 
     // Shopkeeper
@@ -313,7 +309,6 @@ async function runTests() {
   // 20. buildCanonicalClaims supports account deactivation status
   test("20. buildCanonicalClaims supports account deactivation status", () => {
     const deactivatedCustomer = buildCanonicalClaims("customer", {
-      customerId: "cust_12345",
       status: "deactivated",
     });
     assert.strictEqual(deactivatedCustomer.role, "customer");

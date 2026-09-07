@@ -88,9 +88,6 @@ function buildCanonicalClaims(role, options = {}) {
 
   // Customer
   const claims = { role: "customer" };
-  if (options.customerId && typeof options.customerId === "string") {
-    claims.customerId = options.customerId;
-  }
   if (options.status && CANONICAL_ACCOUNT_STATUSES.includes(options.status)) {
     claims.status = options.status;
   }
@@ -173,13 +170,11 @@ function resolveIdentityForPhone(canonicalPhone) {
   }
 
   // 3. Customer (Default for all registered user phones)
-  const customerId = `cust_${cleanPhone}`;
   return {
     role: "customer",
     phone: cleanPhone,
-    customerId,
     uid,
-    claims: buildCanonicalClaims("customer", { customerId }),
+    claims: buildCanonicalClaims("customer"),
   };
 }
 
@@ -195,7 +190,7 @@ function resolveIdentityForPhone(canonicalPhone) {
  * 
  * @param {string} phone - Canonical mobile number
  * @param {object} [options] - Testing options (e.g. injected authInstance)
- * @returns {Promise<{customToken: string, uid: string, role: string, customerId?: string, shopId?: string}>}
+ * @returns {Promise<{customToken: string, uid: string, role: string, shopId?: string}>}
  */
 async function createCustomTokenForPhone(phone, options = {}) {
   // STRICT SECURITY GUARD: Reject any client attempt to override server-trusted identity
@@ -233,12 +228,11 @@ async function createCustomTokenForPhone(phone, options = {}) {
   // 3. Create Firebase custom token embedding claims
   const customToken = await auth.createCustomToken(uid, customClaims);
 
-  // 4. Return safe payload
+  // 4. Return safe payload (uid is canonical identity)
   return {
     customToken,
     uid,
     role: identity.role,
-    ...(identity.customerId ? { customerId: identity.customerId } : {}),
     ...(identity.shopId ? { shopId: identity.shopId } : {}),
   };
 }

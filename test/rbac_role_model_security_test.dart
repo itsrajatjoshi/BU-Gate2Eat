@@ -138,11 +138,11 @@ void main() {
 
     // ─── 2. Canonical Claim Mapping Tests ────────────────────────────────────
     group('2. Canonical Claim Mapping', () {
-      test('Customer claim maps to customer role with customerId and null shopId', () {
+      test('Customer claim maps to customer role with canonical customerId == UID and null shopId', () {
         final user = _FakeFirebaseUser(uid: 'uid_cust_123', phoneNumber: '+919876543210');
+        // Canonical customer claim: strictly { role: 'customer' } (no customerId in claims!)
         final claims = <String, dynamic>{
           'role': 'customer',
-          'customerId': 'uid_cust_123',
         };
 
         final identity = AuthService.mapUserToIdentity(user, claims);
@@ -152,6 +152,7 @@ void main() {
         expect(identity.isShopkeeper, isFalse);
         expect(identity.isAdmin, isFalse);
         expect(identity.shopId, isNull);
+        // Canonical customer identity: customerId == request.auth.uid == user.uid
         expect(identity.customerId, equals('uid_cust_123'));
         expect(identity.authStatus, equals(AuthStatus.authenticated));
       });
@@ -352,6 +353,27 @@ void main() {
         // Guard redirects to /home because CurrentIdentity.isShopkeeper is false
         expect(find.text('Shopkeeper Shell View'), findsNothing);
         expect(find.text('Customer Home View'), findsOneWidget);
+      });
+
+      test('Conflict: LocalStorage customerId = cust_someone_else, authenticated UID = UID_A -> authoritative customer identity = UID_A', () async {
+        // Attacker or stale session wrote an unauthorized customerId into local storage
+        SharedPreferences.setMockInitialValues({
+          'user_phone': '9876543210',
+          'user_name': 'Attacker',
+          'customer_id': 'cust_someone_else',
+          'is_onboarded': true,
+        });
+
+        // Authenticated session has Firebase UID = 'UID_A'
+        final user = _FakeFirebaseUser(uid: 'UID_A', phoneNumber: '+919876543210');
+        // Canonical customer claims: strictly { role: 'customer' }
+        final claims = <String, dynamic>{'role': 'customer'};
+
+        final identity = AuthService.mapUserToIdentity(user, claims);
+        // Security Invariant: Authoritative customerId MUST be the Firebase UID ('UID_A')
+        expect(identity.customerId, equals('UID_A'));
+        expect(identity.uid, equals('UID_A'));
+        expect(identity.customerId, isNot(equals('cust_someone_else')));
       });
     });
 

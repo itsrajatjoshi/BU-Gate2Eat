@@ -98,14 +98,12 @@ void main() {
 
     // 6. Customer receives customer role claim
     test('6. Customer receives customer role claim structure expectation', () {
-      const cleanPhone = '9876543210';
       final expectedClaims = {
         'role': 'customer',
-        'customerId': 'cust_$cleanPhone',
       };
       expect(expectedClaims['role'], equals('customer'));
-      expect(expectedClaims['customerId'], equals('cust_9876543210'));
       expect(expectedClaims.containsKey('shopId'), isFalse);
+      expect(expectedClaims.containsKey('customerId'), isFalse);
     });
 
     // 7. Shopkeeper receives correct canonical shopId
