@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/config/app_environment.dart';
 import 'core/constants/app_constants.dart';
 import 'core/providers.dart';
 import 'core/router.dart';
@@ -71,6 +72,14 @@ void main() async {
 
       // Register top-level background message handler for FCM
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    }
+
+    if (AppEnvironment.useFirebaseEmulator) {
+      FirebaseFirestore.instance.useFirestoreEmulator(
+        AppEnvironment.emulatorHost,
+        AppEnvironment.firestoreEmulatorPort,
+      );
+      debugPrint('🧪 [Emulator] Connected Firestore to ${AppEnvironment.emulatorHost}:${AppEnvironment.firestoreEmulatorPort}');
     }
   } catch (e, stack) {
     debugPrint('❌ Firebase Initialization Note: $e\n$stack');

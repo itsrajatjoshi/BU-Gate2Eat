@@ -9,12 +9,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/config/app_environment.dart';
+
 /// Populates initial shop data into Firestore using custom document IDs.
 /// NEVER overwrites existing shops, contact numbers, order numbers, or manually edited prices.
 class SeedDataService {
   /// Entry point to ensure initial shops exist.
   /// Evaluates each shop independently so existing shops are 100% untouched.
   static Future<void> seedInitialData() async {
+    // ── SAFETY INVARIANT: Development/testing seed logic must NEVER execute against Production ──
+    if (kReleaseMode || AppEnvironment.isProd) {
+      debugPrint('⛔ SeedDataService: Blocked. Seeding is strictly prohibited in production and release builds.');
+      return;
+    }
+
     final firestore = FirebaseFirestore.instance;
 
     // 1. Rajat Shop

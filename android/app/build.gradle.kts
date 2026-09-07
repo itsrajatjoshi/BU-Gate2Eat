@@ -70,12 +70,23 @@ android {
     buildTypes {
         release {
             val releaseSigning = signingConfigs.getByName("release")
-            // Use release keystore when key.properties and keystore file exist;
-            // otherwise fallback to debug signing for local/CI development builds.
-            signingConfig = if (releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
-                releaseSigning
+            val isReleaseKeystoreAvailable = releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()
+            if (isReleaseKeystoreAvailable) {
+                signingConfig = releaseSigning
             } else {
-                signingConfigs.getByName("debug")
+                // Strict production security invariant:
+                // NEVER silently sign production release artifacts with debug keys.
+                // If a release build task is explicitly requested, fail fast.
+                val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+                    it.contains("Release", ignoreCase = true)
+                }
+                if (isReleaseBuildRequested) {
+                    throw GradleException(
+                        "SECURITY VIOLATION: Release build requested, but release signing configuration (key.properties / keystore) was not found. " +
+                        "Production release artifacts must NEVER be silently signed with debug keys."
+                    )
+                }
+                signingConfig = null
             }
         }
     }

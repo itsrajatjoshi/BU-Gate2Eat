@@ -67,11 +67,16 @@ desktop.ini
 coverage/
 *.lcov
 
-# Environment / Secrets
+# Environment / Secrets & Service Account Keys
 .env
 .env.*
 *.env
 secrets/
+*service-account*.json
+*service_account*.json
+*credentials*.json
+*secret*.key
+*.keystore
 
 # Generated files
 *.freezed.dart

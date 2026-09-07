@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "bu-gate2eat"
+    "default": "bu-gate2eat",
+    "production": "bu-gate2eat",
+    "staging": "bu-gate2eat-staging",
+    "development": "bu-gate2eat-dev"
   }
 }
