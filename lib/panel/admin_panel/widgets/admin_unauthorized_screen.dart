@@ -15,6 +15,13 @@ import '../../../services/local_storage_service.dart';
 /// If localStorage is not overridden in an isolated widget test (no session context),
 /// it returns true so isolated non-auth widget tests are not disrupted.
 bool isAdminAuthorized(WidgetRef ref) {
+  try {
+    final currentIdentity = ref.watch(currentIdentityProvider);
+    if (currentIdentity.isAuthenticated) {
+      return currentIdentity.isAdmin;
+    }
+  } catch (_) {}
+
   final LocalStorageService localStorage;
   try {
     localStorage = ref.watch(localStorageServiceProvider);

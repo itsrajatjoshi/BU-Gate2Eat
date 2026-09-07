@@ -315,6 +315,81 @@ async function runTests() {
     assert.strictEqual(deactivatedCustomer.status, "deactivated");
   });
 
+  // 21. Client cannot supply or override status or accountStatus (Security Violation)
+  await testAsync("21. Client cannot supply or override status or accountStatus (Security Violation)", async () => {
+    const mockAuth = new MockAdminAuth();
+    await assert.rejects(
+      async () => {
+        await createCustomTokenForPhone("9876543210", {
+          status: "active",
+          authInstance: mockAuth,
+        });
+      },
+      /Security Violation: Client cannot supply or override role, shopId, customerId, status, or claims/
+    );
+    await assert.rejects(
+      async () => {
+        await createCustomTokenForPhone("9876543210", {
+          accountStatus: "active",
+          authInstance: mockAuth,
+        });
+      },
+      /Security Violation: Client cannot supply or override role, shopId, customerId, status, or claims/
+    );
+  });
+
+  // 22. Client cannot supply or override admin or isAdmin flag (Security Violation)
+  await testAsync("22. Client cannot supply or override admin or isAdmin flag (Security Violation)", async () => {
+    const mockAuth = new MockAdminAuth();
+    await assert.rejects(
+      async () => {
+        await createCustomTokenForPhone("9876543210", {
+          admin: true,
+          authInstance: mockAuth,
+        });
+      },
+      /Security Violation: Client cannot supply or override role/
+    );
+    await assert.rejects(
+      async () => {
+        await createCustomTokenForPhone("9876543210", {
+          isAdmin: true,
+          authInstance: mockAuth,
+        });
+      },
+      /Security Violation: Client cannot supply or override role/
+    );
+  });
+
+  // 23. Client cannot supply or override isShopkeeper flag (Security Violation)
+  await testAsync("23. Client cannot supply or override isShopkeeper flag (Security Violation)", async () => {
+    const mockAuth = new MockAdminAuth();
+    await assert.rejects(
+      async () => {
+        await createCustomTokenForPhone("9876543210", {
+          isShopkeeper: true,
+          authInstance: mockAuth,
+        });
+      },
+      /Security Violation: Client cannot supply or override role/
+    );
+  });
+
+  // 24. Shopkeeper phone cannot be granted cross-shop assignment via client options
+  await testAsync("24. Shopkeeper phone cannot be granted cross-shop assignment via client options", async () => {
+    const mockAuth = new MockAdminAuth();
+    // Phone 8000383993 is Rajat Shop; attempting to inject nayan_shop
+    await assert.rejects(
+      async () => {
+        await createCustomTokenForPhone("8000383993", {
+          shopId: "nayan_shop",
+          authInstance: mockAuth,
+        });
+      },
+      /Security Violation: Client cannot supply or override role, shopId, customerId, status, or claims/
+    );
+  });
+
   console.log("==================================================");
   console.log(`ALL ${passed}/${total} BACKEND AUTH SERVICE TESTS PASSED!`);
   console.log("==================================================");

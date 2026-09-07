@@ -194,8 +194,18 @@ function resolveIdentityForPhone(canonicalPhone) {
  */
 async function createCustomTokenForPhone(phone, options = {}) {
   // STRICT SECURITY GUARD: Reject any client attempt to override server-trusted identity
-  if (options.role !== undefined || options.shopId !== undefined || options.customerId !== undefined || options.claims !== undefined) {
-    throw new Error("Security Violation: Client cannot supply or override role, shopId, customerId, or claims.");
+  if (
+    options.role !== undefined ||
+    options.shopId !== undefined ||
+    options.customerId !== undefined ||
+    options.claims !== undefined ||
+    options.status !== undefined ||
+    options.accountStatus !== undefined ||
+    options.admin !== undefined ||
+    options.isAdmin !== undefined ||
+    options.isShopkeeper !== undefined
+  ) {
+    throw new Error("Security Violation: Client cannot supply or override role, shopId, customerId, status, or claims.");
   }
 
   const identity = resolveIdentityForPhone(phone);

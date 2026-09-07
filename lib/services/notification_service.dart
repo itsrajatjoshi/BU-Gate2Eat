@@ -551,8 +551,8 @@ class NotificationService {
 
     // 1. Authoritative: Prioritize CurrentIdentity from Firebase Auth
     if (currentIdentity != null && currentIdentity.isAuthenticated) {
-      final role = explicitRole ?? currentIdentity.role.name;
-      final shopId = explicitShopId ?? currentIdentity.shopId;
+      final role = currentIdentity.role.name;
+      final shopId = currentIdentity.shopId;
       final customerId = currentIdentity.uid;
       final phone = currentIdentity.phone.isNotEmpty
           ? currentIdentity.phone

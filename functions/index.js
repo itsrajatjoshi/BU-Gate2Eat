@@ -431,6 +431,9 @@ exports.onOrderStatusUpdated = functions.firestore
 
 // ─── PART 5: AUTHENTICATION & ROLE CLAIMS FOUNDATION ────────────────────────
 const {
+  CANONICAL_ROLES,
+  CANONICAL_ACCOUNT_STATUSES,
+  buildCanonicalClaims,
   normalizeCanonicalPhone,
   canonicalizeShopId,
   resolveIdentityForPhone,
@@ -440,6 +443,9 @@ const {
 } = require("./auth_service");
 
 exports.auth = {
+  CANONICAL_ROLES,
+  CANONICAL_ACCOUNT_STATUSES,
+  buildCanonicalClaims,
   normalizeCanonicalPhone,
   canonicalizeShopId,
   resolveIdentityForPhone,

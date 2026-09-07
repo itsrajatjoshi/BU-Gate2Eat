@@ -133,8 +133,12 @@ class _ShopkeeperProfileScreenState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final localStorage = ref.watch(localStorageServiceProvider);
     final phone = localStorage.userPhone;
+    final currentIdentity = ref.watch(currentIdentityProvider);
+    final isAuthorizedShopkeeper = currentIdentity.isAuthenticated
+        ? currentIdentity.isShopkeeper
+        : AppAuthRoles.isShopkeeperPhone(phone);
 
-    if (!AppAuthRoles.isShopkeeperPhone(phone)) {
+    if (!isAuthorizedShopkeeper) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
           final targetRoute =

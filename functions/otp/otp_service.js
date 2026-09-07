@@ -364,12 +364,16 @@ class OtpService {
       clientSuppliedAuthOptions.shopId !== undefined ||
       clientSuppliedAuthOptions.customerId !== undefined ||
       clientSuppliedAuthOptions.claims !== undefined ||
-      clientSuppliedAuthOptions.admin !== undefined
+      clientSuppliedAuthOptions.admin !== undefined ||
+      clientSuppliedAuthOptions.isAdmin !== undefined ||
+      clientSuppliedAuthOptions.status !== undefined ||
+      clientSuppliedAuthOptions.accountStatus !== undefined ||
+      clientSuppliedAuthOptions.isShopkeeper !== undefined
     ) {
       return {
         success: false,
         code: OtpErrorCode.SECURITY_VIOLATION,
-        error: "Security Violation: Client cannot supply role, shopId, customerId, or claims.",
+        error: "Security Violation: Client cannot supply role, shopId, customerId, status, or claims.",
       };
     }
 
