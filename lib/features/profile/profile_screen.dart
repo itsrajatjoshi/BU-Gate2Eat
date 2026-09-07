@@ -332,7 +332,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     subtitle: const Text('Read our privacy practices'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // Open privacy policy URL
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Privacy Policy will be available soon.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
                     },
                   ),
                   const Divider(height: 1, thickness: 0.6, color: AppColors.divider),
@@ -342,7 +347,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     subtitle: const Text('Terms & conditions of use'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // Open terms of service URL
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Terms of Service will be available soon.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
                     },
                   ),
                   const Divider(height: 1, thickness: 0.6, color: AppColors.divider),

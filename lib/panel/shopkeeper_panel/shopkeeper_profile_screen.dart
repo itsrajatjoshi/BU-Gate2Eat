@@ -421,7 +421,14 @@ class _ShopkeeperProfileScreenState
                     title: const Text('Privacy Policy'),
                     subtitle: const Text('Read our privacy practices'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () {},
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Privacy Policy will be available soon.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
                   ),
                   const Divider(
                     height: 1,
@@ -436,7 +443,14 @@ class _ShopkeeperProfileScreenState
                     title: const Text('Terms of Service'),
                     subtitle: const Text('Terms & conditions of use'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () {},
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Terms of Service will be available soon.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
                   ),
                   const Divider(
                     height: 1,
