@@ -36,6 +36,67 @@ const SHOP_ALIASES = Object.freeze({
   "up16_queens": "up16_coffee_queen",
 });
 
+// ─── Canonical RBAC Role & Status Definitions (Checkpoint 2.1) ─────────────
+const CANONICAL_ROLES = Object.freeze(["customer", "shopkeeper", "admin"]);
+const CANONICAL_ACCOUNT_STATUSES = Object.freeze(["active", "deactivated"]);
+
+/**
+ * Validates and constructs a minimal, server-trusted custom claims object.
+ * 
+ * Invariants:
+ * - Role must be one of: "customer", "shopkeeper", "admin".
+ * - "admin" claims strictly omit shopId (admin has platform-wide authority).
+ * - "shopkeeper" claims strictly require a valid, non-empty canonical shopId.
+ * - "customer" claims omit shopId.
+ * 
+ * @param {string} role - canonical role
+ * @param {object} [options] - additional attributes (shopId, customerId, status)
+ * @returns {object} frozen minimal claims object
+ */
+function buildCanonicalClaims(role, options = {}) {
+  if (!role || typeof role !== "string") {
+    throw new Error("Invalid role input: role must be a non-empty string.");
+  }
+  const cleanRole = role.toLowerCase().trim();
+  if (!CANONICAL_ROLES.includes(cleanRole)) {
+    throw new Error(`Invalid canonical role: "${role}". Must be one of: ${CANONICAL_ROLES.join(", ")}`);
+  }
+
+  if (cleanRole === "admin") {
+    const claims = { role: "admin" };
+    if (options.status && CANONICAL_ACCOUNT_STATUSES.includes(options.status)) {
+      claims.status = options.status;
+    }
+    return Object.freeze(claims);
+  }
+
+  if (cleanRole === "shopkeeper") {
+    const rawShopId = options.shopId;
+    const canonicalShopId = canonicalizeShopId(rawShopId);
+    if (!canonicalShopId || typeof canonicalShopId !== "string") {
+      throw new Error("Shopkeeper role strictly requires a valid, authoritative shopId assignment.");
+    }
+    const claims = {
+      role: "shopkeeper",
+      shopId: canonicalShopId,
+    };
+    if (options.status && CANONICAL_ACCOUNT_STATUSES.includes(options.status)) {
+      claims.status = options.status;
+    }
+    return Object.freeze(claims);
+  }
+
+  // Customer
+  const claims = { role: "customer" };
+  if (options.customerId && typeof options.customerId === "string") {
+    claims.customerId = options.customerId;
+  }
+  if (options.status && CANONICAL_ACCOUNT_STATUSES.includes(options.status)) {
+    claims.status = options.status;
+  }
+  return Object.freeze(claims);
+}
+
 /**
  * Normalizes and validates a phone number into a canonical 10-digit string.
  * Strips non-digits, international prefix (+91 / 91), and trunk zero (0).
@@ -94,9 +155,7 @@ function resolveIdentityForPhone(canonicalPhone) {
       role: "admin",
       phone: cleanPhone,
       uid,
-      claims: {
-        role: "admin",
-      },
+      claims: buildCanonicalClaims("admin"),
     };
   }
 
@@ -109,10 +168,7 @@ function resolveIdentityForPhone(canonicalPhone) {
       phone: cleanPhone,
       shopId: canonicalShopId,
       uid,
-      claims: {
-        role: "shopkeeper",
-        shopId: canonicalShopId,
-      },
+      claims: buildCanonicalClaims("shopkeeper", { shopId: canonicalShopId }),
     };
   }
 
@@ -123,10 +179,7 @@ function resolveIdentityForPhone(canonicalPhone) {
     phone: cleanPhone,
     customerId,
     uid,
-    claims: {
-      role: "customer",
-      customerId,
-    },
+    claims: buildCanonicalClaims("customer", { customerId }),
   };
 }
 
@@ -191,11 +244,14 @@ async function createCustomTokenForPhone(phone, options = {}) {
 }
 
 module.exports = {
+  CANONICAL_ROLES,
+  CANONICAL_ACCOUNT_STATUSES,
   SERVER_ADMIN_PHONES,
   SERVER_SHOPKEEPER_PHONE_MAP,
   SHOP_ALIASES,
   normalizeCanonicalPhone,
   canonicalizeShopId,
+  buildCanonicalClaims,
   resolveIdentityForPhone,
   createCustomTokenForPhone,
 };

@@ -13,6 +13,9 @@ const {
   createCustomTokenForPhone,
   SERVER_ADMIN_PHONES,
   SERVER_SHOPKEEPER_PHONE_MAP,
+  CANONICAL_ROLES,
+  CANONICAL_ACCOUNT_STATUSES,
+  buildCanonicalClaims,
 } = require("./auth_service");
 
 // ─── Mock Firebase Auth for Offline Testing ─────────────────────────────────
@@ -264,6 +267,57 @@ async function runTests() {
     assert(!keys.includes("privateKey"));
     assert(!keys.includes("client_secret"));
     assert(!keys.includes("serviceAccount"));
+  });
+
+  // 15. Canonical roles defines exactly customer, shopkeeper, admin
+  test("15. CANONICAL_ROLES defines exactly customer, shopkeeper, admin", () => {
+    assert.deepStrictEqual(Array.from(CANONICAL_ROLES), ["customer", "shopkeeper", "admin"]);
+  });
+
+  // 16. Canonical account statuses defines active and deactivated
+  test("16. CANONICAL_ACCOUNT_STATUSES defines active and deactivated", () => {
+    assert.deepStrictEqual(Array.from(CANONICAL_ACCOUNT_STATUSES), ["active", "deactivated"]);
+  });
+
+  // 17. buildCanonicalClaims creates admin claims strictly omitting shopId
+  test("17. buildCanonicalClaims creates admin claims strictly omitting shopId", () => {
+    const adminClaims = buildCanonicalClaims("admin");
+    assert.strictEqual(adminClaims.role, "admin");
+    assert.strictEqual(adminClaims.shopId, undefined);
+    assert.strictEqual(adminClaims.customerId, undefined);
+  });
+
+  // 18. buildCanonicalClaims rejects shopkeeper role without valid shopId
+  test("18. buildCanonicalClaims rejects shopkeeper role without valid shopId", () => {
+    assert.throws(
+      () => buildCanonicalClaims("shopkeeper", {}),
+      /Shopkeeper role strictly requires a valid, authoritative shopId assignment/
+    );
+    assert.throws(
+      () => buildCanonicalClaims("shopkeeper", { shopId: "" }),
+      /Shopkeeper role strictly requires a valid, authoritative shopId assignment/
+    );
+    const validClaims = buildCanonicalClaims("shopkeeper", { shopId: "rajat_shop" });
+    assert.strictEqual(validClaims.role, "shopkeeper");
+    assert.strictEqual(validClaims.shopId, "rajat_shop");
+  });
+
+  // 19. buildCanonicalClaims rejects invalid or unrecognized roles
+  test("19. buildCanonicalClaims rejects invalid or unrecognized roles", () => {
+    assert.throws(() => buildCanonicalClaims("superadmin"), /Invalid canonical role/);
+    assert.throws(() => buildCanonicalClaims("moderator"), /Invalid canonical role/);
+    assert.throws(() => buildCanonicalClaims(""), /Invalid role input/);
+    assert.throws(() => buildCanonicalClaims(null), /Invalid role input/);
+  });
+
+  // 20. buildCanonicalClaims supports account deactivation status
+  test("20. buildCanonicalClaims supports account deactivation status", () => {
+    const deactivatedCustomer = buildCanonicalClaims("customer", {
+      customerId: "cust_12345",
+      status: "deactivated",
+    });
+    assert.strictEqual(deactivatedCustomer.role, "customer");
+    assert.strictEqual(deactivatedCustomer.status, "deactivated");
   });
 
   console.log("==================================================");

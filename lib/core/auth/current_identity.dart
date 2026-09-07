@@ -62,7 +62,8 @@ class CurrentIdentity {
   bool get isAuthenticated =>
       authStatus == AuthStatus.authenticated && uid.isNotEmpty;
   bool get isCustomer => role == AuthRole.customer;
-  bool get isShopkeeper => role == AuthRole.shopkeeper;
+  bool get isShopkeeper =>
+      role == AuthRole.shopkeeper && shopId != null && shopId!.isNotEmpty;
   bool get isAdmin => role == AuthRole.admin;
   bool get isActive => accountStatus == AccountStatus.active;
 

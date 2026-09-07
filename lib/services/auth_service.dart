@@ -97,29 +97,37 @@ class AuthService implements IAuthenticationProvider {
     }
 
     final rawRole = claims['role']?.toString().toLowerCase().trim() ?? '';
+    final rawStatus = claims['status']?.toString().toLowerCase().trim() ?? '';
+    final isDeactivated = rawStatus == 'deactivated' ||
+        rawStatus == 'disabled' ||
+        rawStatus == 'revoked' ||
+        rawRole == 'deactivated';
+
+    final AccountStatus accountStatus =
+        isDeactivated ? AccountStatus.deactivated : AccountStatus.active;
+
+    final rawShopId = claims['shopId']?.toString().trim();
+    final hasValidShopId = rawShopId != null && rawShopId.isNotEmpty;
+
     final AuthRole role;
-    if (rawRole == 'admin') {
+    if (isDeactivated) {
+      role = AuthRole.none;
+    } else if (rawRole == 'admin') {
       role = AuthRole.admin;
-    } else if (rawRole == 'shopkeeper') {
+    } else if (rawRole == 'shopkeeper' && hasValidShopId) {
       role = AuthRole.shopkeeper;
+    } else if (rawRole == 'shopkeeper' && !hasValidShopId) {
+      // Security invariant: A shopkeeper without valid shop assignment must not obtain vendor permissions.
+      role = AuthRole.customer;
     } else if (rawRole == 'customer') {
       role = AuthRole.customer;
     } else {
       role = AuthRole.customer; // Default safe client role when authenticated
     }
 
-    final rawShopId = claims['shopId']?.toString().trim();
-    final shopId = (role == AuthRole.shopkeeper && rawShopId != null && rawShopId.isNotEmpty)
+    final shopId = (role == AuthRole.shopkeeper && hasValidShopId)
         ? rawShopId
         : null;
-
-    final rawStatus = claims['status']?.toString().toLowerCase().trim() ?? '';
-    final AccountStatus accountStatus;
-    if (rawStatus == 'deactivated' || rawStatus == 'disabled' || rawStatus == 'revoked') {
-      accountStatus = AccountStatus.deactivated;
-    } else {
-      accountStatus = AccountStatus.active;
-    }
 
     // Phone: prioritize claims['phone'] if present, then user.phoneNumber
     final phone = (claims['phone'] ?? user.phoneNumber ?? '').toString().trim();
