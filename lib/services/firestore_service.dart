@@ -40,6 +40,10 @@ class FirestoreService {
     Future<void> Function(String shopId, String itemId)? menuItemDeleterForTesting,
     Future<String?> Function(String path, Uint8List bytes)? storageUploaderForTesting,
     Stream<List<Category>> Function(String shopId)? categoriesStreamForTesting,
+    Future<String> Function(Shop shop)? shopCreatorForTesting,
+    Future<void> Function(String shopId)? shopDeleterForTesting,
+    Stream<List<SupportQuery>> Function()? allSupportQueriesStreamForTesting,
+    Future<List<SupportQuery>> Function()? allSupportQueriesLoaderForTesting,
   })  : _customFirestore = firestore,
         _customStorage = storage,
         _customAuth = auth,
@@ -52,7 +56,11 @@ class FirestoreService {
         _menuItemUpdaterForTesting = menuItemUpdaterForTesting,
         _menuItemDeleterForTesting = menuItemDeleterForTesting,
         _storageUploaderForTesting = storageUploaderForTesting,
-        _categoriesStreamForTesting = categoriesStreamForTesting;
+        _categoriesStreamForTesting = categoriesStreamForTesting,
+        _shopCreatorForTesting = shopCreatorForTesting,
+        _shopDeleterForTesting = shopDeleterForTesting,
+        _allSupportQueriesStreamForTesting = allSupportQueriesStreamForTesting,
+        _allSupportQueriesLoaderForTesting = allSupportQueriesLoaderForTesting;
 
   final FirebaseFirestore? _customFirestore;
   final FirebaseStorage? _customStorage;
@@ -67,6 +75,10 @@ class FirestoreService {
   final Future<void> Function(String shopId, String itemId)? _menuItemDeleterForTesting;
   final Future<String?> Function(String path, Uint8List bytes)? _storageUploaderForTesting;
   final Stream<List<Category>> Function(String shopId)? _categoriesStreamForTesting;
+  final Future<String> Function(Shop shop)? _shopCreatorForTesting;
+  final Future<void> Function(String shopId)? _shopDeleterForTesting;
+  final Stream<List<SupportQuery>> Function()? _allSupportQueriesStreamForTesting;
+  final Future<List<SupportQuery>> Function()? _allSupportQueriesLoaderForTesting;
 
   /// Checks if Firebase is initialized or custom firestore instance is provided.
   bool get isAvailable {
@@ -219,9 +231,9 @@ class FirestoreService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const FirestoreServiceException(
-        'Unauthorized: Customer cannot update shop configuration',
+        'Unauthorized: Caller cannot update shop configuration',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -261,9 +273,9 @@ class FirestoreService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const FirestoreServiceException(
-        'Unauthorized: Customer cannot update shop open status',
+        'Unauthorized: Caller cannot update shop open status',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -304,6 +316,17 @@ class FirestoreService {
     Uint8List? bannerBytes,
     Uint8List? logoBytes,
   }) async {
+    // ── Security Check: Admin Authorization ──
+    final role = _currentAuthRole;
+    if (role != AuthRole.admin) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Only administrators can create new shops',
+      );
+    }
+    if (_shopCreatorForTesting != null) {
+      return _shopCreatorForTesting!(shop);
+    }
+
     debugPrint('📝 FirestoreService.createShop -> creating shops/${shop.id}');
     try {
       String bannerUrl = shop.bannerUrl;
@@ -375,6 +398,17 @@ class FirestoreService {
     String? bannerUrl,
     String? logoUrl,
   }) async {
+    // ── Security Check: Admin Authorization ──
+    final role = _currentAuthRole;
+    if (role != AuthRole.admin) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Only administrators can delete shops',
+      );
+    }
+    if (_shopDeleterForTesting != null) {
+      return _shopDeleterForTesting!(shopId);
+    }
+
     debugPrint('📝 FirestoreService.deleteShopCascade -> deleting shops/$shopId');
     try {
       // 1. Delete all menu items and their storage photos
@@ -513,9 +547,9 @@ class FirestoreService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const FirestoreServiceException(
-        'Unauthorized: Customer cannot create categories',
+        'Unauthorized: Caller cannot create categories',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -648,9 +682,9 @@ class FirestoreService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const FirestoreServiceException(
-        'Unauthorized: Customer cannot add menu items',
+        'Unauthorized: Caller cannot add menu items',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -691,9 +725,9 @@ class FirestoreService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const FirestoreServiceException(
-        'Unauthorized: Customer cannot update menu items',
+        'Unauthorized: Caller cannot update menu items',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -739,9 +773,9 @@ class FirestoreService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const FirestoreServiceException(
-        'Unauthorized: Customer cannot update menu item availability',
+        'Unauthorized: Caller cannot update menu item availability',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -784,9 +818,9 @@ class FirestoreService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const FirestoreServiceException(
-        'Unauthorized: Customer cannot delete menu items',
+        'Unauthorized: Caller cannot delete menu items',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -844,9 +878,9 @@ class FirestoreService {
     // ── Security Check: Tenant Authorization & Strict Path Parsing ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const FirestoreServiceException(
-        'Unauthorized: Customer cannot upload shop assets',
+        'Unauthorized: Caller cannot upload shop assets',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -1108,6 +1142,15 @@ class FirestoreService {
 
   /// Real-time stream of customer support queries for Admin, sorted newest first.
   Stream<List<SupportQuery>> watchSupportQueries() {
+    final role = _currentAuthRole;
+    if (role != AuthRole.admin) {
+      debugPrint('⛔ [FirestoreService] Blocked watchSupportQueries: Role "$role" is not admin.');
+      return const Stream.empty();
+    }
+    if (_allSupportQueriesStreamForTesting != null) {
+      return _allSupportQueriesStreamForTesting!();
+    }
+    if (!isAvailable) return const Stream.empty();
     return _firestore
         .collection('supportQueries')
         .snapshots()
@@ -1122,6 +1165,15 @@ class FirestoreService {
 
   /// One-time fetch of customer support queries for Admin, sorted newest first.
   Future<List<SupportQuery>> getSupportQueries() async {
+    final role = _currentAuthRole;
+    if (role != AuthRole.admin) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Only administrators can access all customer support queries',
+      );
+    }
+    if (_allSupportQueriesLoaderForTesting != null) {
+      return _allSupportQueriesLoaderForTesting!();
+    }
     try {
       final snapshot = await _firestore.collection('supportQueries').get();
       final queries = snapshot.docs

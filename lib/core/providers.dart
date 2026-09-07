@@ -1122,6 +1122,12 @@ final supportQueriesStreamProvider = StreamProvider<List<SupportQuery>>((ref) {
     return const Stream.empty();
   }
 
+  try {
+    if (Firebase.apps.isNotEmpty && (currentIdentity == null || !currentIdentity.isAuthenticated || !currentIdentity.isAdmin)) {
+      return const Stream.empty();
+    }
+  } catch (_) {}
+
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.watchSupportQueries();
 });

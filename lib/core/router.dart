@@ -1,6 +1,7 @@
 // BU Gate2Eat — Router Configuration
 // GoRouter setup with splash → onboarding → home flow
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -102,6 +103,13 @@ String? centralRouteGuard(BuildContext context, GoRouterState state) {
   final hasSession = storage != null && phone.isNotEmpty && storage.isOnboarded;
 
   if (isAdminRoute) {
+    // In live runtime with Firebase initialized, an unauthenticated caller cannot access /admin
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return hasSession ? AppRoutes.home : AppRoutes.onboarding;
+      }
+    } catch (_) {}
+
     if (AppAuthRoles.isAdminPhone(phone)) {
       return null;
     }
@@ -109,6 +117,13 @@ String? centralRouteGuard(BuildContext context, GoRouterState state) {
   }
 
   if (isShopkeeperRoute) {
+    // In live runtime with Firebase initialized, an unauthenticated caller cannot access /shopkeeper
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return hasSession ? AppRoutes.home : AppRoutes.onboarding;
+      }
+    } catch (_) {}
+
     if (AppAuthRoles.isShopkeeperPhone(phone)) {
       return null;
     }

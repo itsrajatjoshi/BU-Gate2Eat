@@ -1,6 +1,7 @@
 // BU Gate2Eat — Admin Panel
 // Reusable unauthorized / access-denied screen and authorization check for admin routes.
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +20,10 @@ bool isAdminAuthorized(WidgetRef ref) {
     final currentIdentity = ref.watch(currentIdentityProvider);
     if (currentIdentity.isAuthenticated) {
       return currentIdentity.isAdmin;
+    }
+    // In live runtime with Firebase initialized, an unauthenticated session cannot access admin
+    if (Firebase.apps.isNotEmpty) {
+      return false;
     }
   } catch (_) {}
 

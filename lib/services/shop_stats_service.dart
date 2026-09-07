@@ -35,6 +35,7 @@ class ShopStatsService {
     Stream<ShopStats?> Function(String shopId)? statsStreamForTesting,
     Future<ShopStats?> Function(String shopId)? statsLoaderForTesting,
     Future<void> Function(String shopId)? statsResetForTesting,
+    Future<int> Function(String shopId)? terminalOrdersDeleterForTesting,
   })  : _customFirestore = firestore,
         _customAuth = auth,
         _customUserIdResolver = currentUserIdResolver,
@@ -42,7 +43,8 @@ class ShopStatsService {
         _customUserRoleResolver = currentUserRoleResolver,
         _statsStreamForTesting = statsStreamForTesting,
         _statsLoaderForTesting = statsLoaderForTesting,
-        _statsResetForTesting = statsResetForTesting;
+        _statsResetForTesting = statsResetForTesting,
+        _terminalOrdersDeleterForTesting = terminalOrdersDeleterForTesting;
 
   final FirebaseFirestore? _customFirestore;
   final FirebaseAuth? _customAuth;
@@ -52,6 +54,7 @@ class ShopStatsService {
   final Stream<ShopStats?> Function(String shopId)? _statsStreamForTesting;
   final Future<ShopStats?> Function(String shopId)? _statsLoaderForTesting;
   final Future<void> Function(String shopId)? _statsResetForTesting;
+  final Future<int> Function(String shopId)? _terminalOrdersDeleterForTesting;
 
   /// Resolves the authoritative authenticated Firebase Auth UID.
   String? get _currentAuthUid {
@@ -157,8 +160,8 @@ class ShopStatsService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
-      debugPrint('🚫 [SECURITY] Blocked customer access to shop stats for shopId: $shopId');
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
+      debugPrint('🚫 [SECURITY] Blocked unauthorized shop stats access for shopId: $shopId');
       return const Stream.empty();
     }
     if (role == AuthRole.shopkeeper) {
@@ -201,9 +204,9 @@ class ShopStatsService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
       throw const ShopStatsServiceException(
-        'Unauthorized: Customer cannot access shop statistics',
+        'Unauthorized: Caller cannot access shop statistics',
       );
     }
     if (role == AuthRole.shopkeeper) {
@@ -443,6 +446,9 @@ class ShopStatsService {
       throw const ShopStatsServiceException(
         'Unauthorized: Only administrators can delete terminal shop orders',
       );
+    }
+    if (_terminalOrdersDeleterForTesting != null) {
+      return _terminalOrdersDeleterForTesting!(shopId);
     }
     if (!isAvailable) return 0;
     int totalDeleted = 0;

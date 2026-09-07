@@ -393,8 +393,8 @@ class OrderService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
-      debugPrint('🚫 [SECURITY] Blocked customer access to shop active orders for shopId: $shopId');
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
+      debugPrint('🚫 [SECURITY] Blocked unauthorized access to shop active orders for shopId: $shopId');
       return const Stream.empty();
     }
     if (role == AuthRole.shopkeeper) {
@@ -434,8 +434,8 @@ class OrderService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
-      debugPrint('🚫 [SECURITY] Blocked customer access to shop order history for shopId: $shopId');
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
+      debugPrint('🚫 [SECURITY] Blocked unauthorized access to shop order history for shopId: $shopId');
       return const Stream.empty();
     }
     if (role == AuthRole.shopkeeper) {
@@ -464,8 +464,8 @@ class OrderService {
     // ── Security Check: Tenant Authorization ──
     final role = _currentAuthRole;
     final trustedShopId = _currentAuthShopId;
-    if (role == AuthRole.customer) {
-      debugPrint('🚫 [SECURITY] Blocked customer access to shop orders for shopId: $shopId');
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
+      debugPrint('🚫 [SECURITY] Blocked unauthorized access to shop orders for shopId: $shopId');
       return const Stream.empty();
     }
     if (role == AuthRole.shopkeeper) {
@@ -507,9 +507,9 @@ class OrderService {
       final orderShopId = data['shopId'] as String? ?? '';
       final role = _currentAuthRole;
       final trustedShopId = _currentAuthShopId;
-      if (role == AuthRole.customer) {
+      if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
         throw const OrderServiceException(
-          'Unauthorized: Customer cannot update shop order status',
+          'Unauthorized: Caller cannot update shop order status',
         );
       }
       if (role == AuthRole.shopkeeper) {
@@ -547,9 +547,9 @@ class OrderService {
         // ── Security Check: Tenant Authorization ──
         final role = _currentAuthRole;
         final trustedShopId = _currentAuthShopId;
-        if (role == AuthRole.customer) {
+        if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
           throw const OrderServiceException(
-            'Unauthorized: Customer cannot update shop order status',
+            'Unauthorized: Caller cannot update shop order status',
           );
         }
         if (role == AuthRole.shopkeeper) {
