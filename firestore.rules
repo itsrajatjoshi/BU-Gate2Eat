@@ -117,24 +117,59 @@ service cloud.firestore {
           || status == 'cancelled';
     }
 
-    // ─── 1. PUBLIC CATALOG & TENANT MANAGEMENT (PHASE 3.2) ─────────────
+    // ─── 1. PUBLIC CATALOG & TENANT MANAGEMENT (PHASE 3.2 / 3.5) ──────
     match /shops/{shopId} {
       // Public catalog browsing allowed for all callers (unauthenticated and authenticated)
       allow read: if true;
 
       // Shop creation: Platform administrator responsibility only.
       // Shopkeepers manage already-assigned shops; they cannot bootstrap/create shops.
+      // Enforces strict schema integrity on creation to prevent injection of unknown/security fields.
       allow create: if isAdmin()
         && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
-        && (!('id' in request.resource.data) || request.resource.data['id'] == shopId);
+        && (!('id' in request.resource.data) || request.resource.data['id'] == shopId)
+        && request.resource.data.keys().hasOnly([
+          'id', 'shopId', 'name', 'description', 'address', 'location', 'bannerUrl', 'imageUrl',
+          'shopLogoImageUrl', 'contactNumber', 'phoneNumber', 'phone', 'orderNumber', 'whatsappNumber',
+          'openTime', 'closeTime', 'openingHours', 'closingHours', 'isClosedOverride', 'isOpen', 'isActive',
+          'sortOrder', 'searchKeywords', 'deliveryNote', 'orderMethod', 'minimumOrderAmount', 'minOrderAmount',
+          'deliveryCharges', 'deliveryCharge', 'deliveryFee', 'estimatedPrepTime', 'categoryIds',
+          'createdAt', 'updatedAt'
+        ]);
 
       // Shop update: Platform administrator or assigned shopkeeper for their own shop.
-      // shopId and id ownership fields are strictly immutable.
-      allow update: if (isAdmin() || isShopOwner(shopId))
-        && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
+      // Tenant identity and creation timestamp are strictly immutable.
+      // Both Admin and Shopkeeper updates are restricted to approved operational fields.
+      allow update: if (
+        (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
         && (!('shopId' in resource.data) || !('shopId' in request.resource.data) || request.resource.data.shopId == resource.data.shopId)
         && (!('id' in request.resource.data) || request.resource.data.id == shopId)
-        && (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id);
+        && (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id)
+        && (!('createdAt' in resource.data) || !('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt)
+        && (
+          (
+            isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'name', 'description', 'address', 'bannerUrl', 'imageUrl', 'shopLogoImageUrl',
+              'contactNumber', 'phoneNumber', 'orderNumber', 'whatsappNumber',
+              'openTime', 'closeTime', 'isClosedOverride', 'isActive', 'sortOrder',
+              'deliveryNote', 'orderMethod', 'minimumOrderAmount', 'deliveryCharges',
+              'deliveryCharge', 'deliveryFee', 'searchKeywords', 'updatedAt'
+            ])
+          )
+          ||
+          (
+            isShopOwner(shopId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'name', 'description', 'address', 'bannerUrl', 'imageUrl', 'shopLogoImageUrl',
+              'contactNumber', 'phoneNumber', 'orderNumber', 'whatsappNumber',
+              'openTime', 'closeTime', 'isClosedOverride', 'isActive', 'sortOrder',
+              'deliveryNote', 'orderMethod', 'minimumOrderAmount', 'deliveryCharges',
+              'deliveryCharge', 'deliveryFee', 'searchKeywords', 'updatedAt'
+            ])
+          )
+        )
+      );
 
       // Destructive shop deletion restricted exclusively to Platform Administrator.
       // Anonymous callers, customers, and shopkeepers are strictly denied.
@@ -147,17 +182,29 @@ service cloud.firestore {
 
         // Creation allowed for assigned shopkeeper or platform administrator.
         // shopId is strictly mandatory and must match the path tenant shopId.
+        // Schema keys restricted to supported category schema preventing arbitrary/security fields.
         allow create: if (isAdmin() || isShopOwner(shopId))
           && ('shopId' in request.resource.data)
-          && request.resource.data.shopId == shopId;
+          && request.resource.data.shopId == shopId
+          && (!('id' in request.resource.data) || request.resource.data.id == categoryId)
+          && request.resource.data.keys().hasOnly([
+            'id', 'name', 'categoryName', 'sortOrder', 'displayOrder', 'imageUrl', 'isActive',
+            'shopId', 'createdAt', 'updatedAt'
+          ]);
 
         // Updates allowed for assigned shopkeeper or platform administrator.
         // Both existing resource and update payload must have matching valid shopId.
+        // shopId and categoryId are strictly immutable.
         allow update: if (isAdmin() || isShopOwner(shopId))
           && ('shopId' in resource.data)
           && resource.data.shopId == shopId
           && ('shopId' in request.resource.data)
-          && request.resource.data.shopId == shopId;
+          && request.resource.data.shopId == shopId
+          && request.resource.data.shopId == resource.data.shopId
+          && (!('id' in request.resource.data) || request.resource.data.id == categoryId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'categoryName', 'sortOrder', 'displayOrder', 'imageUrl', 'isActive', 'updatedAt'
+          ]);
 
         // Deletion allowed for assigned shopkeeper or platform administrator.
         allow delete: if isAdmin() || isShopOwner(shopId);
@@ -170,17 +217,30 @@ service cloud.firestore {
 
         // Creation allowed for assigned shopkeeper or platform administrator.
         // shopId is strictly mandatory and must match the path tenant shopId.
+        // Catalog price and details are client-provided; arbitrary/security fields are prohibited.
         allow create: if (isAdmin() || isShopOwner(shopId))
           && ('shopId' in request.resource.data)
-          && request.resource.data.shopId == shopId;
+          && request.resource.data.shopId == shopId
+          && (!('id' in request.resource.data) || request.resource.data.id == menuItemId)
+          && request.resource.data.keys().hasOnly([
+            'id', 'shopId', 'name', 'details', 'description', 'price', 'imageUrl', 'categoryId',
+            'isVeg', 'isAvailable', 'isRecommended', 'sortOrder', 'optionGroups', 'createdAt', 'updatedAt'
+          ]);
 
         // Updates allowed for assigned shopkeeper or platform administrator.
-        // Both existing resource and update payload must have matching valid shopId.
+        // shopId is strictly immutable and cannot be transferred to another shop.
+        // Catalog price and availability are client-editable; tenant/security fields are protected.
         allow update: if (isAdmin() || isShopOwner(shopId))
           && ('shopId' in resource.data)
           && resource.data.shopId == shopId
           && ('shopId' in request.resource.data)
-          && request.resource.data.shopId == shopId;
+          && request.resource.data.shopId == shopId
+          && request.resource.data.shopId == resource.data.shopId
+          && (!('id' in request.resource.data) || request.resource.data.id == menuItemId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'details', 'description', 'price', 'imageUrl', 'categoryId',
+            'isVeg', 'isAvailable', 'isRecommended', 'sortOrder', 'optionGroups', 'updatedAt'
+          ]);
 
         // Deletion allowed for assigned shopkeeper or platform administrator.
         allow delete: if isAdmin() || isShopOwner(shopId);
@@ -193,7 +253,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ─── 3. SUPPORT QUERIES COLLECTION (PHASE 3.4) ─────────────────────
+    // ─── 3. SUPPORT QUERIES COLLECTION (PHASE 3.4 / 3.5) ───────────────
     match /supportQueries/{queryId} {
       // Read allowed for customer who owns the query
       allow read: if isSignedIn() && resource.data.get('customerId', '') == request.auth.uid;
@@ -202,18 +262,22 @@ service cloud.firestore {
 
       // Submission allowed strictly for authenticated customers binding customerId to auth UID.
       // Anonymous submission and claiming another user's customerId are strictly denied.
+      // Payload keys restricted to valid customer support query schema.
       allow create: if isValidSupportQuery()
         && (
           (isCustomer() && request.resource.data.customerId == request.auth.uid) ||
           isAdmin()
-        );
+        )
+        && request.resource.data.keys().hasOnly([
+          'id', 'name', 'query', 'phoneNumber', 'phone', 'customerId', 'status', 'createdAt'
+        ]);
 
       // Updates and deletes are permanently denied across all client roles.
       // Support inquiries represent permanent customer audit records.
       allow update, delete: if false;
     }
 
-    // ─── 4. ORDERS COLLECTION (PHASE 3.3) ──────────────────────────────
+    // ─── 4. ORDERS COLLECTION (PHASE 3.3 / 3.5) ────────────────────────
     match /orders/{orderId} {
       // ── READ POLICY ──
       // Customer: can read ONLY their own orders (resource.data.customerId == request.auth.uid)
@@ -230,6 +294,7 @@ service cloud.firestore {
       //   - valid non-empty shopId string
       //   - initial status must be 'placed'
       //   - docId matches orderId if provided
+      //   - lifecycle completion timestamps strictly prohibited on creation
       // Admin: platform administrative creation allowed
       // Shopkeeper / Anonymous: strictly denied
       allow create: if (
@@ -240,6 +305,10 @@ service cloud.firestore {
         && request.resource.data.shopId.size() > 0
         && request.resource.data.status == 'placed'
         && (!('orderId' in request.resource.data) || request.resource.data.orderId == orderId)
+        && !('acceptedAt' in request.resource.data)
+        && !('rejectedAt' in request.resource.data)
+        && !('deliveredAt' in request.resource.data)
+        && !('cancelledAt' in request.resource.data)
       ) || isAdmin();
 
       // ── UPDATE POLICY ──
@@ -249,6 +318,7 @@ service cloud.firestore {
       //   - shopId cannot be reassigned
       //   - orderId cannot be reassigned
       //   - createdAt cannot be altered
+      // Financial values and lifecycle deadlines are strictly protected from client mutation.
       allow update: if (
         request.resource.data.customerId == resource.data.customerId
         && request.resource.data.shopId == resource.data.shopId
@@ -284,8 +354,16 @@ service cloud.firestore {
           )
           ||
           // 3. Platform Admin updates:
-          //    - Cannot bypass ownership immutability (checked above)
-          isAdmin()
+          //    - Admin client access is NOT unrestricted:
+          //      cannot mutate ownership, items, financials, or server lifecycle timestamps
+          //    - Restricted strictly to administrative fulfillment/operational fields:
+          (
+            isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'rejectionReason', 'deliveryPersonId', 'deliveryPersonName',
+              'adminNote', 'adminNotes', 'updatedAt'
+            ])
+          )
         )
       );
 
@@ -311,7 +389,7 @@ service cloud.firestore {
       }
     }
 
-    // ─── 6. DEVICE TOKENS (PHASE 3.4) ──────────────────────────────────
+    // ─── 6. DEVICE TOKENS (PHASE 3.4 / 3.5) ────────────────────────────
     match /deviceTokens/{tokenId} {
       // Read allowed only for token owner or platform admin.
       // Blanket enumeration by non-admin is strictly denied.
@@ -322,9 +400,20 @@ service cloud.firestore {
       // with verified role and tenant bounds.
       allow create: if isValidDeviceTokenPayload(tokenId);
 
-      // Update allowed only for the token owner preserving ownership bounds.
+      // Update allowed only for the token owner preserving ownership & identity bounds.
+      // token, uid, role, shopId, customerId, and phone are strictly immutable on update.
+      // Only operational fields (platform, updatedAt) may be modified.
       allow update: if isValidDeviceTokenPayload(tokenId)
-        && resource.data.get('uid', resource.data.get('customerId', '')) == request.auth.uid;
+        && resource.data.get('uid', resource.data.get('customerId', '')) == request.auth.uid
+        && request.resource.data.token == resource.data.token
+        && request.resource.data.get('uid', '') == resource.data.get('uid', '')
+        && request.resource.data.get('role', '') == resource.data.get('role', '')
+        && (!('shopId' in resource.data) || request.resource.data.get('shopId', '') == resource.data.get('shopId', ''))
+        && (!('customerId' in resource.data) || request.resource.data.get('customerId', '') == resource.data.get('customerId', ''))
+        && (!('phone' in resource.data) || request.resource.data.get('phone', '') == resource.data.get('phone', ''))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'platform', 'updatedAt'
+        ]);
 
       // Delete allowed only for token owner or platform admin.
       allow delete: if (isSignedIn() && resource.data.get('uid', resource.data.get('customerId', '')) == request.auth.uid)

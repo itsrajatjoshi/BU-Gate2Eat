@@ -458,6 +458,90 @@ async function setup() {
       maintenanceMode: false,
       version: '1.0.0',
     });
+
+    // 6. Dedicated seeds for Checkpoint 3.5 Field-Level Attack Tests
+    const fldCreated = new Date('2026-09-01T10:00:00Z');
+    await adminFs.collection('shops').doc('shop_a').update({
+      createdAt: fldCreated,
+      updatedAt: fldCreated,
+    });
+    await adminFs.collection('shops').doc('shop_b').update({
+      createdAt: fldCreated,
+      updatedAt: fldCreated,
+    });
+    await adminFs.collection('shops').doc('shop_a').collection('categories').doc('cat_a_fld').set({
+      name: 'Cat A Fld',
+      shopId: 'shop_a',
+      sortOrder: 1,
+      isActive: true,
+    });
+    await adminFs.collection('shops').doc('shop_a').collection('menuItems').doc('item_a_fld').set({
+      name: 'Item A Fld',
+      price: 100,
+      shopId: 'shop_a',
+      isAvailable: true,
+      sortOrder: 1,
+    });
+    await adminFs.collection('orders').doc('order_cust_a_fld_cancel').set({
+      orderId: 'order_cust_a_fld_cancel',
+      customerId: 'customer_a',
+      customerName: 'Customer A',
+      customerPhone: '+919876543210',
+      shopId: 'shop_a',
+      shopName: 'Shop A',
+      status: 'placed',
+      totalAmount: 300,
+      subtotal: 300,
+      grandTotal: 300,
+      deliveryCharges: 0,
+      items: [{ itemId: 'item_1', name: 'Burger', price: 300, quantity: 1 }],
+      acceptDeadline: new Date('2026-09-08T12:00:00Z'),
+      createdAt: fldCreated,
+      updatedAt: fldCreated,
+    });
+    await adminFs.collection('orders').doc('order_cust_a_fld_sk').set({
+      orderId: 'order_cust_a_fld_sk',
+      customerId: 'customer_a',
+      customerName: 'Customer A',
+      customerPhone: '+919876543210',
+      shopId: 'shop_a',
+      shopName: 'Shop A',
+      status: 'placed',
+      totalAmount: 300,
+      subtotal: 300,
+      grandTotal: 300,
+      deliveryCharges: 0,
+      items: [{ itemId: 'item_1', name: 'Burger', price: 300, quantity: 1 }],
+      acceptDeadline: new Date('2026-09-08T12:00:00Z'),
+      createdAt: fldCreated,
+      updatedAt: fldCreated,
+    });
+    await adminFs.collection('orders').doc('order_cust_a_fld_admin').set({
+      orderId: 'order_cust_a_fld_admin',
+      customerId: 'customer_a',
+      customerName: 'Customer A',
+      customerPhone: '+919876543210',
+      shopId: 'shop_a',
+      shopName: 'Shop A',
+      status: 'placed',
+      totalAmount: 300,
+      subtotal: 300,
+      grandTotal: 300,
+      deliveryCharges: 0,
+      items: [{ itemId: 'item_1', name: 'Burger', price: 300, quantity: 1 }],
+      acceptDeadline: new Date('2026-09-08T12:00:00Z'),
+      createdAt: fldCreated,
+      updatedAt: fldCreated,
+    });
+    await adminFs.collection('deviceTokens').doc('token_cust_a_fld').set({
+      token: 'token_cust_a_fld',
+      uid: 'customer_a',
+      customerId: 'customer_a',
+      role: 'customer',
+      phone: '+919876543210',
+      platform: 'android',
+      updatedAt: fldCreated,
+    });
   });
 }
 
@@ -2331,6 +2415,942 @@ async function runRulesSecuritySuite() {
     reportTest('Sens.38 Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY', true);
   } catch (e) {
     reportTest('Sens.38 Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY', false);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // CHECKPOINT 3.5: FIELD-LEVEL RESTRICTIONS ATTACK MATRIX (Fld.1 - Fld.50)
+  // ═════════════════════════════════════════════════════════════════════
+  console.log('\n=================================================================');
+  console.log('  CHECKPOINT 3.5: FIELD-LEVEL RESTRICTIONS ATTACK MATRIX SUITE   ');
+  console.log('=================================================================\n');
+
+  // ── 1. Shops Field Restrictions (Fld.1 - Fld.6) ──
+  // Fld.1: Shopkeeper updates allowed operational fields on own shop -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').update({
+      isClosedOverride: true,
+      openTime: '09:00',
+      description: 'Updated description by shopkeeper',
+      updatedAt: new Date(),
+    }));
+    reportTest('Fld.1 Shopkeeper updates allowed operational fields on own shop -> ALLOW', true);
+  } catch (e) {
+    reportTest('Fld.1 Shopkeeper updates allowed operational fields on own shop -> ALLOW', false);
+  }
+
+  // Fld.2: Shopkeeper attempts to mutate id or shopId on shop -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      id: 'shop_hacked',
+    }));
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      shopId: 'shop_b',
+    }));
+    reportTest('Fld.2 Shopkeeper attempts to mutate id or shopId on shop -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.2 Shopkeeper attempts to mutate id or shopId on shop -> DENY', false);
+  }
+
+  // Fld.3: Shopkeeper attempts to mutate createdAt on shop -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      createdAt: new Date('2020-01-01T00:00:00Z'),
+    }));
+    reportTest('Fld.3 Shopkeeper attempts to mutate createdAt on shop -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.3 Shopkeeper attempts to mutate createdAt on shop -> DENY', false);
+  }
+
+  // Fld.4: Shopkeeper attempts to inject unauthorized role/security field on shop -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      role: 'admin',
+    }));
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      ownerUid: 'attacker_uid',
+    }));
+    reportTest('Fld.4 Shopkeeper attempts to inject unauthorized role/security field on shop -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.4 Shopkeeper attempts to inject unauthorized role/security field on shop -> DENY', false);
+  }
+
+  // Fld.5: Shopkeeper attempts mixed update (allowed openTime + forbidden role) on shop -> DENY (atomicity)
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      openTime: '10:00',
+      role: 'admin',
+    }));
+    reportTest('Fld.5 Shopkeeper attempts mixed update (allowed openTime + forbidden role) on shop -> DENY (atomicity)', true);
+  } catch (e) {
+    reportTest('Fld.5 Shopkeeper attempts mixed update (allowed openTime + forbidden role) on shop -> DENY (atomicity)', false);
+  }
+
+  // Fld.6: Admin attempts to mutate createdAt or shopId on shop -> DENY
+  try {
+    await assertFails(adminDb.collection('shops').doc('shop_a').update({
+      createdAt: new Date('2020-01-01T00:00:00Z'),
+    }));
+    await assertFails(adminDb.collection('shops').doc('shop_a').update({
+      shopId: 'shop_renamed',
+    }));
+    reportTest('Fld.6 Admin attempts to mutate createdAt or shopId on shop -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.6 Admin attempts to mutate createdAt or shopId on shop -> DENY', false);
+  }
+
+  // ── 2. Categories Field Restrictions (Fld.7 - Fld.9) ──
+  // Fld.7: Shopkeeper updates allowed fields on category -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_a_fld').update({
+      name: 'Updated Category Name',
+      sortOrder: 2,
+    }));
+    reportTest('Fld.7 Shopkeeper updates allowed fields on category -> ALLOW', true);
+  } catch (e) {
+    reportTest('Fld.7 Shopkeeper updates allowed fields on category -> ALLOW', false);
+  }
+
+  // Fld.8: Shopkeeper attempts to mutate category shopId to foreign shop -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_a_fld').update({
+      shopId: 'shop_b',
+    }));
+    reportTest('Fld.8 Shopkeeper attempts to mutate category shopId to foreign shop -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.8 Shopkeeper attempts to mutate category shopId to foreign shop -> DENY', false);
+  }
+
+  // Fld.9: Shopkeeper attempts mixed update on category (allowed name + forbidden shopId) -> DENY (atomicity)
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_a_fld').update({
+      name: 'Another Name',
+      shopId: 'shop_b',
+    }));
+    reportTest('Fld.9 Shopkeeper attempts mixed update on category (allowed name + forbidden shopId) -> DENY (atomicity)', true);
+  } catch (e) {
+    reportTest('Fld.9 Shopkeeper attempts mixed update on category (allowed name + forbidden shopId) -> DENY (atomicity)', false);
+  }
+
+  // ── 3. Menu Items Field Restrictions (Fld.10 - Fld.12) ──
+  // Fld.10: Shopkeeper updates allowed catalog fields on menu item (price, availability) -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_a_fld').update({
+      price: 120,
+      isAvailable: false,
+    }));
+    reportTest('Fld.10 Shopkeeper updates allowed catalog fields on menu item (price, availability) -> ALLOW', true);
+  } catch (e) {
+    reportTest('Fld.10 Shopkeeper updates allowed catalog fields on menu item (price, availability) -> ALLOW', false);
+  }
+
+  // Fld.11: Shopkeeper attempts to mutate menu item shopId to transfer to another shop -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_a_fld').update({
+      shopId: 'shop_b',
+    }));
+    reportTest('Fld.11 Shopkeeper attempts to mutate menu item shopId to transfer to another shop -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.11 Shopkeeper attempts to mutate menu item shopId to transfer to another shop -> DENY', false);
+  }
+
+  // Fld.12: Shopkeeper attempts mixed update on menu item (allowed price + forbidden shopId) -> DENY (atomicity)
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_a_fld').update({
+      price: 150,
+      shopId: 'shop_b',
+    }));
+    reportTest('Fld.12 Shopkeeper attempts mixed update on menu item (allowed price + forbidden shopId) -> DENY (atomicity)', true);
+  } catch (e) {
+    reportTest('Fld.12 Shopkeeper attempts mixed update on menu item (allowed price + forbidden shopId) -> DENY (atomicity)', false);
+  }
+
+  // ── 4. Order Field Restrictions: Customer (Fld.13 - Fld.19) ──
+  // Fld.13: Customer updates allowed fields on order cancellation -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('orders').doc('order_cust_a_fld_cancel').update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+    }));
+    reportTest('Fld.13 Customer updates allowed fields on order cancellation -> ALLOW', true);
+  } catch (e) {
+    reportTest('Fld.13 Customer updates allowed fields on order cancellation -> ALLOW', false);
+  }
+
+  // Fld.14: Customer attempts to mutate order totalAmount during cancellation -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      totalAmount: 50,
+    }));
+    reportTest('Fld.14 Customer attempts to mutate order totalAmount during cancellation -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.14 Customer attempts to mutate order totalAmount during cancellation -> DENY', false);
+  }
+
+  // Fld.15: Customer attempts to mutate order items during cancellation -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      items: [],
+    }));
+    reportTest('Fld.15 Customer attempts to mutate order items during cancellation -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.15 Customer attempts to mutate order items during cancellation -> DENY', false);
+  }
+
+  // Fld.16: Customer attempts to mutate order deliveryCharges during cancellation -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      deliveryCharges: 100,
+    }));
+    reportTest('Fld.16 Customer attempts to mutate order deliveryCharges during cancellation -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.16 Customer attempts to mutate order deliveryCharges during cancellation -> DENY', false);
+  }
+
+  // Fld.17: Customer attempts to mutate order acceptDeadline during cancellation -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptDeadline: new Date('2026-09-08T18:00:00Z'),
+    }));
+    reportTest('Fld.17 Customer attempts to mutate order acceptDeadline during cancellation -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.17 Customer attempts to mutate order acceptDeadline during cancellation -> DENY', false);
+  }
+
+  // Fld.18: Customer attempts to mutate order acceptedAt during cancellation -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptedAt: new Date(),
+    }));
+    reportTest('Fld.18 Customer attempts to mutate order acceptedAt during cancellation -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.18 Customer attempts to mutate order acceptedAt during cancellation -> DENY', false);
+  }
+
+  // Fld.19: Customer attempts mixed update on order (allowed status + forbidden totalAmount) -> DENY (atomicity)
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      status: 'cancelled',
+      totalAmount: 10,
+    }));
+    reportTest('Fld.19 Customer attempts mixed update on order (allowed status + forbidden totalAmount) -> DENY (atomicity)', true);
+  } catch (e) {
+    reportTest('Fld.19 Customer attempts mixed update on order (allowed status + forbidden totalAmount) -> DENY (atomicity)', false);
+  }
+
+  // ── 5. Order Field Restrictions: Shopkeeper (Fld.20 - Fld.26) ──
+  // Fld.20: Shopkeeper updates allowed fulfillment fields on order -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_fld_sk').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('Fld.20 Shopkeeper updates allowed fulfillment fields on order -> ALLOW', true);
+  } catch (e) {
+    reportTest('Fld.20 Shopkeeper updates allowed fulfillment fields on order -> ALLOW', false);
+  }
+
+  // Fld.21: Shopkeeper attempts to mutate order totalAmount / financials -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      totalAmount: 999,
+    }));
+    reportTest('Fld.21 Shopkeeper attempts to mutate order totalAmount / financials -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.21 Shopkeeper attempts to mutate order totalAmount / financials -> DENY', false);
+  }
+
+  // Fld.22: Shopkeeper attempts to mutate order items -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      items: [{ itemId: 'item_tampered', name: 'Fake Item', price: 999, quantity: 5 }],
+    }));
+    reportTest('Fld.22 Shopkeeper attempts to mutate order items -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.22 Shopkeeper attempts to mutate order items -> DENY', false);
+  }
+
+  // Fld.23: Shopkeeper attempts to mutate order customerId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      customerId: 'customer_b',
+    }));
+    reportTest('Fld.23 Shopkeeper attempts to mutate order customerId -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.23 Shopkeeper attempts to mutate order customerId -> DENY', false);
+  }
+
+  // Fld.24: Shopkeeper attempts to mutate order acceptDeadline / deliveryDeadline -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptDeadline: new Date('2026-09-08T20:00:00Z'),
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      deliveryDeadline: new Date('2026-09-08T20:00:00Z'),
+    }));
+    reportTest('Fld.24 Shopkeeper attempts to mutate order acceptDeadline / deliveryDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.24 Shopkeeper attempts to mutate order acceptDeadline / deliveryDeadline -> DENY', false);
+  }
+
+  // Fld.25: Shopkeeper attempts to mutate order acceptedAt / deliveredAt -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptedAt: new Date(),
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      deliveredAt: new Date(),
+    }));
+    reportTest('Fld.25 Shopkeeper attempts to mutate order acceptedAt / deliveredAt -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.25 Shopkeeper attempts to mutate order acceptedAt / deliveredAt -> DENY', false);
+  }
+
+  // Fld.26: Shopkeeper attempts mixed update on order (allowed status + forbidden totalAmount) -> DENY (atomicity)
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      status: 'accepted',
+      totalAmount: 999,
+    }));
+    reportTest('Fld.26 Shopkeeper attempts mixed update on order (allowed status + forbidden totalAmount) -> DENY (atomicity)', true);
+  } catch (e) {
+    reportTest('Fld.26 Shopkeeper attempts mixed update on order (allowed status + forbidden totalAmount) -> DENY (atomicity)', false);
+  }
+
+  // ── 6. Order Field Restrictions: Admin (Fld.27 - Fld.29) ──
+  // Fld.27: Admin attempts to mutate order customerId or shopId -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_shop_a').update({
+      customerId: 'customer_b',
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_shop_a').update({
+      shopId: 'shop_b',
+    }));
+    reportTest('Fld.27 Admin attempts to mutate order customerId or shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.27 Admin attempts to mutate order customerId or shopId -> DENY', false);
+  }
+
+  // Fld.28: Admin attempts to mutate order totalAmount or items -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_shop_a').update({
+      totalAmount: 1,
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_shop_a').update({
+      items: [],
+    }));
+    reportTest('Fld.28 Admin attempts to mutate order totalAmount or items -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.28 Admin attempts to mutate order totalAmount or items -> DENY', false);
+  }
+
+  // Fld.29: Admin attempts to mutate order createdAt or lifecycle timestamps -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_shop_a').update({
+      createdAt: new Date('2020-01-01T00:00:00Z'),
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptedAt: new Date(),
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_shop_a').update({
+      deliveredAt: new Date(),
+    }));
+    reportTest('Fld.29 Admin attempts to mutate order createdAt or lifecycle timestamps -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.29 Admin attempts to mutate order createdAt or lifecycle timestamps -> DENY', false);
+  }
+
+  // ── 7. Device Token Field Restrictions (Fld.30 - Fld.37) ──
+  // Fld.30: Token owner updates allowed operational fields on deviceToken -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('deviceTokens').doc('token_cust_a_fld').update({
+      platform: 'ios',
+      updatedAt: new Date(),
+    }));
+    reportTest('Fld.30 Token owner updates allowed operational fields on deviceToken -> ALLOW', true);
+  } catch (e) {
+    reportTest('Fld.30 Token owner updates allowed operational fields on deviceToken -> ALLOW', false);
+  }
+
+  // Fld.31: Token owner attempts to mutate token -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      token: 'token_hijacked',
+    }));
+    reportTest('Fld.31 Token owner attempts to mutate token -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.31 Token owner attempts to mutate token -> DENY', false);
+  }
+
+  // Fld.32: Token owner attempts to mutate uid -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      uid: 'customer_b',
+    }));
+    reportTest('Fld.32 Token owner attempts to mutate uid -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.32 Token owner attempts to mutate uid -> DENY', false);
+  }
+
+  // Fld.33: Token owner attempts to mutate role -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      role: 'admin',
+    }));
+    reportTest('Fld.33 Token owner attempts to mutate role -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.33 Token owner attempts to mutate role -> DENY', false);
+  }
+
+  // Fld.34: Token owner attempts to mutate shopId -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      shopId: 'shop_a',
+    }));
+    reportTest('Fld.34 Token owner attempts to mutate shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.34 Token owner attempts to mutate shopId -> DENY', false);
+  }
+
+  // Fld.35: Token owner attempts to mutate phone -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      phone: '+919999999999',
+    }));
+    reportTest('Fld.35 Token owner attempts to mutate phone -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.35 Token owner attempts to mutate phone -> DENY', false);
+  }
+
+  // Fld.36: Token owner attempts mixed update (allowed platform + forbidden role) -> DENY (atomicity)
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      platform: 'web',
+      role: 'admin',
+    }));
+    reportTest('Fld.36 Token owner attempts mixed update (allowed platform + forbidden role) -> DENY (atomicity)', true);
+  } catch (e) {
+    reportTest('Fld.36 Token owner attempts mixed update (allowed platform + forbidden role) -> DENY (atomicity)', false);
+  }
+
+  // Fld.37: Token owner attempts mixed update (allowed platform + forbidden phone) -> DENY (atomicity)
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      platform: 'web',
+      phone: '+919999999999',
+    }));
+    reportTest('Fld.37 Token owner attempts mixed update (allowed platform + forbidden phone) -> DENY (atomicity)', true);
+  } catch (e) {
+    reportTest('Fld.37 Token owner attempts mixed update (allowed platform + forbidden phone) -> DENY (atomicity)', false);
+  }
+
+  // ── 8. User & Profile Field Restrictions (Fld.38 - Fld.44) ──
+  // Fld.38: User updates allowed profile fields -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('profiles').doc('customer_a').update({
+      displayName: 'Customer A Updated Name',
+      updatedAt: new Date(),
+    }));
+    reportTest('Fld.38 User updates allowed profile fields -> ALLOW', true);
+  } catch (e) {
+    reportTest('Fld.38 User updates allowed profile fields -> ALLOW', false);
+  }
+
+  // Fld.39: User attempts to mutate profile role -> DENY
+  try {
+    await assertFails(customerDb.collection('profiles').doc('customer_a').update({
+      role: 'admin',
+    }));
+    reportTest('Fld.39 User attempts to mutate profile role -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.39 User attempts to mutate profile role -> DENY', false);
+  }
+
+  // Fld.40: User attempts to mutate profile shopId -> DENY
+  try {
+    await assertFails(customerDb.collection('profiles').doc('customer_a').update({
+      shopId: 'shop_a',
+    }));
+    reportTest('Fld.40 User attempts to mutate profile shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.40 User attempts to mutate profile shopId -> DENY', false);
+  }
+
+  // Fld.41: User attempts to mutate profile status -> DENY
+  try {
+    await assertFails(customerDb.collection('profiles').doc('customer_a').update({
+      status: 'deactivated',
+    }));
+    reportTest('Fld.41 User attempts to mutate profile status -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.41 User attempts to mutate profile status -> DENY', false);
+  }
+
+  // Fld.42: User attempts to mutate profile phone -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_a').update({
+      phone: '+918078643910',
+    }));
+    reportTest('Fld.42 User attempts to mutate profile phone -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.42 User attempts to mutate profile phone -> DENY', false);
+  }
+
+  // Fld.43: User attempts to mutate profile uid -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_a').update({
+      uid: 'customer_b',
+    }));
+    reportTest('Fld.43 User attempts to mutate profile uid -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.43 User attempts to mutate profile uid -> DENY', false);
+  }
+
+  // Fld.44: User attempts mixed update (allowed displayName + forbidden role) -> DENY (atomicity)
+  try {
+    await assertFails(customerDb.collection('profiles').doc('customer_a').update({
+      displayName: 'Legit Name',
+      role: 'admin',
+    }));
+    reportTest('Fld.44 User attempts mixed update (allowed displayName + forbidden role) -> DENY (atomicity)', true);
+  } catch (e) {
+    reportTest('Fld.44 User attempts mixed update (allowed displayName + forbidden role) -> DENY (atomicity)', false);
+  }
+
+  // ── 9. Support Queries, Server-Only & Invariants (Fld.45 - Fld.50) ──
+  // Fld.45: Customer attempts to update supportQuery -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').update({
+      status: 'resolved',
+    }));
+    reportTest('Fld.45 Customer attempts to update supportQuery -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.45 Customer attempts to update supportQuery -> DENY', false);
+  }
+
+  // Fld.46: Customer attempts to delete supportQuery -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').delete());
+    reportTest('Fld.46 Customer attempts to delete supportQuery -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.46 Customer attempts to delete supportQuery -> DENY', false);
+  }
+
+  // Fld.47: Client attempts to write to server-only shopStats -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shopStats').doc('shop_a').update({
+      revenue: 999999,
+    }));
+    reportTest('Fld.47 Client attempts to write to server-only shopStats -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.47 Client attempts to write to server-only shopStats -> DENY', false);
+  }
+
+  // Fld.48: Client attempts to write to server-only _authChallenges -> DENY
+  try {
+    await assertFails(customerDb.collection('_authChallenges').doc('challenge_fld').set({
+      fake: true,
+    }));
+    reportTest('Fld.48 Client attempts to write to server-only _authChallenges -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.48 Client attempts to write to server-only _authChallenges -> DENY', false);
+  }
+
+  // Fld.49: Customer attempts to create order with pre-filled acceptedAt -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_bad_time').set({
+      orderId: 'order_cust_bad_time',
+      customerId: 'customer_a',
+      shopId: 'shop_a',
+      status: 'placed',
+      totalAmount: 100,
+      items: [{ itemId: 'item_1', name: 'Burger', price: 100, quantity: 1 }],
+      acceptedAt: new Date(),
+    }));
+    reportTest('Fld.49 Customer attempts to create order with pre-filled acceptedAt -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.49 Customer attempts to create order with pre-filled acceptedAt -> DENY', false);
+  }
+
+  // Fld.50: Customer attempts to create support query with unauthorized admin fields -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_bad_fields').set({
+      id: 'query_bad_fields',
+      name: 'Tamper Query',
+      query: 'Testing field restriction on supportQueries',
+      phone: '+919876543210',
+      phoneNumber: '+919876543210',
+      customerId: 'customer_a',
+      status: 'unread',
+      adminNotes: 'Injected admin notes',
+    }));
+    reportTest('Fld.50 Customer attempts to create support query with unauthorized admin fields -> DENY', true);
+  } catch (e) {
+    reportTest('Fld.50 Customer attempts to create support query with unauthorized admin fields -> DENY', false);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CHECKPOINT 3.5 REMEDIATION: CREATE-TIME FIELD INTEGRITY (Crt.1 - Crt.26)
+  // ══════════════════════════════════════════════════════════════════════════
+  console.log('\n--- Checkpoint 3.5 Remediation: Create-Time Field Integrity (Crt.1 - Crt.26) ---');
+
+  // ── Shops Create-Time Schema & Tenant Integrity (Crt.1 - Crt.8) ──
+  // Crt.1: Admin legitimate shop create -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('shops').doc('shop_admin_crt_1').set({
+      id: 'shop_admin_crt_1',
+      shopId: 'shop_admin_crt_1',
+      name: 'Admin Valid Shop',
+      address: 'Gate 2 Outside',
+      isActive: true,
+      openTime: '08:00',
+      closeTime: '23:00',
+    }));
+    reportTest('Crt.1 Admin legitimate shop create -> ALLOW', true);
+  } catch (e) {
+    reportTest('Crt.1 Admin legitimate shop create -> ALLOW', false);
+  }
+
+  // Crt.2: Admin inject unknown/security field in shop create (ownerUid) -> DENY
+  try {
+    await assertFails(adminDb.collection('shops').doc('shop_admin_crt_2').set({
+      id: 'shop_admin_crt_2',
+      shopId: 'shop_admin_crt_2',
+      name: 'Tampered Admin Shop',
+      ownerUid: 'admin_injected_uid',
+      isActive: true,
+    }));
+    reportTest('Crt.2 Admin inject unknown/security field in shop create (ownerUid) -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.2 Admin inject unknown/security field in shop create (ownerUid) -> DENY', false);
+  }
+
+  // Crt.3: Admin forge protected identity field (id != docId) -> DENY
+  try {
+    await assertFails(adminDb.collection('shops').doc('shop_admin_crt_3').set({
+      id: 'forged_mismatched_shop_id',
+      shopId: 'shop_admin_crt_3',
+      name: 'Forged ID Shop',
+      isActive: true,
+    }));
+    reportTest('Crt.3 Admin forge protected identity field (id != docId) -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.3 Admin forge protected identity field (id != docId) -> DENY', false);
+  }
+
+  // Crt.4: Admin cross-tenant identity (shopId != docId) -> DENY
+  try {
+    await assertFails(adminDb.collection('shops').doc('shop_admin_crt_4').set({
+      id: 'shop_admin_crt_4',
+      shopId: 'foreign_tenant_shop_id',
+      name: 'Cross Tenant Shop',
+      isActive: true,
+    }));
+    reportTest('Crt.4 Admin cross-tenant identity (shopId != docId) -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.4 Admin cross-tenant identity (shopId != docId) -> DENY', false);
+  }
+
+  // Crt.5: Admin legitimate fields + one forbidden field (securityFlags) -> DENY (atomic)
+  try {
+    await assertFails(adminDb.collection('shops').doc('shop_admin_crt_5').set({
+      id: 'shop_admin_crt_5',
+      shopId: 'shop_admin_crt_5',
+      name: 'Mixed Valid Shop',
+      address: 'Gate 2 Outside',
+      isActive: true,
+      securityFlags: { bypass: true },
+    }));
+    reportTest('Crt.5 Admin legitimate fields + one forbidden field (securityFlags) -> DENY (atomic)', true);
+  } catch (e) {
+    reportTest('Crt.5 Admin legitimate fields + one forbidden field (securityFlags) -> DENY (atomic)', false);
+  }
+
+  // Crt.6: Shopkeeper shop create -> DENY (Admin-only responsibility)
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_sk_crt_6').set({
+      id: 'shop_sk_crt_6',
+      shopId: 'shop_sk_crt_6',
+      name: 'Shopkeeper Bootstrapped Shop',
+      isActive: true,
+    }));
+    reportTest('Crt.6 Shopkeeper shop create -> DENY (Admin-only)', true);
+  } catch (e) {
+    reportTest('Crt.6 Shopkeeper shop create -> DENY (Admin-only)', false);
+  }
+
+  // Crt.7: Customer shop create -> DENY
+  try {
+    await assertFails(customerDb.collection('shops').doc('shop_cust_crt_7').set({
+      id: 'shop_cust_crt_7',
+      name: 'Customer Shop',
+      isActive: true,
+    }));
+    reportTest('Crt.7 Customer shop create -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.7 Customer shop create -> DENY', false);
+  }
+
+  // Crt.8: Anonymous shop create -> DENY
+  try {
+    await assertFails(unauthDb.collection('shops').doc('shop_anon_crt_8').set({
+      id: 'shop_anon_crt_8',
+      name: 'Anon Shop',
+      isActive: true,
+    }));
+    reportTest('Crt.8 Anonymous shop create -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.8 Anonymous shop create -> DENY', false);
+  }
+
+  // ── Categories Create-Time Schema & Tenant Integrity (Crt.9 - Crt.17) ──
+  // Crt.9: Admin legitimate category create -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('shops').doc('shop_a').collection('categories').doc('cat_admin_crt_9').set({
+      id: 'cat_admin_crt_9',
+      shopId: 'shop_a',
+      name: 'Admin Provisioned Category',
+      sortOrder: 1,
+      isActive: true,
+    }));
+    reportTest('Crt.9 Admin legitimate category create -> ALLOW', true);
+  } catch (e) {
+    reportTest('Crt.9 Admin legitimate category create -> ALLOW', false);
+  }
+
+  // Crt.10: Shopkeeper own-shop legitimate category create -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_sk_crt_10').set({
+      id: 'cat_sk_crt_10',
+      shopId: 'shop_a',
+      name: 'Momos Specials',
+      sortOrder: 2,
+      isActive: true,
+    }));
+    reportTest('Crt.10 Shopkeeper own-shop legitimate category create -> ALLOW', true);
+  } catch (e) {
+    reportTest('Crt.10 Shopkeeper own-shop legitimate category create -> ALLOW', false);
+  }
+
+  // Crt.11: Shopkeeper category create with wrong shopId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_sk_crt_11').set({
+      id: 'cat_sk_crt_11',
+      shopId: 'shop_b',
+      name: 'Mismatched Shop Category',
+    }));
+    reportTest('Crt.11 Shopkeeper category create with wrong shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.11 Shopkeeper category create with wrong shopId -> DENY', false);
+  }
+
+  // Crt.12: Shopkeeper category create with injected security field (role) -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_sk_crt_12').set({
+      id: 'cat_sk_crt_12',
+      shopId: 'shop_a',
+      name: 'Privilege Injected Category',
+      role: 'admin',
+      isActive: true,
+    }));
+    reportTest('Crt.12 Shopkeeper category create with injected security field (role) -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.12 Shopkeeper category create with injected security field (role) -> DENY', false);
+  }
+
+  // Crt.13: Shopkeeper category create with mismatched id (id != categoryId) -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_sk_crt_13').set({
+      id: 'forged_category_id',
+      shopId: 'shop_a',
+      name: 'Forged ID Category',
+      isActive: true,
+    }));
+    reportTest('Crt.13 Shopkeeper category create with mismatched id -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.13 Shopkeeper category create with mismatched id -> DENY', false);
+  }
+
+  // Crt.14: Shopkeeper cross-shop category creation (Shopkeeper A in Shop B) -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_b').collection('categories').doc('cat_sk_crt_14').set({
+      id: 'cat_sk_crt_14',
+      shopId: 'shop_b',
+      name: 'Cross Shop Infiltration',
+    }));
+    reportTest('Crt.14 Shopkeeper cross-shop category creation -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.14 Shopkeeper cross-shop category creation -> DENY', false);
+  }
+
+  // Crt.15: Shopkeeper category legitimate fields + one forbidden field (ownerUid) -> DENY (atomic)
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_sk_crt_15').set({
+      id: 'cat_sk_crt_15',
+      shopId: 'shop_a',
+      name: 'Valid Name',
+      sortOrder: 3,
+      isActive: true,
+      ownerUid: 'attacker_uid',
+    }));
+    reportTest('Crt.15 Shopkeeper category legitimate + forbidden field (ownerUid) -> DENY (atomic)', true);
+  } catch (e) {
+    reportTest('Crt.15 Shopkeeper category legitimate + forbidden field (ownerUid) -> DENY (atomic)', false);
+  }
+
+  // Crt.16: Customer category create -> DENY
+  try {
+    await assertFails(customerDb.collection('shops').doc('shop_a').collection('categories').doc('cat_cust_crt_16').set({
+      id: 'cat_cust_crt_16',
+      shopId: 'shop_a',
+      name: 'Customer Injected Cat',
+    }));
+    reportTest('Crt.16 Customer category create -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.16 Customer category create -> DENY', false);
+  }
+
+  // Crt.17: Anonymous category create -> DENY
+  try {
+    await assertFails(unauthDb.collection('shops').doc('shop_a').collection('categories').doc('cat_anon_crt_17').set({
+      id: 'cat_anon_crt_17',
+      shopId: 'shop_a',
+      name: 'Anon Injected Cat',
+    }));
+    reportTest('Crt.17 Anonymous category create -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.17 Anonymous category create -> DENY', false);
+  }
+
+  // ── Menu Items Create-Time Schema & Tenant Integrity (Crt.18 - Crt.26) ──
+  // Crt.18: Admin legitimate menu item create -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('shops').doc('shop_a').collection('menuItems').doc('item_admin_crt_18').set({
+      id: 'item_admin_crt_18',
+      shopId: 'shop_a',
+      name: 'Admin Combo Meal',
+      details: 'Full loaded meal',
+      price: 180,
+      categoryId: 'cat_a1',
+      isVeg: true,
+      isAvailable: true,
+      isRecommended: true,
+      sortOrder: 1,
+    }));
+    reportTest('Crt.18 Admin legitimate menu item create -> ALLOW', true);
+  } catch (e) {
+    reportTest('Crt.18 Admin legitimate menu item create -> ALLOW', false);
+  }
+
+  // Crt.19: Shopkeeper own-shop legitimate menu item create -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_sk_crt_19').set({
+      id: 'item_sk_crt_19',
+      shopId: 'shop_a',
+      name: 'Steamed Momos Special',
+      details: '8 pcs with dip',
+      price: 80,
+      categoryId: 'cat_a1',
+      isVeg: true,
+      isAvailable: true,
+      sortOrder: 2,
+    }));
+    reportTest('Crt.19 Shopkeeper own-shop legitimate menu item create -> ALLOW', true);
+  } catch (e) {
+    reportTest('Crt.19 Shopkeeper own-shop legitimate menu item create -> ALLOW', false);
+  }
+
+  // Crt.20: Shopkeeper menu item create with wrong shopId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_sk_crt_20').set({
+      id: 'item_sk_crt_20',
+      shopId: 'shop_b',
+      name: 'Wrong Tenant Item',
+      price: 50,
+    }));
+    reportTest('Crt.20 Shopkeeper menu item create with wrong shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.20 Shopkeeper menu item create with wrong shopId -> DENY', false);
+  }
+
+  // Crt.21: Shopkeeper menu item create with injected security field (isSuperAdmin) -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_sk_crt_21').set({
+      id: 'item_sk_crt_21',
+      shopId: 'shop_a',
+      name: 'Privileged Item',
+      price: 50,
+      isSuperAdmin: true,
+    }));
+    reportTest('Crt.21 Shopkeeper menu item create with injected security field (isSuperAdmin) -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.21 Shopkeeper menu item create with injected security field (isSuperAdmin) -> DENY', false);
+  }
+
+  // Crt.22: Shopkeeper menu item create with mismatched id (id != menuItemId) -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_sk_crt_22').set({
+      id: 'forged_item_doc_id',
+      shopId: 'shop_a',
+      name: 'Forged Item ID',
+      price: 50,
+    }));
+    reportTest('Crt.22 Shopkeeper menu item create with mismatched id -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.22 Shopkeeper menu item create with mismatched id -> DENY', false);
+  }
+
+  // Crt.23: Shopkeeper cross-shop menu item creation (Shopkeeper A in Shop B) -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_b').collection('menuItems').doc('item_sk_crt_23').set({
+      id: 'item_sk_crt_23',
+      shopId: 'shop_b',
+      name: 'Cross Shop Menu Hack',
+      price: 50,
+    }));
+    reportTest('Crt.23 Shopkeeper cross-shop menu item creation -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.23 Shopkeeper cross-shop menu item creation -> DENY', false);
+  }
+
+  // Crt.24: Shopkeeper menu item legitimate fields + one forbidden field (internalRole) -> DENY (atomic)
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_sk_crt_24').set({
+      id: 'item_sk_crt_24',
+      shopId: 'shop_a',
+      name: 'Mixed Valid Item',
+      price: 60,
+      isAvailable: true,
+      internalRole: 'manager',
+    }));
+    reportTest('Crt.24 Shopkeeper menu item legitimate + forbidden field (internalRole) -> DENY (atomic)', true);
+  } catch (e) {
+    reportTest('Crt.24 Shopkeeper menu item legitimate + forbidden field (internalRole) -> DENY (atomic)', false);
+  }
+
+  // Crt.25: Customer menu item create -> DENY
+  try {
+    await assertFails(customerDb.collection('shops').doc('shop_a').collection('menuItems').doc('item_cust_crt_25').set({
+      id: 'item_cust_crt_25',
+      shopId: 'shop_a',
+      name: 'Customer Injected Food',
+      price: 5,
+    }));
+    reportTest('Crt.25 Customer menu item create -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.25 Customer menu item create -> DENY', false);
+  }
+
+  // Crt.26: Anonymous menu item create -> DENY
+  try {
+    await assertFails(unauthDb.collection('shops').doc('shop_a').collection('menuItems').doc('item_anon_crt_26').set({
+      id: 'item_anon_crt_26',
+      shopId: 'shop_a',
+      name: 'Anon Injected Food',
+      price: 5,
+    }));
+    reportTest('Crt.26 Anonymous menu item create -> DENY', true);
+  } catch (e) {
+    reportTest('Crt.26 Anonymous menu item create -> DENY', false);
   }
 
   console.log('\n=================================================================');
