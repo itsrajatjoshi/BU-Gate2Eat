@@ -309,6 +309,155 @@ async function setup() {
       ...orderDataA,
       orderId: 'order_cust_a_for_cancel_rem',
     });
+
+    // ── Phase 3.4 Sensitive Collections Seeds ──
+    // 1. shopStats
+    await adminFs.collection('shopStats').doc('shop_a').set({
+      shopId: 'shop_a',
+      shopName: 'Shop A',
+      totalOrders: 10,
+      deliveredOrders: 8,
+      cancelledOrders: 1,
+      whatsappOrders: 5,
+      revenue: 2500,
+      updatedAt: new Date(),
+    });
+    await adminFs.collection('shopStats').doc('shop_b').set({
+      shopId: 'shop_b',
+      shopName: 'Shop B',
+      totalOrders: 5,
+      deliveredOrders: 4,
+      cancelledOrders: 0,
+      whatsappOrders: 2,
+      revenue: 1200,
+      updatedAt: new Date(),
+    });
+    await adminFs.collection('shopStats').doc('shop_a').collection('monthlyStats').doc('2026-09').set({
+      shopId: 'shop_a',
+      monthKey: '2026-09',
+      totalOrders: 10,
+      updatedAt: new Date(),
+    });
+    await adminFs.collection('shopStats').doc('shop_b').collection('monthlyStats').doc('2026-09').set({
+      shopId: 'shop_b',
+      monthKey: '2026-09',
+      totalOrders: 5,
+      updatedAt: new Date(),
+    });
+
+    // 2. deviceTokens
+    await adminFs.collection('deviceTokens').doc('token_cust_a').set({
+      token: 'token_cust_a',
+      uid: 'customer_a',
+      customerId: 'customer_a',
+      role: 'customer',
+      phone: '+919876543210',
+      platform: 'android',
+      updatedAt: new Date(),
+    });
+    await adminFs.collection('deviceTokens').doc('token_cust_b').set({
+      token: 'token_cust_b',
+      uid: 'customer_b',
+      customerId: 'customer_b',
+      role: 'customer',
+      phone: '+919876543211',
+      platform: 'ios',
+      updatedAt: new Date(),
+    });
+    await adminFs.collection('deviceTokens').doc('token_sk_a').set({
+      token: 'token_sk_a',
+      uid: 'shopkeeper_a',
+      role: 'shopkeeper',
+      shopId: 'shop_a',
+      phone: '+919876543212',
+      platform: 'android',
+      updatedAt: new Date(),
+    });
+    await adminFs.collection('deviceTokens').doc('token_for_delete').set({
+      token: 'token_for_delete',
+      uid: 'customer_a',
+      customerId: 'customer_a',
+      role: 'customer',
+      phone: '+919876543210',
+      platform: 'android',
+      updatedAt: new Date(),
+    });
+
+    // 3. supportQueries
+    await adminFs.collection('supportQueries').doc('query_1').set({
+      id: 'query_1',
+      name: 'Regression Inquiry',
+      query: 'Inquiry text for regression',
+      phone: '+918078643910',
+      phoneNumber: '+918078643910',
+      customerId: 'some_other_customer',
+      status: 'unread',
+      createdAt: new Date(),
+    });
+    await adminFs.collection('supportQueries').doc('query_cust_a').set({
+      id: 'query_cust_a',
+      name: 'Customer A Support',
+      query: 'Customer A problem description',
+      phone: '+919876543210',
+      phoneNumber: '+919876543210',
+      customerId: 'customer_a',
+      status: 'unread',
+      createdAt: new Date(),
+    });
+    await adminFs.collection('supportQueries').doc('query_cust_b').set({
+      id: 'query_cust_b',
+      name: 'Customer B Support',
+      query: 'Customer B problem description',
+      phone: '+919876543211',
+      phoneNumber: '+919876543211',
+      customerId: 'customer_b',
+      status: 'unread',
+      createdAt: new Date(),
+    });
+
+    // 4. users & profiles
+    await adminFs.collection('users').doc('customer_a').set({
+      uid: 'customer_a',
+      name: 'Customer A User Profile',
+      phone: '+919876543210',
+      createdAt: new Date(),
+    });
+    await adminFs.collection('users').doc('customer_b').set({
+      uid: 'customer_b',
+      name: 'Customer B User Profile',
+      phone: '+919876543211',
+      createdAt: new Date(),
+    });
+    await adminFs.collection('profiles').doc('customer_a').set({
+      uid: 'customer_a',
+      displayName: 'Customer A Public Profile',
+      updatedAt: new Date(),
+    });
+    await adminFs.collection('profiles').doc('customer_b').set({
+      uid: 'customer_b',
+      displayName: 'Customer B Public Profile',
+      updatedAt: new Date(),
+    });
+
+    // 5. Server-only collections
+    await adminFs.collection('_authChallenges').doc('challenge_1').set({
+      phoneHash: 'hash_phone_1',
+      otpHash: 'hash_otp_1',
+      expiresAt: new Date(Date.now() + 600000),
+    });
+    await adminFs.collection('auditLogs').doc('audit_1').set({
+      event: 'platform_maintenance',
+      actor: 'system',
+      timestamp: new Date(),
+    });
+    await adminFs.collection('internal_metrics').doc('metric_1').set({
+      activeNodes: 4,
+      timestamp: new Date(),
+    });
+    await adminFs.collection('adminSettings').doc('system').set({
+      maintenanceMode: false,
+      version: '1.0.0',
+    });
   });
 }
 
@@ -1772,6 +1921,347 @@ async function runRulesSecuritySuite() {
     reportTest('Rem33.12 Cross-shop lifecycle manipulation remains denied -> DENY', true);
   } catch (e) {
     reportTest('Rem33.12 Cross-shop lifecycle manipulation remains denied -> DENY', false);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // CHECKPOINT 3.4 SENSITIVE COLLECTIONS SUITE (Sens.1 - Sens.30)
+  // ═════════════════════════════════════════════════════════════════════
+  console.log('\n--- Phase 3.4: Sensitive Collections Suite (Sens.1 - Sens.30) ---');
+
+  // ── 1. shopStats Tests (Sens.1 - Sens.6) ──
+  // Sens.1: Shopkeeper own stats read -> ALLOW
+  try {
+    const p1 = assertSucceeds(shopkeeperADb.collection('shopStats').doc('shop_a').get());
+    const p2 = assertSucceeds(shopkeeperADb.collection('shopStats').doc('shop_a').collection('monthlyStats').doc('2026-09').get());
+    await Promise.all([p1, p2]);
+    reportTest('Sens.1 Shopkeeper own stats read -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.1 Shopkeeper own stats read -> ALLOW', false);
+  }
+
+  // Sens.2: Shopkeeper foreign stats read -> DENY
+  try {
+    const p1 = assertFails(shopkeeperADb.collection('shopStats').doc('shop_b').get());
+    const p2 = assertFails(shopkeeperADb.collection('shopStats').doc('shop_b').collection('monthlyStats').doc('2026-09').get());
+    await Promise.all([p1, p2]);
+    reportTest('Sens.2 Shopkeeper foreign stats read -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.2 Shopkeeper foreign stats read -> DENY', false);
+  }
+
+  // Sens.3: Customer stats read -> DENY
+  try {
+    const p1 = assertFails(customerDb.collection('shopStats').doc('shop_a').get());
+    const p2 = assertFails(customerDb.collection('shopStats').doc('shop_b').get());
+    await Promise.all([p1, p2]);
+    reportTest('Sens.3 Customer stats read -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.3 Customer stats read -> DENY', false);
+  }
+
+  // Sens.4: Anonymous stats read -> DENY
+  try {
+    await assertFails(unauthDb.collection('shopStats').doc('shop_a').get());
+    reportTest('Sens.4 Anonymous stats read -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.4 Anonymous stats read -> DENY', false);
+  }
+
+  // Sens.5: Unauthorized stats write -> DENY
+  try {
+    const p1 = assertFails(customerDb.collection('shopStats').doc('shop_a').update({ totalOrders: 99 }));
+    const p2 = assertFails(unauthDb.collection('shopStats').doc('shop_a').set({ totalOrders: 99 }));
+    await Promise.all([p1, p2]);
+    reportTest('Sens.5 Unauthorized stats write -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.5 Unauthorized stats write -> DENY', false);
+  }
+
+  // Sens.6: Shopkeeper cross-shop write -> DENY & own write -> ALLOW
+  try {
+    await assertFails(shopkeeperADb.collection('shopStats').doc('shop_b').update({ totalOrders: 99 }));
+    await assertFails(shopkeeperADb.collection('shopStats').doc('shop_a').update({ shopId: 'shop_b' }));
+    await assertSucceeds(shopkeeperADb.collection('shopStats').doc('shop_a').update({ totalOrders: 11, shopId: 'shop_a' }));
+    reportTest('Sens.6 Shopkeeper cross-shop write -> DENY & own write -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.6 Shopkeeper cross-shop write -> DENY & own write -> ALLOW', false);
+  }
+
+  // ── 2. deviceTokens Tests (Sens.7 - Sens.12) ──
+  // Sens.7: Customer own token operation -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('deviceTokens').doc('token_new_a').set({
+      token: 'token_new_a',
+      uid: 'customer_a',
+      customerId: 'customer_a',
+      role: 'customer',
+      platform: 'android',
+    }));
+    await assertSucceeds(customerDb.collection('deviceTokens').doc('token_new_a').get());
+    await assertSucceeds(customerDb.collection('deviceTokens').doc('token_for_delete').delete());
+    reportTest('Sens.7 Customer own token operation -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.7 Customer own token operation -> ALLOW', false);
+  }
+
+  // Sens.8: Customer foreign token -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_b').get());
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_b').delete());
+    reportTest('Sens.8 Customer foreign token -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.8 Customer foreign token -> DENY', false);
+  }
+
+  // Sens.9: Customer token role/shop tampering -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_t1').set({
+      token: 'token_t1',
+      uid: 'customer_a',
+      role: 'admin',
+    }));
+    await assertFails(customerDb.collection('deviceTokens').doc('token_t2').set({
+      token: 'token_t2',
+      uid: 'customer_a',
+      role: 'customer',
+      shopId: 'shop_a',
+    }));
+    await assertFails(customerDb.collection('deviceTokens').doc('token_t3').set({
+      token: 'token_t3',
+      uid: 'customer_b',
+      role: 'customer',
+    }));
+    reportTest('Sens.9 Customer token role/shop tampering -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.9 Customer token role/shop tampering -> DENY', false);
+  }
+
+  // Sens.10: Shopkeeper cross-shop token manipulation -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('deviceTokens').doc('token_sk_bad').set({
+      token: 'token_sk_bad',
+      uid: 'shopkeeper_a',
+      role: 'shopkeeper',
+      shopId: 'shop_b',
+    }));
+    await assertSucceeds(shopkeeperADb.collection('deviceTokens').doc('token_sk_ok').set({
+      token: 'token_sk_ok',
+      uid: 'shopkeeper_a',
+      role: 'shopkeeper',
+      shopId: 'shop_a',
+    }));
+    reportTest('Sens.10 Shopkeeper cross-shop token manipulation -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.10 Shopkeeper cross-shop token manipulation -> DENY', false);
+  }
+
+  // Sens.11: Anonymous token access -> DENY
+  try {
+    await assertFails(unauthDb.collection('deviceTokens').doc('token_anon').set({
+      token: 'token_anon',
+      uid: 'anon',
+      role: 'customer',
+    }));
+    await assertFails(unauthDb.collection('deviceTokens').doc('token_cust_a').get());
+    await assertFails(unauthDb.collection('deviceTokens').doc('token_cust_a').delete());
+    reportTest('Sens.11 Anonymous token access -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.11 Anonymous token access -> DENY', false);
+  }
+
+  // Sens.12: Global token enumeration -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').get());
+    await assertFails(shopkeeperADb.collection('deviceTokens').get());
+    await assertFails(unauthDb.collection('deviceTokens').get());
+    reportTest('Sens.12 Global token enumeration -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.12 Global token enumeration -> DENY', false);
+  }
+
+  // ── 3. supportQueries Tests (Sens.13 - Sens.19) ──
+  // Sens.13: Customer own support query -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('supportQueries').doc('query_cust_a').get());
+    reportTest('Sens.13 Customer own support query -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.13 Customer own support query -> ALLOW', false);
+  }
+
+  // Sens.14: Customer foreign support query -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_b').get());
+    reportTest('Sens.14 Customer foreign support query -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.14 Customer foreign support query -> DENY', false);
+  }
+
+  // Sens.15: Customer foreign create -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_bad_create').set({
+      name: 'Customer A',
+      query: 'Tampered Customer ID',
+      phone: '9876543210',
+      phoneNumber: '9876543210',
+      status: 'unread',
+      customerId: 'customer_b',
+    }));
+    await assertSucceeds(customerDb.collection('supportQueries').doc('query_good_create').set({
+      name: 'Customer A',
+      query: 'Legitimate Customer Query',
+      phone: '9876543210',
+      phoneNumber: '9876543210',
+      status: 'unread',
+      customerId: 'customer_a',
+    }));
+    reportTest('Sens.15 Customer foreign create -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.15 Customer foreign create -> DENY', false);
+  }
+
+  // Sens.16: Customer ownership mutation -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').update({ customerId: 'customer_b' }));
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').update({ status: 'resolved' }));
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').delete());
+    reportTest('Sens.16 Customer ownership mutation -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.16 Customer ownership mutation -> DENY', false);
+  }
+
+  // Sens.17: Shopkeeper support access -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('supportQueries').doc('query_cust_a').get());
+    await assertFails(shopkeeperADb.collection('supportQueries').get());
+    reportTest('Sens.17 Shopkeeper support access -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.17 Shopkeeper support access -> DENY', false);
+  }
+
+  // Sens.18: Anonymous support access -> DENY
+  try {
+    await assertFails(unauthDb.collection('supportQueries').doc('query_cust_a').get());
+    await assertFails(unauthDb.collection('supportQueries').get());
+    reportTest('Sens.18 Anonymous support access -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.18 Anonymous support access -> DENY', false);
+  }
+
+  // Sens.19: Admin intended support access -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('supportQueries').doc('query_cust_a').get());
+    await assertSucceeds(adminDb.collection('supportQueries').get());
+    reportTest('Sens.19 Admin intended support access -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.19 Admin intended support access -> ALLOW', false);
+  }
+
+  // ── 4. users & profiles Tests (Sens.20 - Sens.23) ──
+  // Sens.20: User reads own profile -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('users').doc('customer_a').get());
+    await assertSucceeds(customerDb.collection('profiles').doc('customer_a').get());
+    reportTest('Sens.20 User reads own profile -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.20 User reads own profile -> ALLOW', false);
+  }
+
+  // Sens.21: User reads another user\'s profile -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_b').get());
+    await assertFails(customerDb.collection('profiles').doc('customer_b').get());
+    reportTest('Sens.21 User reads another user\'s profile -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.21 User reads another user\'s profile -> DENY', false);
+  }
+
+  // Sens.22: User writes another user\'s profile -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_b').set({ name: 'Tampered' }));
+    await assertFails(customerDb.collection('profiles').doc('customer_b').set({ displayName: 'Tampered' }));
+    await assertSucceeds(customerDb.collection('users').doc('customer_a').set({ name: 'Customer A Updated', phone: '+919876543210' }));
+    await assertSucceeds(customerDb.collection('profiles').doc('customer_a').set({ displayName: 'Customer A Nickname' }));
+    reportTest('Sens.22 User writes another user\'s profile -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.22 User writes another user\'s profile -> DENY', false);
+  }
+
+  // Sens.23: Anonymous profile access -> DENY
+  try {
+    await assertFails(unauthDb.collection('users').doc('customer_a').get());
+    await assertFails(unauthDb.collection('users').doc('customer_a').set({ name: 'Anon' }));
+    await assertFails(unauthDb.collection('profiles').doc('customer_a').get());
+    reportTest('Sens.23 Anonymous profile access -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.23 Anonymous profile access -> DENY', false);
+  }
+
+  // ── 5. Server-Only Collections Tests (Sens.24 - Sens.25) ──
+  // Sens.24: Client reads server-only collection -> DENY
+  try {
+    await assertFails(customerDb.collection('_authChallenges').doc('challenge_1').get());
+    await assertFails(adminDb.collection('_authChallenges').doc('challenge_1').get());
+    await assertFails(customerDb.collection('auditLogs').doc('audit_1').get());
+    await assertFails(adminDb.collection('auditLogs').doc('audit_1').get());
+    reportTest('Sens.24 Client reads server-only collection -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.24 Client reads server-only collection -> DENY', false);
+  }
+
+  // Sens.25: Client writes server-only collection -> DENY
+  try {
+    await assertFails(customerDb.collection('_authChallenges').doc('challenge_bad').set({ fake: true }));
+    await assertFails(adminDb.collection('_authChallenges').doc('challenge_bad').set({ fake: true }));
+    await assertFails(customerDb.collection('internal_metrics').doc('m1').set({ hacked: true }));
+    await assertFails(adminDb.collection('internal_metrics').doc('m1').set({ hacked: true }));
+    reportTest('Sens.25 Client writes server-only collection -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.25 Client writes server-only collection -> DENY', false);
+  }
+
+  // ── 6. Query Safety & Direct Bypass Tests (Sens.26 - Sens.30) ──
+  // Sens.26: Query Safety: Customer scoped query on own support queries -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('supportQueries').where('customerId', '==', 'customer_a').get());
+    reportTest('Sens.26 Query Safety: Customer scoped query on own support queries -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.26 Query Safety: Customer scoped query on own support queries -> ALLOW', false);
+  }
+
+  // Sens.27: Query Safety: Customer unfiltered query on all support queries -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').get());
+    reportTest('Sens.27 Query Safety: Customer unfiltered query on all support queries -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.27 Query Safety: Customer unfiltered query on all support queries -> DENY', false);
+  }
+
+  // Sens.28: Query Safety: Admin unfiltered query on all shopStats -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('shopStats').get());
+    reportTest('Sens.28 Query Safety: Admin unfiltered query on all shopStats -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.28 Query Safety: Admin unfiltered query on all shopStats -> ALLOW', false);
+  }
+
+  // Sens.29: Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shopStats').get());
+    reportTest('Sens.29 Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.29 Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY', false);
+  }
+
+  // Sens.30: Direct bypass: Token ID mismatch with payload -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('doc_id_123').set({
+      token: 'different_token_456',
+      uid: 'customer_a',
+      role: 'customer',
+    }));
+    reportTest('Sens.30 Direct bypass: Token ID mismatch with payload -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.30 Direct bypass: Token ID mismatch with payload -> DENY', false);
   }
 
   console.log('\n=================================================================');

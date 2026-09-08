@@ -41,6 +41,25 @@ service cloud.firestore {
       return isAdmin();
     }
 
+    /// Validates device token registration payload against authenticated caller session.
+    /// Binds token to caller UID and strictly prevents role escalation or cross-tenant assignment.
+    function isValidDeviceTokenPayload(tokenId) {
+      let data = request.resource.data;
+      let callerUid = request.auth.uid;
+      let tokenOwner = data.get('uid', data.get('customerId', ''));
+      let callerRole = request.auth.token.get('role', 'customer');
+      let isCallerCustomer = callerRole == 'customer';
+      let isCallerShopkeeper = callerRole == 'shopkeeper';
+      let trustedShopId = request.auth.token.get('shopId', '');
+
+      return isSignedIn()
+        && data.get('token', '') == tokenId
+        && tokenOwner == callerUid
+        && data.get('role', '') == callerRole
+        && (isCallerCustomer ? (!('shopId' in data) || data.shopId == null || data.shopId == '') : true)
+        && (isCallerShopkeeper ? data.get('shopId', '') == trustedShopId : true);
+    }
+
     // ─── VALIDATION HELPERS (Preserved for Subsequent Checkpoints) ─────
 
     // 1. Support Query payload validation
@@ -174,13 +193,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ─── 3. SUPPORT QUERIES COLLECTION ─────────────────────────────────
+    // ─── 3. SUPPORT QUERIES COLLECTION (PHASE 3.4) ─────────────────────
     match /supportQueries/{queryId} {
-      // Submission allowed with strict validation
-      allow create: if isValidSupportQuery();
-      // Read allowed ONLY for verified Administrators
+      // Read allowed for customer who owns the query
+      allow read: if isSignedIn() && resource.data.get('customerId', '') == request.auth.uid;
+      // Read allowed for verified Platform Administrator
       allow read: if isAuthorizedAdmin();
-      // Updates and deletes are permanently denied
+
+      // Submission allowed with strict validation:
+      // If caller is authenticated, customerId MUST match their authenticated UID.
+      // Unauthenticated submissions cannot claim an authenticated customerId.
+      allow create: if isValidSupportQuery()
+        && (isSignedIn()
+            ? (request.resource.data.get('customerId', '') == request.auth.uid)
+            : (!('customerId' in request.resource.data) || request.resource.data.customerId == '' || request.resource.data.customerId == null));
+
+      // Updates and deletes are permanently denied across all client roles.
+      // Support inquiries represent permanent customer audit records.
       allow update, delete: if false;
     }
 
@@ -266,22 +295,91 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ─── 5. SHOP STATISTICS (DEFAULT DENY IN 3.1) ──────────────────────
+    // ─── 5. SHOP STATISTICS (PHASE 3.4) ────────────────────────────────
     match /shopStats/{shopId} {
-      allow read, write: if false;
+      // Shopkeeper can read only their assigned shop stats.
+      // Admin has platform-wide visibility.
+      // Customer and Anonymous are strictly denied.
+      allow read: if isShopOwner(shopId) || isAdmin();
 
+      // Assigned shopkeeper or platform admin can update stats.
+      // The shopId field cannot be reassigned to another shop.
+      allow create, update: if (isShopOwner(shopId) || isAdmin())
+        && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId);
+
+      // Metric documents must not be deleted by clients.
+      allow delete: if false;
+
+      // Subcollection for monthly stats breakdown
       match /monthlyStats/{monthKey} {
-        allow read, write: if false;
+        allow read: if isShopOwner(shopId) || isAdmin();
+
+        allow create, update: if (isShopOwner(shopId) || isAdmin())
+          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId);
+
+        allow delete: if false;
       }
     }
 
-    // ─── 6. DEVICE TOKENS (DEFAULT DENY IN 3.1) ────────────────────────
+    // ─── 6. DEVICE TOKENS (PHASE 3.4) ──────────────────────────────────
     match /deviceTokens/{tokenId} {
-      // Cloud Functions reads/writes via Firebase Admin SDK
+      // Read allowed only for token owner or platform admin.
+      // Blanket enumeration by non-admin is strictly denied.
+      allow read: if (isSignedIn() && resource.data.get('uid', resource.data.get('customerId', '')) == request.auth.uid)
+        || isAdmin();
+
+      // Create allowed only for authenticated user registering their own token
+      // with verified role and tenant bounds.
+      allow create: if isValidDeviceTokenPayload(tokenId);
+
+      // Update allowed only for the token owner preserving ownership bounds.
+      allow update: if isValidDeviceTokenPayload(tokenId)
+        && resource.data.get('uid', resource.data.get('customerId', '')) == request.auth.uid;
+
+      // Delete allowed only for token owner or platform admin.
+      allow delete: if (isSignedIn() && resource.data.get('uid', resource.data.get('customerId', '')) == request.auth.uid)
+        || isAdmin();
+    }
+
+    // ─── 7. USER & PROFILE DOCUMENTS (PHASE 3.4) ───────────────────────
+    match /users/{userId} {
+      // User can read their own profile document; Admin can inspect platform users.
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+
+      // User can create or update only their own profile document.
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+
+      // Deletions permanently denied via client SDK.
+      allow delete: if false;
+    }
+
+    match /profiles/{userId} {
+      // User can read their own profile document; Admin can inspect platform profiles.
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+
+      // User can create or update only their own profile document.
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+
+      // Deletions permanently denied via client SDK.
+      allow delete: if false;
+    }
+
+    // ─── 8. SERVER-ONLY COLLECTIONS (PHASE 3.4) ────────────────────────
+    // Internal server collections inaccessible from any client SDK (Admin SDK / Functions only).
+    match /_authChallenges/{doc=**} {
+      allow read, write: if false;
+    }
+    match /auditLogs/{doc=**} {
+      allow read, write: if false;
+    }
+    match /internal_metrics/{doc=**} {
+      allow read, write: if false;
+    }
+    match /adminSettings/{doc=**} {
       allow read, write: if false;
     }
 
-    // ─── 7. UNIVERSAL DEFAULT-DENY FALLTHROUGH ─────────────────────────
+    // ─── 9. UNIVERSAL DEFAULT-DENY FALLTHROUGH ─────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

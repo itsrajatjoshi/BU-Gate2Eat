@@ -643,6 +643,7 @@ class NotificationService {
         'role': role,
         'shopId': role == 'shopkeeper' ? shopId : null,
         'customerId': role == 'customer' ? effectiveCustomerId : null,
+        'uid': (customerId != null && customerId.isNotEmpty) ? customerId : effectiveCustomerId,
         'platform': currentPlatform,
         'updatedAt': FieldValue.serverTimestamp(),
       };
