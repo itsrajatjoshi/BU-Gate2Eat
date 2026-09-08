@@ -20,6 +20,13 @@ const assert = require("assert");
 const {
   processServerAuthoritativeOrder,
   buildDeterministicCartKey,
+  toPaise,
+  fromPaise,
+  MAX_ITEMS_PER_ORDER,
+  MAX_ITEM_QUANTITY,
+  MAX_TOTAL_QUANTITY,
+  MAX_ITEM_PRICE,
+  MAX_ORDER_GRAND_TOTAL,
 } = require("./order_creation");
 
 // ─── Lightweight Mock Firestore for Offline Verification ────────────────────
@@ -199,6 +206,164 @@ function createSeededFirestore() {
     name: "Alien Pizza",
     price: 250,
     isAvailable: true,
+  });
+
+  // Seed Menu Item with negative option price (Mandatory Correction 1 test)
+  db.setDoc("shops/shop_active/menuItems/item_neg_opt_price", {
+    id: "item_neg_opt_price",
+    shopId: "shop_active",
+    name: "Defective Burger",
+    price: 100,
+    isAvailable: true,
+    optionGroups: [
+      {
+        id: "grp_sauce",
+        name: "Sauce",
+        groupType: "choice",
+        required: false,
+        options: [
+          { id: "opt_neg_sauce", name: "Bad Sauce", price: -20, pricingType: "priceAdjustment" },
+        ],
+      },
+    ],
+  });
+
+  // Seed Menu Item with non-finite (NaN / Infinity) option price (Mandatory Correction 1 test)
+  db.setDoc("shops/shop_active/menuItems/item_nan_opt_price", {
+    id: "item_nan_opt_price",
+    shopId: "shop_active",
+    name: "NaN Burger",
+    price: 100,
+    isAvailable: true,
+    optionGroups: [
+      {
+        id: "grp_sauce",
+        name: "Sauce",
+        groupType: "choice",
+        required: false,
+        options: [
+          { id: "opt_nan_sauce", name: "NaN Sauce", price: NaN, pricingType: "priceAdjustment" },
+        ],
+      },
+    ],
+  });
+
+  // Seed Menu Item with valid 0 (free) option and selectionOnly option
+  db.setDoc("shops/shop_active/menuItems/item_free_option", {
+    id: "item_free_option",
+    shopId: "shop_active",
+    name: "Item with Free Option",
+    price: 80,
+    isAvailable: true,
+    optionGroups: [
+      {
+        id: "grp_addons",
+        name: "Free Addon",
+        groupType: "choice",
+        required: false,
+        options: [
+          { id: "opt_free_dip", name: "Free Mint Dip", price: 0, pricingType: "priceAdjustment" },
+          { id: "opt_fork", name: "Include Fork", price: 0, pricingType: "selectionOnly" },
+        ],
+      },
+    ],
+  });
+
+  // Seed Menu Item with negative base catalog price
+  db.setDoc("shops/shop_active/menuItems/item_neg_base_price", {
+    id: "item_neg_base_price",
+    shopId: "shop_active",
+    name: "Negative Base Price Item",
+    price: -50,
+    isAvailable: true,
+  });
+
+  // Seed Menu Item with non-finite base catalog price
+  db.setDoc("shops/shop_active/menuItems/item_nan_base_price", {
+    id: "item_nan_base_price",
+    shopId: "shop_active",
+    name: "NaN Base Price Item",
+    price: NaN,
+    isAvailable: true,
+  });
+
+  // Seed Shop with negative delivery charges
+  db.setDoc("shops/shop_neg_delivery", {
+    id: "shop_neg_delivery",
+    name: "Negative Delivery Shop",
+    isActive: true,
+    deliveryCharges: -10,
+  });
+
+  // Seed Menu Item with multi-select option group (Mandatory Correction 2)
+  db.setDoc("shops/shop_active/menuItems/item_multi_pizza", {
+    id: "item_multi_pizza",
+    shopId: "shop_active",
+    name: "Custom Pizza",
+    price: 200,
+    isAvailable: true,
+    optionGroups: [
+      {
+        id: "grp_toppings",
+        name: "Toppings (Choose up to 3)",
+        groupType: "choice",
+        multiple: true,
+        maxSelections: 3,
+        minSelections: 1,
+        options: [
+          { id: "opt_olives", name: "Black Olives", price: 30, pricingType: "priceAdjustment" },
+          { id: "opt_mushrooms", name: "Mushrooms", price: 35, pricingType: "priceAdjustment" },
+          { id: "opt_corn", name: "Sweet Corn", price: 25, pricingType: "priceAdjustment" },
+          { id: "opt_jalapenos", name: "Jalapenos", price: 30, pricingType: "priceAdjustment" },
+        ],
+      },
+    ],
+  });
+
+  // Seed Menu Item & Shop with decimal pricing (Mandatory Correction 4 test)
+  db.setDoc("shops/shop_active/menuItems/item_decimal_pasta", {
+    id: "item_decimal_pasta",
+    shopId: "shop_active",
+    name: "Penne Alfredo",
+    price: 49.50,
+    isAvailable: true,
+    optionGroups: [
+      {
+        id: "grp_extra",
+        name: "Pasta Extras",
+        groupType: "choice",
+        required: false,
+        options: [
+          { id: "opt_herbs", name: "Extra Herbs", price: 12.25, pricingType: "priceAdjustment" },
+        ],
+      },
+    ],
+  });
+
+  // Seed Shop with decimal delivery charges
+  db.setDoc("shops/shop_decimal", {
+    id: "shop_decimal",
+    name: "Decimal Delivery Shop",
+    isActive: true,
+    deliveryCharges: 25.50,
+  });
+  db.setDoc("shops/shop_decimal/menuItems/item_decimal_pasta", {
+    id: "item_decimal_pasta",
+    shopId: "shop_decimal",
+    name: "Penne Alfredo",
+    price: 49.50,
+    isAvailable: true,
+    optionGroups: [
+      {
+        id: "grp_extra",
+        name: "Pasta Extras",
+        groupType: "choice",
+        required: false,
+        options: [
+          { id: "opt_herbs", name: "Extra Herbs", price: 12.25, pricingType: "priceAdjustment" },
+        ],
+      },
+    ],
   });
 
   // Seed Customer Profile in users collection
@@ -932,8 +1097,754 @@ async function runTests() {
     pass("Concurrent collision cannot create two orders at the same ID");
   }
 
+  // ===========================================================================
+  // PHASE 4.2 — SERVER-AUTHORITATIVE PRICING HARDENING TESTS
+  // ===========================================================================
+
+  // ─── Test 34: Negative option price in catalog is rejected (Mandatory Correction 1) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_neg_opt_price",
+          quantity: 1,
+          selectedOptions: [{ groupId: "grp_sauce", optionId: "opt_neg_sauce" }],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert(err.message.includes("invalid or negative price"));
+        return true;
+      }
+    );
+    pass("Negative catalog option price is rejected with failed-precondition (no silent clamping to 0)");
+  }
+
+  // ─── Test 35: Non-finite option price in catalog is rejected (Mandatory Correction 1) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_nan_opt_price",
+          quantity: 1,
+          selectedOptions: [{ groupId: "grp_sauce", optionId: "opt_nan_sauce" }],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert(err.message.includes("invalid or negative price"));
+        return true;
+      }
+    );
+    pass("Non-finite catalog option price is rejected with failed-precondition");
+  }
+
+  // ─── Test 36: Valid zero (free) option price in catalog is allowed (Mandatory Correction 1) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_free_option",
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_addons", optionId: "opt_free_dip" },
+            { groupId: "grp_addons", optionId: "opt_fork" },
+          ],
+        },
+      ],
+    };
+
+    // Note: grp_addons is a single-select choice group by default, so selecting both should be tested under multi-select
+    // Let's test each free option separately:
+    const res1 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_free_option",
+          quantity: 1,
+          selectedOptions: [{ groupId: "grp_addons", optionId: "opt_free_dip" }],
+        },
+      ],
+    }, { now: fixedNow });
+    assert.strictEqual(res1.order.items[0].price, 80); // 80 base + 0 dip
+    assert.strictEqual(res1.order.items[0].selectedOptions[0].price, 0);
+
+    const res2 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_free_option",
+          quantity: 1,
+          selectedOptions: [{ groupId: "grp_addons", optionId: "opt_fork" }],
+        },
+      ],
+    }, { now: fixedNow });
+    assert.strictEqual(res2.order.items[0].price, 80); // 80 base + 0 selectionOnly
+    assert.strictEqual(res2.order.items[0].selectedOptions[0].price, 0);
+    pass("Valid zero (free) option price and selectionOnly option are allowed with exact 0 price");
+  }
+
+  // ─── Test 37: Negative base catalog price is rejected (Mandatory Correction 1) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_neg_base_price", quantity: 1 }],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert(err.message.includes("invalid or negative price"));
+        return true;
+      }
+    );
+    pass("Negative catalog base price is rejected with failed-precondition");
+  }
+
+  // ─── Test 38: Non-finite base catalog price is rejected (Mandatory Correction 1) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_nan_base_price", quantity: 1 }],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert(err.message.includes("invalid or negative price"));
+        return true;
+      }
+    );
+    pass("Non-finite catalog base price is rejected with failed-precondition");
+  }
+
+  // ─── Test 39: Negative shop delivery charges in catalog is rejected ─────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_neg_delivery",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert(err.message.includes("invalid or negative delivery charges"));
+        return true;
+      }
+    );
+    pass("Negative shop delivery charges in catalog are rejected with failed-precondition");
+  }
+
+  // ─── Test 40: Multi-select group: valid multi-selection succeeds (Mandatory Correction 2) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_multi_pizza", // base 200, grp_toppings max 3, min 1
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_toppings", optionId: "opt_olives" }, // +30
+            { groupId: "grp_toppings", optionId: "opt_mushrooms" }, // +35
+          ],
+        },
+      ],
+    };
+
+    const res = await processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow });
+    const item = res.order.items[0];
+    // Base 200 + 30 + 35 = 265
+    assert.strictEqual(item.price, 265);
+    assert.strictEqual(item.subtotal, 265);
+    assert.strictEqual(item.selectedOptions.length, 2);
+    assert.strictEqual(item.optionsDescription, "Black Olives · Mushrooms");
+    pass("Multi-select option group allows valid multiple selections according to catalog schema");
+  }
+
+  // ─── Test 41: Multi-select group: exceeding maxSelections is rejected (Mandatory Correction 2) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_multi_pizza", // grp_toppings maxSelections: 3
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_toppings", optionId: "opt_olives" },
+            { groupId: "grp_toppings", optionId: "opt_mushrooms" },
+            { groupId: "grp_toppings", optionId: "opt_corn" },
+            { groupId: "grp_toppings", optionId: "opt_jalapenos" }, // 4 selections > 3!
+          ],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes("Too many options selected for group"));
+        return true;
+      }
+    );
+    pass("Multi-select group exceeding authoritative maxSelections is rejected");
+  }
+
+  // ─── Test 42: Single-select group: multiple distinct selections rejected (Mandatory Correction 2) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_custom_burger", // grp_size is single-select fixed (max: 1)
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_size", optionId: "opt_regular" },
+            { groupId: "grp_size", optionId: "opt_large" }, // Attempting 2 sizes!
+          ],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes("Too many options selected for group"));
+        return true;
+      }
+    );
+    pass("Single-select group with multiple distinct selections is rejected");
+  }
+
+  // ─── Test 43: Duplicate selection of exact same optionId within a group rejected ──
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_multi_pizza",
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_toppings", optionId: "opt_olives" },
+            { groupId: "grp_toppings", optionId: "opt_olives" }, // Duplicate identical option!
+          ],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes("Duplicate selection of option"));
+        return true;
+      }
+    );
+    pass("Duplicate selection of the exact same option within a group is rejected");
+  }
+
+  // ─── Test 44: Missing required selection for group with minSelections > 0 rejected ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_multi_pizza", // minSelections: 1
+          quantity: 1,
+          selectedOptions: [], // 0 selections < minSelections (1)
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes("Missing required option selection for group"));
+        return true;
+      }
+    );
+    pass("Missing required selection for group with minSelections > 0 is rejected");
+  }
+
+  // ─── Test 45: Quantity boundary testing (Mandatory Correction 3) ────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 1. boundary - 1: quantity = 98 -> ALLOW
+    const res98 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 98 }],
+    }, { now: fixedNow });
+    assert.strictEqual(res98.order.items[0].quantity, 98);
+
+    // 2. boundary: quantity = 99 -> ALLOW
+    const res99 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 99 }],
+    }, { now: fixedNow });
+    assert.strictEqual(res99.order.items[0].quantity, 99);
+
+    // 3. boundary + 1: quantity = 100 -> DENY
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 100 }],
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("Quantity must be an integer between 1 and 99")
+    );
+
+    // 4. lower boundary: quantity = 1 -> ALLOW
+    const res1 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: fixedNow });
+    assert.strictEqual(res1.order.items[0].quantity, 1);
+
+    // 5. lower boundary - 1: quantity = 0 -> DENY
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 0 }],
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument"
+    );
+    pass("Quantity boundaries (1, 98, 99 allowed; 0, 100 denied) strictly enforced");
+  }
+
+  // ─── Test 46: Items per order boundary testing (Mandatory Correction 3) ────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // Create 50 distinct items in catalog
+    const items50 = [];
+    for (let i = 1; i <= 50; i++) {
+      const id = `item_bulk_${i}`;
+      db.setDoc(`shops/shop_active/menuItems/${id}`, {
+        id,
+        shopId: "shop_active",
+        name: `Bulk Item ${i}`,
+        price: 10,
+        isAvailable: true,
+      });
+      items50.push({ menuItemId: id, quantity: 1 });
+    }
+
+    // 50 items (boundary) -> ALLOW
+    const res50 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: items50,
+    }, { now: fixedNow });
+    assert.strictEqual(res50.order.items.length, 50);
+
+    // 51 items (boundary + 1) -> DENY
+    db.setDoc("shops/shop_active/menuItems/item_bulk_51", {
+      id: "item_bulk_51",
+      shopId: "shop_active",
+      name: "Bulk Item 51",
+      price: 10,
+      isAvailable: true,
+    });
+    const items51 = [...items50, { menuItemId: "item_bulk_51", quantity: 1 }];
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: items51,
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("cannot contain more than 50 distinct items")
+    );
+    pass("Items per order boundaries (50 allowed, 51 denied) strictly enforced");
+  }
+
+  // ─── Test 47: Total items quantity boundary testing (Mandatory Correction 3) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 5 items * 99 = 495, + 1 item * 5 = 500 (boundary) -> ALLOW
+    const items500 = [
+      { menuItemId: "item_momos", quantity: 99 },
+      { menuItemId: "item_coffee", quantity: 99 },
+      { menuItemId: "item_custom_burger", quantity: 99, selectedOptions: [{ groupId: "grp_size", optionId: "opt_regular" }] },
+      { menuItemId: "item_multi_pizza", quantity: 99, selectedOptions: [{ groupId: "grp_toppings", optionId: "opt_olives" }] },
+      { menuItemId: "item_decimal_pasta", quantity: 99 },
+      { menuItemId: "item_free_option", quantity: 5 },
+    ];
+    const res500 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: items500,
+    }, { now: fixedNow });
+    assert.strictEqual(res500.order.totalItems, 500);
+
+    // 501 total quantity (boundary + 1) -> DENY
+    const items501 = [
+      ...items500.slice(0, 5),
+      { menuItemId: "item_free_option", quantity: 6 }, // 495 + 6 = 501
+    ];
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: items501,
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("exceeds allowable limit of 500")
+    );
+    pass("Total order item quantity boundaries (500 allowed, 501 denied) strictly enforced");
+  }
+
+  // ─── Test 48: Item unit price ceiling testing (Mandatory Correction 3) ──────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 1. ₹100,000 (boundary) -> ALLOW
+    db.setDoc("shops/shop_active/menuItems/item_max_price", {
+      id: "item_max_price",
+      shopId: "shop_active",
+      name: "Luxury Banquet",
+      price: 100000,
+      isAvailable: true,
+    });
+    const res100k = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_max_price", quantity: 1 }],
+    }, { now: fixedNow });
+    assert.strictEqual(res100k.order.items[0].price, 100000);
+
+    // 2. ₹100,001 (boundary + 1) -> DENY
+    db.setDoc("shops/shop_active/menuItems/item_over_price", {
+      id: "item_over_price",
+      shopId: "shop_active",
+      name: "Overpriced Item",
+      price: 100001,
+      isAvailable: true,
+    });
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_over_price", quantity: 1 }],
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("exceeds allowable maximum limit of ₹100000")
+    );
+    pass("Item unit price ceiling boundaries (₹100,000 allowed, ₹100,001 denied) strictly enforced");
+  }
+
+  // ─── Test 49: Grand total ceiling testing (> ₹500,000 rejected) ──────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 5 items * 99 quantity * ₹1,000 = ₹495,000 + 30 delivery = ₹495,030 (< ₹500,000) -> ALLOW
+    db.setDoc("shops/shop_active/menuItems/item_1k", {
+      id: "item_1k",
+      shopId: "shop_active",
+      name: "1K Item",
+      price: 1000,
+      isAvailable: true,
+    });
+    const resAllow = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [
+        { menuItemId: "item_1k", quantity: 99 },
+        { menuItemId: "item_1k", quantity: 99 },
+        { menuItemId: "item_1k", quantity: 99 },
+        { menuItemId: "item_1k", quantity: 99 },
+        { menuItemId: "item_1k", quantity: 99 },
+      ],
+    }, { now: fixedNow });
+    assert.strictEqual(resAllow.order.grandTotal, 495030);
+
+    // Total > ₹500,000: 6 items with quantity 1 each at ₹90,000 = ₹540,000 -> DENY
+    db.setDoc("shops/shop_active/menuItems/item_90k", {
+      id: "item_90k",
+      shopId: "shop_active",
+      name: "90K Item",
+      price: 90000,
+      isAvailable: true,
+    });
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [
+          { menuItemId: "item_90k", quantity: 1 },
+          { menuItemId: "item_90k", quantity: 1 },
+          { menuItemId: "item_90k", quantity: 1 },
+          { menuItemId: "item_90k", quantity: 1 },
+          { menuItemId: "item_90k", quantity: 1 },
+          { menuItemId: "item_90k", quantity: 1 },
+        ],
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("exceeds allowable maximum limit of ₹500000")
+    );
+    pass("Order grand total ceiling (> ₹500,000 denied) strictly enforced");
+  }
+
+  // ─── Test 50: Decimal catalog pricing and exact paise arithmetic (Mandatory Correction 4) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // Shop with decimal delivery (25.50) and item with decimal base (49.50) + option (12.25)
+    // Unit price = 49.50 + 12.25 = 61.75 (6175 paise)
+    // Quantity = 3
+    // Subtotal = 61.75 * 3 = 185.25 (18525 paise)
+    // Delivery = 25.50 (2550 paise)
+    // Grand Total = 185.25 + 25.50 = 210.75 (21075 paise)
+    const request = {
+      shopId: "shop_decimal",
+      items: [
+        {
+          menuItemId: "item_decimal_pasta",
+          quantity: 3,
+          selectedOptions: [{ groupId: "grp_extra", optionId: "opt_herbs" }],
+        },
+      ],
+    };
+
+    const res = await processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow });
+    const stored = db.data.get(`orders/${res.orderId}`);
+
+    assert.strictEqual(stored.items[0].price, 61.75);
+    assert.strictEqual(stored.items[0].subtotal, 185.25);
+    assert.strictEqual(stored.subtotal, 185.25);
+    assert.strictEqual(stored.deliveryCharges, 25.50);
+    assert.strictEqual(stored.grandTotal, 210.75);
+    assert.strictEqual(stored.totalAmount, 210.75);
+    assert.strictEqual(stored.totalItems, 3);
+    pass("Decimal catalog pricing and exact integer paise arithmetic eliminate floating-point drift");
+  }
+
+  // ─── Test 51: Price Tampering Attack Matrix — All 16 fields verified in stored order ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // Attacker crafts a payload tampering with every conceivable financial field name
+    const maliciousRequest = {
+      shopId: "shop_active",
+      // Root-level financial tampering attempts
+      price: 0.01,
+      unitPrice: 0.01,
+      unitPriceOverride: 0.01,
+      subtotal: 0.01,
+      deliveryCharges: 0,
+      deliveryCharge: 0,
+      deliveryFee: 0,
+      grandTotal: 0.01,
+      totalAmount: 0.01,
+      totalItems: 1,
+      items: [
+        {
+          menuItemId: "item_custom_burger", // catalog: Regular is 130, Cheese is 25 -> unit 155
+          quantity: 2, // authoritative subtotal = 155 * 2 = 310
+          // Item-level financial tampering attempts
+          price: 1,
+          unitPrice: 1,
+          unitPriceOverride: 1,
+          subtotal: 2,
+          totalPrice: 2,
+          optionsDescription: "HACKED_FREE_OPTIONS_DESCRIPTION",
+          selectedOptions: [
+            {
+              groupId: "grp_size",
+              optionId: "opt_regular",
+              // Option-level financial tampering attempts
+              price: 0.1,
+              fixedPrice: 0.1,
+              priceAdjustment: 0.1,
+              optionPrice: 0.1,
+            },
+            {
+              groupId: "grp_cheese",
+              optionId: "opt_extra_cheese",
+              price: 0.2,
+              fixedPrice: 0.2,
+              priceAdjustment: 0.2,
+              optionPrice: 0.2,
+            },
+          ],
+        },
+      ],
+    };
+
+    const res = await processServerAuthoritativeOrder(db, authContext, maliciousRequest, { now: fixedNow });
+
+    // CRITICAL SECURITY AUDIT CHECK: Inspect the actual stored document from Firestore
+    const stored = db.data.get(`orders/${res.orderId}`);
+    assert(stored, "Stored order must exist in Firestore");
+
+    // 1. Authoritative item price (130 + 25 = 155), client price/unitPrice/unitPriceOverride ignored
+    assert.strictEqual(stored.items[0].price, 155);
+
+    // 2. Authoritative item subtotal (155 * 2 = 310), client subtotal/totalPrice ignored
+    assert.strictEqual(stored.items[0].subtotal, 310);
+
+    // 3. Authoritative option prices stored (130, 25), client option tampering ignored
+    assert.strictEqual(stored.items[0].selectedOptions[0].price, 130);
+    assert.strictEqual(stored.items[0].selectedOptions[1].price, 25);
+
+    // 4. Authoritative optionsDescription generated from catalog names, client string ignored
+    assert.strictEqual(stored.items[0].optionsDescription, "Regular · Extra Cheese");
+
+    // 5. Authoritative order subtotal (310), client subtotal ignored
+    assert.strictEqual(stored.subtotal, 310);
+
+    // 6. Authoritative delivery charges (30 from shop_active), client deliveryCharges/deliveryCharge/deliveryFee ignored
+    assert.strictEqual(stored.deliveryCharges, 30);
+
+    // 7. Authoritative grandTotal (310 + 30 = 340), client grandTotal ignored
+    assert.strictEqual(stored.grandTotal, 340);
+
+    // 8. Authoritative totalAmount (340), client totalAmount ignored
+    assert.strictEqual(stored.totalAmount, 340);
+
+    // 9. Authoritative totalItems (2), client totalItems ignored
+    assert.strictEqual(stored.totalItems, 2);
+
+    pass("Price Tampering Attack Matrix: All 16 client financial fields ignored and stored Firestore order verified authoritative");
+  }
+
+  // ─── Test 52: Quantity security: NaN, Infinity, null, undefined, '3', 1.5, -1 rejected ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    const invalidQuantities = [NaN, Infinity, -Infinity, null, undefined, "3", "one", 1.5, -1, 0, 100];
+    for (const badQ of invalidQuantities) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, {
+          shopId: "shop_active",
+          items: [{ menuItemId: "item_momos", quantity: badQ }],
+        }, { now: fixedNow }),
+        (err) => err.code === "invalid-argument",
+        `Expected rejection for quantity: ${badQ}`
+      );
+    }
+    pass("Quantity security: NaN, Infinity, null, undefined, strings, decimals, and out-of-bounds rejected");
+  }
+
+  // ─── Test 53: Catalog price mutation scenario / historical order immutability ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // Step 1: Initial catalog price of Momos is ₹80. Customer places Order 1.
+    const res1 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: fixedNow, _serverOrderId: "ORD_HISTORICAL_PRICE_1" });
+
+    const stored1 = db.data.get("orders/ORD_HISTORICAL_PRICE_1");
+    assert.strictEqual(stored1.items[0].price, 80);
+    assert.strictEqual(stored1.subtotal, 80);
+    assert.strictEqual(stored1.grandTotal, 110);
+
+    // Step 2: Shopkeeper updates catalog price from ₹80 to ₹120
+    db.setDoc("shops/shop_active/menuItems/item_momos", {
+      id: "item_momos",
+      shopId: "shop_active",
+      name: "Steamed Momos",
+      price: 120, // Updated catalog price!
+      isAvailable: true,
+    });
+
+    // Step 3: Customer places Order 2 after catalog price change
+    const res2 = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: fixedNow, _serverOrderId: "ORD_HISTORICAL_PRICE_2" });
+
+    const stored2 = db.data.get("orders/ORD_HISTORICAL_PRICE_2");
+    assert.strictEqual(stored2.items[0].price, 120);
+    assert.strictEqual(stored2.subtotal, 120);
+    assert.strictEqual(stored2.grandTotal, 150);
+
+    // Step 4: Verify Order 1 in Firestore STILL retains its original historical price of ₹80!
+    const reReadOrder1 = db.data.get("orders/ORD_HISTORICAL_PRICE_1");
+    assert.strictEqual(reReadOrder1.items[0].price, 80);
+    assert.strictEqual(reReadOrder1.subtotal, 80);
+    assert.strictEqual(reReadOrder1.grandTotal, 110);
+    pass("Catalog price mutation scenario: Historical order pricing remains frozen; new orders reflect updated catalog");
+  }
+
+  // ─── Test 54: Stored order mathematical consistency invariants ──────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    const request = {
+      shopId: "shop_active",
+      items: [
+        { menuItemId: "item_momos", quantity: 4 }, // 4 * 80 = 320
+        { menuItemId: "item_coffee", quantity: 2, selectedOptions: [{ groupId: "grp_flavour", optionId: "opt_vanilla" }] }, // 2 * (50 + 15) = 130
+        { menuItemId: "item_multi_pizza", quantity: 3, selectedOptions: [{ groupId: "grp_toppings", optionId: "opt_olives" }, { groupId: "grp_toppings", optionId: "opt_corn" }] }, // 3 * (200 + 30 + 25) = 765
+      ],
+    };
+
+    const res = await processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow });
+    const stored = db.data.get(`orders/${res.orderId}`);
+
+    // Invariant 1: sum(item subtotals) == subtotal
+    const itemSubtotalsSum = stored.items.reduce((acc, it) => acc + it.subtotal, 0);
+    assert.strictEqual(stored.subtotal, itemSubtotalsSum);
+    assert.strictEqual(stored.subtotal, 1215); // 320 + 130 + 765
+
+    // Invariant 2: subtotal + deliveryCharges == grandTotal
+    assert.strictEqual(stored.grandTotal, stored.subtotal + stored.deliveryCharges);
+    assert.strictEqual(stored.grandTotal, 1245); // 1215 + 30
+
+    // Invariant 3: grandTotal == totalAmount
+    assert.strictEqual(stored.grandTotal, stored.totalAmount);
+
+    // Invariant 4: sum(item quantities) == totalItems
+    const totalQty = stored.items.reduce((acc, it) => acc + it.quantity, 0);
+    assert.strictEqual(stored.totalItems, totalQty);
+    assert.strictEqual(stored.totalItems, 9); // 4 + 2 + 3
+
+    pass("Stored order satisfies all 4 mathematical consistency invariants");
+  }
+
   console.log("==================================================");
-  console.log(`ALL ${passed}/${passed} PHASE 4.1 SERVER ORDER TESTS PASSED!`);
+  console.log(`ALL ${passed}/${passed} SERVER-AUTHORITATIVE PRICING TESTS PASSED!`);
   console.log("==================================================");
 }
 

@@ -19,6 +19,47 @@ const crypto = require("crypto");
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
 /**
+ * Limits for abuse prevention and physical/monetary constraints:
+ * - MAX_ITEMS_PER_ORDER: 50 line items. Prevents unbounded array processing / memory DoS.
+ * - MAX_ITEM_QUANTITY: 99 per item. Matches Flutter model clamp(1, 99).
+ * - MAX_TOTAL_QUANTITY: 500 total units. Prevents physical fulfillment impossibility / inventory denial of service.
+ * - MAX_ITEM_PRICE: 100,000 INR (1 Lakh). Matches Flutter model clamp(0, 100000).
+ * - MAX_ORDER_GRAND_TOTAL: 500,000 INR (5 Lakhs). Standard payment gateway single-transaction ceiling in India.
+ */
+const MAX_ITEMS_PER_ORDER = 50;
+const MAX_ITEM_QUANTITY = 99;
+const MAX_TOTAL_QUANTITY = 500;
+const MAX_ITEM_PRICE = 100000;
+const MAX_ORDER_GRAND_TOTAL = 500000;
+
+/**
+ * Converts INR rupees to integer paise (minor units).
+ * Guarantees exact integer arithmetic and eliminates floating point drift.
+ *
+ * @param {number} rupees
+ * @returns {number} integer paise
+ */
+function toPaise(rupees) {
+  if (typeof rupees !== "number" || !Number.isFinite(rupees)) {
+    throw new Error(`Invalid monetary amount: ${rupees}`);
+  }
+  return Math.round(rupees * 100);
+}
+
+/**
+ * Converts integer paise back to INR rupees (decimal representation).
+ *
+ * @param {number} paise
+ * @returns {number} rupees
+ */
+function fromPaise(paise) {
+  if (!Number.isInteger(paise)) {
+    throw new Error(`Expected integer paise amount, got ${paise}`);
+  }
+  return paise / 100;
+}
+
+/**
  * Builds a deterministic cartKey for a menuItem + options combination.
  * Matches Flutter client `CartItem.buildCartKey` sorting logic.
  * 
@@ -92,7 +133,7 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     }
   }
 
-  // ─── 2. Validate Shop Identity ─────────────────────────────────────────────
+  // ─── 2. Validate Shop Identity & Authoritative Delivery Charges ────────────
   const shopId = typeof requestData.shopId === "string" ? requestData.shopId.trim() : "";
   if (!shopId) {
     const err = new Error("Invalid request: shopId is required.");
@@ -118,14 +159,32 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
   }
 
   const authoritativeShopName = shopData.name || "Shop";
-  const authoritativeDeliveryCharges = typeof shopData.deliveryCharges === "number"
-    ? Math.max(0, shopData.deliveryCharges)
-    : (typeof shopData.delivery_charges === "number" ? Math.max(0, shopData.delivery_charges) : 0);
+  const rawDelivery = typeof shopData.deliveryCharges === "number"
+    ? shopData.deliveryCharges
+    : (typeof shopData.delivery_charges === "number" ? shopData.delivery_charges : (shopData.deliveryCharges ?? shopData.delivery_charges ?? 0));
+
+  if (typeof rawDelivery !== "number" || !Number.isFinite(rawDelivery) || rawDelivery < 0) {
+    const err = new Error(`Catalog error: Shop "${shopId}" has invalid or negative delivery charges (${rawDelivery}).`);
+    err.code = "failed-precondition";
+    err.status = 400;
+    throw err;
+  }
+  const deliveryChargesPaise = toPaise(rawDelivery);
+  const authoritativeDeliveryCharges = fromPaise(deliveryChargesPaise);
 
   // ─── 3. Validate Requested Items & Enforce Cost Efficiency ─────────────────
   const rawItems = requestData.items;
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
     const err = new Error("Invalid request: items must be a non-empty array.");
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+
+  if (rawItems.length > MAX_ITEMS_PER_ORDER) {
+    const err = new Error(
+      `Invalid request: Order cannot contain more than ${MAX_ITEMS_PER_ORDER} distinct items (received ${rawItems.length}).`
+    );
     err.code = "invalid-argument";
     err.status = 400;
     throw err;
@@ -151,17 +210,24 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
   // ─── 4. Process Each Item with Authoritative Catalog & Option Pricing ──────
   const processedItems = [];
   let totalItemCount = 0;
-  let calculatedSubtotal = 0;
+  let calculatedSubtotalPaise = 0;
 
   for (let idx = 0; idx < rawItems.length; idx++) {
     const reqItem = rawItems[idx];
-    const menuItemId = reqItem.menuItemId.trim();
+    if (!reqItem || typeof reqItem !== "object") {
+      const err = new Error(`Invalid item payload at index ${idx}.`);
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+
+    const menuItemId = typeof reqItem.menuItemId === "string" ? reqItem.menuItemId.trim() : "";
     const quantity = reqItem.quantity;
 
-    // Validate quantity: integer between 1 and 99
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+    // Validate quantity: integer between 1 and MAX_ITEM_QUANTITY (99)
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_ITEM_QUANTITY) {
       const err = new Error(
-        `Invalid quantity "${quantity}" for item "${menuItemId}". Quantity must be an integer between 1 and 99.`
+        `Invalid quantity "${quantity}" for item "${menuItemId}". Quantity must be an integer between 1 and ${MAX_ITEM_QUANTITY}.`
       );
       err.code = "invalid-argument";
       err.status = 400;
@@ -194,14 +260,37 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
       throw err;
     }
 
+    // Validate authoritative base catalog price (No silent clamping)
+    const rawBasePrice = menuData.price;
+    if (typeof rawBasePrice !== "number" || !Number.isFinite(rawBasePrice) || rawBasePrice < 0) {
+      const err = new Error(`Catalog error: Menu item "${menuItemId}" has invalid or negative price (${rawBasePrice}).`);
+      err.code = "failed-precondition";
+      err.status = 400;
+      throw err;
+    }
+    const basePricePaise = toPaise(rawBasePrice);
+
+    let startingPricePaise = 0;
+    if (menuData.startingPrice !== undefined && menuData.startingPrice !== null) {
+      if (typeof menuData.startingPrice !== "number" || !Number.isFinite(menuData.startingPrice) || menuData.startingPrice < 0) {
+        const err = new Error(`Catalog error: Menu item "${menuItemId}" has invalid startingPrice (${menuData.startingPrice}).`);
+        err.code = "failed-precondition";
+        err.status = 400;
+        throw err;
+      }
+      startingPricePaise = toPaise(menuData.startingPrice);
+    }
+
     // Compute Authoritative Unit Price and Options
-    let itemUnitPrice = 0;
+    let unitPricePaise = 0;
     let hasAnyFixed = false;
     const authoritativeSelectedOptions = [];
     const optionsDescriptionTokens = [];
 
     const reqOptions = Array.isArray(reqItem.selectedOptions) ? reqItem.selectedOptions : [];
-    const catalogOptionGroups = Array.isArray(menuData.optionGroups) ? menuData.optionGroups : [];
+    const catalogOptionGroups = Array.isArray(menuData.optionGroups)
+      ? menuData.optionGroups
+      : (Array.isArray(menuData.groups) ? menuData.groups : []);
 
     if (catalogOptionGroups.length === 0 && reqOptions.length > 0) {
       const err = new Error(`Menu item "${menuItemId}" does not accept option selections.`);
@@ -211,6 +300,10 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     }
 
     if (catalogOptionGroups.length > 0) {
+      // Map to collect requested selections per option group
+      const selectionsByGroup = new Map();
+      const seenOptionKeys = new Set();
+
       for (const reqOpt of reqOptions) {
         if (!reqOpt || typeof reqOpt !== "object") {
           const err = new Error("Malformed selectedOption entry.");
@@ -218,8 +311,8 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
           err.status = 400;
           throw err;
         }
-        const groupId = reqOpt.groupId;
-        const optionId = reqOpt.optionId;
+        const groupId = typeof reqOpt.groupId === "string" ? reqOpt.groupId.trim() : "";
+        const optionId = typeof reqOpt.optionId === "string" ? reqOpt.optionId.trim() : "";
         if (!groupId || !optionId) {
           const err = new Error("Each selectedOption must contain valid groupId and optionId.");
           err.code = "invalid-argument";
@@ -243,70 +336,143 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
           throw err;
         }
 
+        // Prevent duplicate selection of the exact same optionId within a group
+        const optKey = `${groupId}:${optionId}`;
+        if (seenOptionKeys.has(optKey)) {
+          const err = new Error(`Duplicate selection of option "${optionId}" in group "${groupId}".`);
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
+        seenOptionKeys.add(optKey);
+
+        // Authoritative option pricing validation (Mandatory Correction 1: No silent clamping)
         const pricingType = catalogOpt.pricingType || (group.groupType === "fixed" ? "fixedPrice" : "priceAdjustment");
-        const catalogOptPrice = pricingType === "selectionOnly"
-          ? 0
-          : (typeof catalogOpt.price === "number" ? Math.max(0, catalogOpt.price) : 0);
+        let catalogOptPricePaise = 0;
 
-        if (group.groupType === "fixed" || pricingType === "fixedPrice") {
-          hasAnyFixed = true;
-          itemUnitPrice += catalogOptPrice;
-        } else {
-          itemUnitPrice += catalogOptPrice;
-        }
-
-        authoritativeSelectedOptions.push({
-          groupId: group.id,
-          groupName: group.name || "",
-          optionId: catalogOpt.id,
-          optionName: catalogOpt.name || "",
-          pricingType: pricingType,
-          price: catalogOptPrice,
-        });
-        if (catalogOpt.name) {
-          optionsDescriptionTokens.push(catalogOpt.name);
-        }
-      }
-
-      // Validate required groups
-      for (const group of catalogOptionGroups) {
-        if (group.required === true || group.groupType === "fixed") {
-          const hasSelection = authoritativeSelectedOptions.some((o) => o.groupId === group.id);
-          if (!hasSelection) {
-            const err = new Error(`Missing required option selection for group "${group.name || group.id}".`);
-            err.code = "invalid-argument";
+        if (pricingType !== "selectionOnly") {
+          const rawOptPrice = catalogOpt.price;
+          if (typeof rawOptPrice !== "number" || !Number.isFinite(rawOptPrice) || rawOptPrice < 0) {
+            const err = new Error(
+              `Catalog error: Option "${optionId}" in group "${groupId}" has invalid or negative price (${rawOptPrice}).`
+            );
+            err.code = "failed-precondition";
             err.status = 400;
             throw err;
+          }
+          catalogOptPricePaise = toPaise(rawOptPrice);
+        }
+
+        if (!selectionsByGroup.has(groupId)) {
+          selectionsByGroup.set(groupId, []);
+        }
+        selectionsByGroup.get(groupId).push({
+          group,
+          catalogOpt,
+          pricingType,
+          catalogOptPricePaise,
+        });
+      }
+
+      // Validate group-level selection constraints according to authoritative catalog schema (Mandatory Correction 2)
+      for (const group of catalogOptionGroups) {
+        const selections = selectionsByGroup.get(group.id) || [];
+        const count = selections.length;
+
+        const isMulti = group.multiple === true || group.allowMultiple === true || (typeof group.maxSelections === "number" && group.maxSelections > 1);
+
+        let minSelections;
+        let maxSelections;
+
+        if (typeof group.minSelections === "number") {
+          minSelections = group.minSelections;
+        } else if (group.required === true || group.groupType === "fixed") {
+          minSelections = 1;
+        } else {
+          minSelections = 0;
+        }
+
+        if (typeof group.maxSelections === "number") {
+          maxSelections = group.maxSelections;
+        } else if (isMulti) {
+          maxSelections = Array.isArray(group.options) ? group.options.length : 10;
+        } else {
+          maxSelections = 1;
+        }
+
+        if (count < minSelections) {
+          const err = new Error(
+            `Missing required option selection for group "${group.name || group.id}". Expected at least ${minSelections}, got ${count}.`
+          );
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
+
+        if (count > maxSelections) {
+          const err = new Error(
+            `Too many options selected for group "${group.name || group.id}". Maximum allowed is ${maxSelections}, got ${count}.`
+          );
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
+
+        // Accumulate option pricing and tokens
+        for (const sel of selections) {
+          if (group.groupType === "fixed" || sel.pricingType === "fixedPrice") {
+            hasAnyFixed = true;
+          }
+          unitPricePaise += sel.catalogOptPricePaise;
+
+          authoritativeSelectedOptions.push({
+            groupId: group.id,
+            groupName: group.name || "",
+            optionId: sel.catalogOpt.id,
+            optionName: sel.catalogOpt.name || "",
+            pricingType: sel.pricingType,
+            price: fromPaise(sel.catalogOptPricePaise),
+          });
+
+          if (sel.catalogOpt.name) {
+            optionsDescriptionTokens.push(sel.catalogOpt.name);
           }
         }
       }
 
       if (!hasAnyFixed) {
-        const baseCatalogPrice = typeof menuData.price === "number" ? Math.max(0, menuData.price) : 0;
-        itemUnitPrice += baseCatalogPrice;
+        unitPricePaise += basePricePaise;
       }
 
-      if (itemUnitPrice <= 0) {
-        itemUnitPrice = (typeof menuData.startingPrice === "number" && menuData.startingPrice > 0)
-          ? menuData.startingPrice
-          : (typeof menuData.price === "number" ? Math.max(0, menuData.price) : 0);
+      if (unitPricePaise <= 0) {
+        unitPricePaise = startingPricePaise > 0 ? startingPricePaise : basePricePaise;
       }
     } else {
       // Standard item with no option groups
-      itemUnitPrice = typeof menuData.price === "number" ? Math.max(0, menuData.price) : 0;
+      unitPricePaise = basePricePaise;
     }
 
-    const itemSubtotal = itemUnitPrice * quantity;
-    calculatedSubtotal += itemSubtotal;
+    // Check item unit price ceiling
+    if (unitPricePaise > toPaise(MAX_ITEM_PRICE)) {
+      const err = new Error(
+        `Item unit price for "${menuItemId}" (₹${fromPaise(unitPricePaise)}) exceeds allowable maximum limit of ₹${MAX_ITEM_PRICE}.`
+      );
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+
+    const itemSubtotalPaise = unitPricePaise * quantity;
+    calculatedSubtotalPaise += itemSubtotalPaise;
     totalItemCount += quantity;
 
     processedItems.push({
       itemId: menuItemId,
       menuItemId: menuItemId,
       name: menuData.name || "Item",
-      price: itemUnitPrice,
+      price: fromPaise(unitPricePaise),
       quantity: quantity,
-      subtotal: itemSubtotal,
+      subtotal: fromPaise(itemSubtotalPaise),
       imageUrl: menuData.imageUrl || "",
       optionsDescription: optionsDescriptionTokens.join(" · "),
       selectedOptions: authoritativeSelectedOptions,
@@ -314,8 +480,29 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     });
   }
 
-  // ─── 5. Calculate Authoritative Financials ──────────────────────────────────
-  const grandTotal = calculatedSubtotal + authoritativeDeliveryCharges;
+  // Validate total order quantity ceiling
+  if (totalItemCount > MAX_TOTAL_QUANTITY) {
+    const err = new Error(
+      `Total item quantity across all order items (${totalItemCount}) exceeds allowable limit of ${MAX_TOTAL_QUANTITY}.`
+    );
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+
+  // ─── 5. Calculate Authoritative Financials (Paise Minor Units) ──────────────
+  const grandTotalPaise = calculatedSubtotalPaise + deliveryChargesPaise;
+  if (grandTotalPaise > toPaise(MAX_ORDER_GRAND_TOTAL)) {
+    const err = new Error(
+      `Order grand total (₹${fromPaise(grandTotalPaise)}) exceeds allowable maximum limit of ₹${MAX_ORDER_GRAND_TOTAL}.`
+    );
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+
+  const calculatedSubtotal = fromPaise(calculatedSubtotalPaise);
+  const grandTotal = fromPaise(grandTotalPaise);
   const totalAmount = grandTotal;
 
   // ─── 6. Derive Customer Details ────────────────────────────────────────────
@@ -447,4 +634,11 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
 module.exports = {
   processServerAuthoritativeOrder,
   buildDeterministicCartKey,
+  toPaise,
+  fromPaise,
+  MAX_ITEMS_PER_ORDER,
+  MAX_ITEM_QUANTITY,
+  MAX_TOTAL_QUANTITY,
+  MAX_ITEM_PRICE,
+  MAX_ORDER_GRAND_TOTAL,
 };
