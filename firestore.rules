@@ -22,6 +22,12 @@ service cloud.firestore {
         && request.auth.token.get('shopId', '').size() > 0;
     }
 
+    /// Returns true if caller is an authorized shopkeeper whose trusted shopId claim
+    /// matches the target path shopId.
+    function isShopOwner(shopId) {
+      return isShopkeeper() && request.auth.token.get('shopId', '') == shopId;
+    }
+
     /// Returns true if caller is an authenticated platform administrator.
     /// Derives authority strictly from trusted Firebase Custom Claim `role == "admin"`.
     function isAdmin() {
@@ -92,19 +98,66 @@ service cloud.firestore {
           || status == 'cancelled';
     }
 
-    // ─── 1. PUBLIC CATALOG (READ-ONLY FOR BROWSING) ────────────────────
+    // ─── 1. PUBLIC CATALOG & TENANT MANAGEMENT (PHASE 3.2) ─────────────
     match /shops/{shopId} {
+      // Public catalog browsing allowed for all callers (unauthenticated and authenticated)
       allow read: if true;
-      allow write: if false;
 
+      // Shop creation: Platform administrator or assigned shopkeeper for their own shop
+      allow create: if (isAdmin() || isShopOwner(shopId))
+        && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
+        && (!('id' in request.resource.data) || request.resource.data['id'] == shopId);
+
+      // Shop update: Platform administrator or assigned shopkeeper for their own shop.
+      // shopId and id ownership fields are strictly immutable.
+      allow update: if (isAdmin() || isShopOwner(shopId))
+        && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
+        && (!('shopId' in resource.data) || !('shopId' in request.resource.data) || request.resource.data.shopId == resource.data.shopId)
+        && (!('id' in request.resource.data) || request.resource.data.id == shopId)
+        && (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id);
+
+      // Destructive shop deletion restricted exclusively to Platform Administrator.
+      // Anonymous callers, customers, and shopkeepers are strictly denied.
+      allow delete: if isAdmin();
+
+      // ─── Categories Subcollection ───────────────────────────────────
       match /categories/{categoryId} {
+        // Public category read allowed
         allow read: if true;
-        allow write: if false;
+
+        // Creation allowed for assigned shopkeeper or platform administrator.
+        // shopId if present in data must match path shopId.
+        allow create: if (isAdmin() || isShopOwner(shopId))
+          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId);
+
+        // Updates allowed for assigned shopkeeper or platform administrator.
+        // shopId cannot be mutated to another tenant.
+        allow update: if (isAdmin() || isShopOwner(shopId))
+          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
+          && (!('shopId' in resource.data) || !('shopId' in request.resource.data) || request.resource.data.shopId == resource.data.shopId);
+
+        // Deletion allowed for assigned shopkeeper or platform administrator.
+        allow delete: if isAdmin() || isShopOwner(shopId);
       }
 
+      // ─── Menu Items Subcollection ───────────────────────────────────
       match /menuItems/{menuItemId} {
+        // Public menu item read allowed
         allow read: if true;
-        allow write: if false;
+
+        // Creation allowed for assigned shopkeeper or platform administrator.
+        // shopId if present in data must match path shopId.
+        allow create: if (isAdmin() || isShopOwner(shopId))
+          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId);
+
+        // Updates allowed for assigned shopkeeper or platform administrator.
+        // shopId cannot be mutated to another tenant.
+        allow update: if (isAdmin() || isShopOwner(shopId))
+          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
+          && (!('shopId' in resource.data) || !('shopId' in request.resource.data) || request.resource.data.shopId == resource.data.shopId);
+
+        // Deletion allowed for assigned shopkeeper or platform administrator.
+        allow delete: if isAdmin() || isShopOwner(shopId);
       }
     }
 
