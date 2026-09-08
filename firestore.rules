@@ -184,10 +184,83 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ─── 4. ORDERS COLLECTION (DEFAULT DENY IN 3.1) ────────────────────
+    // ─── 4. ORDERS COLLECTION (PHASE 3.3) ──────────────────────────────
     match /orders/{orderId} {
-      // Explicitly denied in 3.1 baseline until Phase 4 / Phase 3.x order rules
-      allow read, write: if false;
+      // ── READ POLICY ──
+      // Customer: can read ONLY their own orders (resource.data.customerId == request.auth.uid)
+      // Shopkeeper: can read ONLY orders belonging to their assigned shop (isShopOwner)
+      // Admin: platform-wide read authorization (isAdmin)
+      // Anonymous: strictly denied
+      allow read: if (isSignedIn() && resource.data.customerId == request.auth.uid)
+        || isShopOwner(resource.data.shopId)
+        || isAdmin();
+
+      // ── CREATE POLICY ──
+      // Customer: can create an order ONLY for themselves:
+      //   - request.auth.uid == request.resource.data.customerId
+      //   - valid non-empty shopId string
+      //   - initial status must be 'placed'
+      //   - docId matches orderId if provided
+      // Admin: platform administrative creation allowed
+      // Shopkeeper / Anonymous: strictly denied
+      allow create: if (
+        isCustomer()
+        && request.auth.uid == request.resource.data.customerId
+        && ('shopId' in request.resource.data)
+        && request.resource.data.shopId is string
+        && request.resource.data.shopId.size() > 0
+        && request.resource.data.status == 'placed'
+        && (!('orderId' in request.resource.data) || request.resource.data.orderId == orderId)
+      ) || isAdmin();
+
+      // ── UPDATE POLICY ──
+      // Invariant across ALL roles (Customer, Shopkeeper, Admin):
+      // Ownership and creation fields are strictly immutable:
+      //   - customerId cannot be reassigned
+      //   - shopId cannot be reassigned
+      //   - orderId cannot be reassigned
+      //   - createdAt cannot be altered
+      allow update: if (
+        request.resource.data.customerId == resource.data.customerId
+        && request.resource.data.shopId == resource.data.shopId
+        && (!('orderId' in resource.data) || !('orderId' in request.resource.data) || request.resource.data.orderId == resource.data.orderId)
+        && (!('createdAt' in resource.data) || !('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt)
+        && (
+          // 1. Customer cancellation path:
+          //    - Customer owns the order
+          //    - Order is currently 'placed'
+          //    - Next status is 'cancelled'
+          //    - Cannot modify financial, item, or shopkeeper fields
+          (
+            isCustomer()
+            && resource.data.customerId == request.auth.uid
+            && resource.data.status == 'placed'
+            && request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'updatedAt'])
+          )
+          ||
+          // 2. Shopkeeper fulfillment / status updates:
+          //    - Shopkeeper owns the tenant (isShopOwner)
+          //    - Restricted strictly to fulfillment fields (cannot alter financial, item, or identity fields)
+          (
+            isShopOwner(resource.data.shopId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'acceptedAt', 'rejectDeadline', 'deliveryDeadline',
+              'rejectedAt', 'rejectionReason', 'deliveredAt',
+              'deliveryPersonId', 'deliveryPersonName', 'updatedAt'
+            ])
+          )
+          ||
+          // 3. Platform Admin updates:
+          //    - Cannot bypass ownership immutability (checked above)
+          isAdmin()
+        )
+      );
+
+      // ── DELETE POLICY ──
+      // Direct client deletion is permanently DENIED to all roles (Anonymous, Customer, Shopkeeper, Admin).
+      // Orders represent immutable financial and legal audit history.
+      allow delete: if false;
     }
 
     // ─── 5. SHOP STATISTICS (DEFAULT DENY IN 3.1) ──────────────────────

@@ -210,6 +210,82 @@ async function setup() {
       price: 99,
       isAvailable: true,
     });
+
+    // Seed test orders for Phase 3.3
+    const orderDataA = {
+      orderId: 'order_cust_a_shop_a',
+      customerId: 'customer_a',
+      customerName: 'Customer A',
+      customerPhone: '+919876543210',
+      shopId: 'shop_a',
+      shopName: 'Shop A',
+      status: 'placed',
+      totalAmount: 250,
+      grandTotal: 250,
+      subtotal: 250,
+      deliveryCharges: 0,
+      items: [{ itemId: 'item_1', name: 'Burger', price: 250, quantity: 1 }],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await adminFs.collection('orders').doc('order_cust_a_shop_a').set(orderDataA);
+
+    const orderDataB = {
+      orderId: 'order_cust_b_shop_b',
+      customerId: 'customer_b',
+      customerName: 'Customer B',
+      customerPhone: '+919876543211',
+      shopId: 'shop_b',
+      shopName: 'Shop B',
+      status: 'placed',
+      totalAmount: 180,
+      grandTotal: 180,
+      subtotal: 180,
+      deliveryCharges: 0,
+      items: [{ itemId: 'item_2', name: 'Pizza', price: 180, quantity: 1 }],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await adminFs.collection('orders').doc('order_cust_b_shop_b').set(orderDataB);
+
+    await adminFs.collection('orders').doc('order_cust_a_accepted').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_accepted',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+
+    await adminFs.collection('orders').doc('order_cust_a_for_cancel').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_cancel',
+    });
+
+    await adminFs.collection('orders').doc('order_cust_a_for_sk_update').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_sk_update',
+    });
+
+    await adminFs.collection('orders').doc('order_cust_a_for_sk_deliver').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_sk_deliver',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+
+    await adminFs.collection('orders').doc('order_cust_a_for_admin_update').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_admin_update',
+    });
+
+    await adminFs.collection('orders').doc('order_cust_a_for_admin_immutability').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_admin_immutability',
+    });
+
+    await adminFs.collection('orders').doc('order_delete_target').set({
+      ...orderDataA,
+      orderId: 'order_delete_target',
+    });
   });
 }
 
@@ -1129,6 +1205,408 @@ async function runRulesSecuritySuite() {
     reportTest('R.34 Shopkeeper write on unknown collection = DENY', true);
   } catch (e) {
     reportTest('R.34 Shopkeeper write on unknown collection = DENY', false);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // CHECKPOINT 3.3 ORDERS SECURITY SUITE (O.1 - O.35)
+  // ═════════════════════════════════════════════════════════════════════
+  console.log('\n--- Phase 3.3: Anonymous Order Access Tests (O.1 - O.4) ---');
+
+  // O.1 Anonymous order read -> DENY
+  try {
+    await assertFails(unauthDb.collection('orders').doc('order_cust_a_shop_a').get());
+    reportTest('O.1 Anonymous order read -> DENY', true);
+  } catch (e) {
+    reportTest('O.1 Anonymous order read -> DENY', false);
+  }
+
+  // O.2 Anonymous order create -> DENY
+  try {
+    await assertFails(unauthDb.collection('orders').doc('order_anon_create').set({
+      orderId: 'order_anon_create',
+      customerId: 'anon',
+      shopId: 'shop_a',
+      status: 'placed',
+      totalAmount: 100,
+    }));
+    reportTest('O.2 Anonymous order create -> DENY', true);
+  } catch (e) {
+    reportTest('O.2 Anonymous order create -> DENY', false);
+  }
+
+  // O.3 Anonymous order update -> DENY
+  try {
+    await assertFails(unauthDb.collection('orders').doc('order_cust_a_shop_a').update({
+      status: 'cancelled',
+    }));
+    reportTest('O.3 Anonymous order update -> DENY', true);
+  } catch (e) {
+    reportTest('O.3 Anonymous order update -> DENY', false);
+  }
+
+  // O.4 Anonymous order delete -> DENY
+  try {
+    await assertFails(unauthDb.collection('orders').doc('order_delete_target').delete());
+    reportTest('O.4 Anonymous order delete -> DENY', true);
+  } catch (e) {
+    reportTest('O.4 Anonymous order delete -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.3: Customer Order Access Tests (O.5 - O.12) ---');
+
+  // O.5 Customer reads own order -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('orders').doc('order_cust_a_shop_a').get());
+    reportTest('O.5 Customer reads own order -> ALLOW', true);
+  } catch (e) {
+    reportTest('O.5 Customer reads own order -> ALLOW', false);
+  }
+
+  // O.6 Customer reads another customer order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_b_shop_b').get());
+    reportTest('O.6 Customer reads another customer order -> DENY', true);
+  } catch (e) {
+    reportTest('O.6 Customer reads another customer order -> DENY', false);
+  }
+
+  // O.7 Customer creates own order -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('orders').doc('order_new_cust_a').set({
+      orderId: 'order_new_cust_a',
+      customerId: 'customer_a',
+      shopId: 'shop_a',
+      status: 'placed',
+      totalAmount: 200,
+      items: [{ itemId: 'item_1', name: 'Burger', price: 200, quantity: 1 }],
+      createdAt: new Date(),
+    }));
+    reportTest('O.7 Customer creates own order -> ALLOW', true);
+  } catch (e) {
+    reportTest('O.7 Customer creates own order -> ALLOW', false);
+  }
+
+  // O.8 Customer creates order with foreign customerId -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_forged_cust').set({
+      orderId: 'order_forged_cust',
+      customerId: 'customer_b',
+      shopId: 'shop_a',
+      status: 'placed',
+      totalAmount: 200,
+      items: [{ itemId: 'item_1', name: 'Burger', price: 200, quantity: 1 }],
+    }));
+    reportTest('O.8 Customer creates order with foreign customerId -> DENY', true);
+  } catch (e) {
+    reportTest('O.8 Customer creates order with foreign customerId -> DENY', false);
+  }
+
+  // O.9 Customer changes order customerId -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      customerId: 'customer_b',
+    }));
+    reportTest('O.9 Customer changes order customerId -> DENY', true);
+  } catch (e) {
+    reportTest('O.9 Customer changes order customerId -> DENY', false);
+  }
+
+  // O.10 Customer changes order shopId -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      shopId: 'shop_b',
+    }));
+    reportTest('O.10 Customer changes order shopId -> DENY', true);
+  } catch (e) {
+    reportTest('O.10 Customer changes order shopId -> DENY', false);
+  }
+
+  // O.11 Customer updates protected status/financial fields -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      status: 'accepted',
+    }));
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      totalAmount: 50,
+    }));
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_accepted').update({
+      status: 'cancelled',
+    }));
+    reportTest('O.11 Customer updates protected status/financial fields -> DENY', true);
+  } catch (e) {
+    reportTest('O.11 Customer updates protected status/financial fields -> DENY', false);
+  }
+
+  // O.12 Customer updates another customer order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_b_shop_b').update({
+      status: 'cancelled',
+    }));
+    reportTest('O.12 Customer updates another customer order -> DENY', true);
+  } catch (e) {
+    reportTest('O.12 Customer updates another customer order -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.3: Shopkeeper Order Access Tests (O.13 - O.20) ---');
+
+  // O.13 Shopkeeper reads own-shop order -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').get());
+    reportTest('O.13 Shopkeeper reads own-shop order -> ALLOW', true);
+  } catch (e) {
+    reportTest('O.13 Shopkeeper reads own-shop order -> ALLOW', false);
+  }
+
+  // O.14 Shopkeeper reads another-shop order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_b_shop_b').get());
+    reportTest('O.14 Shopkeeper reads another-shop order -> DENY', true);
+  } catch (e) {
+    reportTest('O.14 Shopkeeper reads another-shop order -> DENY', false);
+  }
+
+  // O.15 Shopkeeper updates own-shop order -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_for_sk_update').update({
+      status: 'accepted',
+      acceptedAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('O.15 Shopkeeper updates own-shop order -> ALLOW', true);
+  } catch (e) {
+    reportTest('O.15 Shopkeeper updates own-shop order -> ALLOW', false);
+  }
+
+  // O.16 Shopkeeper updates another-shop order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_b_shop_b').update({
+      status: 'accepted',
+      acceptedAt: new Date(),
+    }));
+    reportTest('O.16 Shopkeeper updates another-shop order -> DENY', true);
+  } catch (e) {
+    reportTest('O.16 Shopkeeper updates another-shop order -> DENY', false);
+  }
+
+  // O.17 Shopkeeper changes order shopId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      shopId: 'shop_b',
+    }));
+    reportTest('O.17 Shopkeeper changes order shopId -> DENY', true);
+  } catch (e) {
+    reportTest('O.17 Shopkeeper changes order shopId -> DENY', false);
+  }
+
+  // O.18 Shopkeeper changes customerId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      customerId: 'attacker_uid',
+    }));
+    reportTest('O.18 Shopkeeper changes customerId -> DENY', true);
+  } catch (e) {
+    reportTest('O.18 Shopkeeper changes customerId -> DENY', false);
+  }
+
+  // O.19 Shopkeeper changes protected financial ownership fields -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      totalAmount: 9999,
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      items: [{ itemId: 'hacked', name: 'Free', price: 0, quantity: 1 }],
+    }));
+    reportTest('O.19 Shopkeeper changes protected financial ownership fields -> DENY', true);
+  } catch (e) {
+    reportTest('O.19 Shopkeeper changes protected financial ownership fields -> DENY', false);
+  }
+
+  // O.20 Shopkeeper creates unauthorized order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_sk_bootstrap').set({
+      orderId: 'order_sk_bootstrap',
+      customerId: 'customer_a',
+      shopId: 'shop_a',
+      status: 'placed',
+      totalAmount: 100,
+    }));
+    reportTest('O.20 Shopkeeper creates unauthorized order -> DENY', true);
+  } catch (e) {
+    reportTest('O.20 Shopkeeper creates unauthorized order -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.3: Admin Order Access Tests (O.21 - O.24) ---');
+
+  // O.21 Admin reads order -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('orders').doc('order_cust_a_shop_a').get());
+    reportTest('O.21 Admin reads order -> ALLOW', true);
+  } catch (e) {
+    reportTest('O.21 Admin reads order -> ALLOW', false);
+  }
+
+  // O.22 Admin allowed order operation -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('orders').doc('order_cust_a_for_admin_update').update({
+      adminNote: 'Verified and approved by administrator',
+      updatedAt: new Date(),
+    }));
+    reportTest('O.22 Admin allowed order operation -> ALLOW', true);
+  } catch (e) {
+    reportTest('O.22 Admin allowed order operation -> ALLOW', false);
+  }
+
+  // O.23 Admin cannot bypass ownership immutability accidentally -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_for_admin_immutability').update({
+      customerId: 'reassigned_customer',
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_for_admin_immutability').update({
+      shopId: 'reassigned_shop',
+    }));
+    reportTest('O.23 Admin cannot bypass ownership immutability accidentally -> DENY', true);
+  } catch (e) {
+    reportTest('O.23 Admin cannot bypass ownership immutability accidentally -> DENY', false);
+  }
+
+  // O.24 Non-admin cannot perform admin-only order operation -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      adminNote: 'Customer attempted write to adminNote',
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      adminNote: 'Shopkeeper attempted write to adminNote',
+    }));
+    reportTest('O.24 Non-admin cannot perform admin-only order operation -> DENY', true);
+  } catch (e) {
+    reportTest('O.24 Non-admin cannot perform admin-only order operation -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.3: Query Isolation & Direct Read Tests (O.25 - O.28) ---');
+
+  // O.25 Customer order query returns/permits only own tenant
+  try {
+    await assertSucceeds(customerDb.collection('orders').where('customerId', '==', 'customer_a').get());
+    await assertFails(customerDb.collection('orders').where('customerId', '==', 'customer_b').get());
+    await assertFails(customerDb.collection('orders').get());
+    reportTest('O.25 Customer order query returns/permits only own tenant -> ALLOW own, DENY foreign/unfiltered', true);
+  } catch (e) {
+    reportTest('O.25 Customer order query returns/permits only own tenant -> ALLOW own, DENY foreign/unfiltered', false);
+  }
+
+  // O.26 Shopkeeper order query returns/permits only own shop
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').where('shopId', '==', 'shop_a').get());
+    await assertFails(shopkeeperADb.collection('orders').where('shopId', '==', 'shop_b').get());
+    await assertFails(shopkeeperADb.collection('orders').get());
+    reportTest('O.26 Shopkeeper order query returns/permits only own shop -> ALLOW own, DENY foreign/unfiltered', true);
+  } catch (e) {
+    reportTest('O.26 Shopkeeper order query returns/permits only own shop -> ALLOW own, DENY foreign/unfiltered', false);
+  }
+
+  // O.27 Cross-customer direct document read -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_b_shop_b').get());
+    reportTest('O.27 Cross-customer direct document read -> DENY', true);
+  } catch (e) {
+    reportTest('O.27 Cross-customer direct document read -> DENY', false);
+  }
+
+  // O.28 Cross-shop direct document read -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_b_shop_b').get());
+    reportTest('O.28 Cross-shop direct document read -> DENY', true);
+  } catch (e) {
+    reportTest('O.28 Cross-shop direct document read -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.3: Order Deletion Policy Tests (O.29 - O.30) ---');
+
+  // O.29 Unauthorized order deletion -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_delete_target').delete());
+    await assertFails(shopkeeperADb.collection('orders').doc('order_delete_target').delete());
+    await assertFails(unauthDb.collection('orders').doc('order_delete_target').delete());
+    reportTest('O.29 Unauthorized order deletion -> DENY', true);
+  } catch (e) {
+    reportTest('O.29 Unauthorized order deletion -> DENY', false);
+  }
+
+  // O.30 Chosen admin/deletion policy is explicitly tested -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_delete_target').delete());
+    reportTest('O.30 Chosen admin/deletion policy is explicitly tested (Direct deletion DENIED) -> DENY', true);
+  } catch (e) {
+    reportTest('O.30 Chosen admin/deletion policy is explicitly tested (Direct deletion DENIED) -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.3: Additional Edge Invariants Tests (O.31 - O.35) ---');
+
+  // O.31 Customer cancels own placed order -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('orders').doc('order_cust_a_for_cancel').update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('O.31 Customer cancels own placed order -> ALLOW', true);
+  } catch (e) {
+    reportTest('O.31 Customer cancels own placed order -> ALLOW', false);
+  }
+
+  // O.32 Customer creates order without shopId -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_no_shop').set({
+      orderId: 'order_no_shop',
+      customerId: 'customer_a',
+      status: 'placed',
+      totalAmount: 100,
+    }));
+    reportTest('O.32 Customer creates order without shopId -> DENY', true);
+  } catch (e) {
+    reportTest('O.32 Customer creates order without shopId -> DENY', false);
+  }
+
+  // O.33 Customer creates order with empty shopId -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_empty_shop').set({
+      orderId: 'order_empty_shop',
+      customerId: 'customer_a',
+      shopId: '',
+      status: 'placed',
+      totalAmount: 100,
+    }));
+    reportTest('O.33 Customer creates order with empty shopId -> DENY', true);
+  } catch (e) {
+    reportTest('O.33 Customer creates order with empty shopId -> DENY', false);
+  }
+
+  // O.34 Customer creates order with initial status != placed -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_bad_status').set({
+      orderId: 'order_bad_status',
+      customerId: 'customer_a',
+      shopId: 'shop_a',
+      status: 'delivered',
+      totalAmount: 100,
+    }));
+    reportTest('O.34 Customer creates order with initial status != placed -> DENY', true);
+  } catch (e) {
+    reportTest('O.34 Customer creates order with initial status != placed -> DENY', false);
+  }
+
+  // O.35 Shopkeeper marks order delivered with delivery person details -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_for_sk_deliver').update({
+      status: 'delivered',
+      deliveredAt: new Date(),
+      deliveryPersonId: 'delivery_boy_1',
+      deliveryPersonName: 'Ramesh',
+      updatedAt: new Date(),
+    }));
+    reportTest('O.35 Shopkeeper marks order delivered with delivery person details -> ALLOW', true);
+  } catch (e) {
+    reportTest('O.35 Shopkeeper marks order delivered with delivery person details -> ALLOW', false);
   }
 
   console.log('\n=================================================================');
