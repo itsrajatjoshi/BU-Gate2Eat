@@ -3353,6 +3353,429 @@ async function runRulesSecuritySuite() {
     reportTest('Crt.26 Anonymous menu item create -> DENY', false);
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // CHECKPOINT 3.6: RULES TESTING & SECURITY REGRESSION GATE (Gate.1 - Gate.50)
+  // ══════════════════════════════════════════════════════════════════════════
+  console.log('\n--- Checkpoint 3.6: Rules Testing & Security Regression Gate (Gate.1 - Gate.50) ---');
+
+  // ── 1. Universal Default-Deny Fallthrough (Gate.1 - Gate.12) ──
+  // Gate.1: Anonymous read unknown collection -> DENY
+  try {
+    await assertFails(unauthDb.collection('unknownCollection').doc('doc1').get());
+    reportTest('Gate.1 Anonymous read unknown collection -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.1 Anonymous read unknown collection -> DENY', false);
+  }
+
+  // Gate.2: Anonymous write unknown collection -> DENY
+  try {
+    await assertFails(unauthDb.collection('unknownCollection').doc('doc1').set({ foo: 'bar' }));
+    reportTest('Gate.2 Anonymous write unknown collection -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.2 Anonymous write unknown collection -> DENY', false);
+  }
+
+  // Gate.3: Customer read unknown collection -> DENY
+  try {
+    await assertFails(customerDb.collection('unknownCollection').doc('doc1').get());
+    reportTest('Gate.3 Customer read unknown collection -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.3 Customer read unknown collection -> DENY', false);
+  }
+
+  // Gate.4: Customer write unknown collection -> DENY
+  try {
+    await assertFails(customerDb.collection('unknownCollection').doc('doc1').set({ foo: 'bar' }));
+    reportTest('Gate.4 Customer write unknown collection -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.4 Customer write unknown collection -> DENY', false);
+  }
+
+  // Gate.5: Shopkeeper read unknown collection -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('unknownCollection').doc('doc1').get());
+    reportTest('Gate.5 Shopkeeper read unknown collection -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.5 Shopkeeper read unknown collection -> DENY', false);
+  }
+
+  // Gate.6: Shopkeeper write unknown collection -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('unknownCollection').doc('doc1').set({ foo: 'bar' }));
+    reportTest('Gate.6 Shopkeeper write unknown collection -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.6 Shopkeeper write unknown collection -> DENY', false);
+  }
+
+  // Gate.7: Admin read unknown collection -> DENY
+  try {
+    await assertFails(adminDb.collection('unknownCollection').doc('doc1').get());
+    reportTest('Gate.7 Admin read unknown collection -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.7 Admin read unknown collection -> DENY', false);
+  }
+
+  // Gate.8: Admin write unknown collection -> DENY
+  try {
+    await assertFails(adminDb.collection('unknownCollection').doc('doc1').set({ foo: 'bar' }));
+    reportTest('Gate.8 Admin write unknown collection -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.8 Admin write unknown collection -> DENY', false);
+  }
+
+  // Gate.9: Anonymous access random nested path -> DENY
+  try {
+    await assertFails(unauthDb.collection('randomNested').doc('parent').collection('child').doc('doc1').get());
+    reportTest('Gate.9 Anonymous access random nested path -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.9 Anonymous access random nested path -> DENY', false);
+  }
+
+  // Gate.10: Customer access random nested path -> DENY
+  try {
+    await assertFails(customerDb.collection('randomNested').doc('parent').collection('child').doc('doc1').set({ x: 1 }));
+    reportTest('Gate.10 Customer access random nested path -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.10 Customer access random nested path -> DENY', false);
+  }
+
+  // Gate.11: Shopkeeper access random nested path -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('randomNested').doc('parent').collection('child').doc('doc1').get());
+    reportTest('Gate.11 Shopkeeper access random nested path -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.11 Shopkeeper access random nested path -> DENY', false);
+  }
+
+  // Gate.12: Admin access random nested path -> DENY
+  try {
+    await assertFails(adminDb.collection('randomNested').doc('parent').collection('child').doc('doc1').set({ x: 1 }));
+    reportTest('Gate.12 Admin access random nested path -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.12 Admin access random nested path -> DENY', false);
+  }
+
+  // ── 2. Query Safety Matrix (Rules are not filters) (Gate.13 - Gate.26) ──
+  // Gate.13: Customer A query own orders -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('orders').where('customerId', '==', 'customer_a').get());
+    reportTest('Gate.13 Customer A query own orders -> ALLOW', true);
+  } catch (e) {
+    reportTest('Gate.13 Customer A query own orders -> ALLOW', false);
+  }
+
+  // Gate.14: Customer A unfiltered orders query -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').get());
+    reportTest('Gate.14 Customer A unfiltered orders query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.14 Customer A unfiltered orders query -> DENY', false);
+  }
+
+  // Gate.15: Customer A cross-customer orders query -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').where('customerId', '==', 'customer_b').get());
+    reportTest('Gate.15 Customer A cross-customer orders query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.15 Customer A cross-customer orders query -> DENY', false);
+  }
+
+  // Gate.16: Shopkeeper A query own-shop orders -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').where('shopId', '==', 'shop_a').get());
+    reportTest('Gate.16 Shopkeeper A query own-shop orders -> ALLOW', true);
+  } catch (e) {
+    reportTest('Gate.16 Shopkeeper A query own-shop orders -> ALLOW', false);
+  }
+
+  // Gate.17: Shopkeeper A unfiltered orders query -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').get());
+    reportTest('Gate.17 Shopkeeper A unfiltered orders query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.17 Shopkeeper A unfiltered orders query -> DENY', false);
+  }
+
+  // Gate.18: Shopkeeper A cross-shop orders query -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').where('shopId', '==', 'shop_b').get());
+    reportTest('Gate.18 Shopkeeper A cross-shop orders query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.18 Shopkeeper A cross-shop orders query -> DENY', false);
+  }
+
+  // Gate.19: Customer A unfiltered supportQueries query -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').get());
+    reportTest('Gate.19 Customer A unfiltered supportQueries query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.19 Customer A unfiltered supportQueries query -> DENY', false);
+  }
+
+  // Gate.20: Customer A foreign-customer supportQueries query -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').where('customerId', '==', 'customer_b').get());
+    reportTest('Gate.20 Customer A foreign-customer supportQueries query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.20 Customer A foreign-customer supportQueries query -> DENY', false);
+  }
+
+  // Gate.21: Shopkeeper query on supportQueries -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('supportQueries').get());
+    reportTest('Gate.21 Shopkeeper query on supportQueries -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.21 Shopkeeper query on supportQueries -> DENY', false);
+  }
+
+  // Gate.22: Admin query on supportQueries -> ALLOW (platform administration)
+  try {
+    await assertSucceeds(adminDb.collection('supportQueries').get());
+    reportTest('Gate.22 Admin query on supportQueries -> ALLOW', true);
+  } catch (e) {
+    reportTest('Gate.22 Admin query on supportQueries -> ALLOW', false);
+  }
+
+  // Gate.23: Customer A unfiltered deviceTokens query -> DENY (global enumeration protection)
+  try {
+    await assertFails(customerDb.collection('deviceTokens').get());
+    reportTest('Gate.23 Customer A unfiltered deviceTokens query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.23 Customer A unfiltered deviceTokens query -> DENY', false);
+  }
+
+  // Gate.24: Customer A cross-customer deviceTokens query -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').where('uid', '==', 'customer_b').get());
+    reportTest('Gate.24 Customer A cross-customer deviceTokens query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.24 Customer A cross-customer deviceTokens query -> DENY', false);
+  }
+
+  // Gate.25: Shopkeeper A unfiltered shopStats query -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shopStats').get());
+    reportTest('Gate.25 Shopkeeper A unfiltered shopStats query -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.25 Shopkeeper A unfiltered shopStats query -> DENY', false);
+  }
+
+  // Gate.26: Admin query on deviceTokens -> ALLOW (platform audit)
+  try {
+    await assertSucceeds(adminDb.collection('deviceTokens').get());
+    reportTest('Gate.26 Admin query on deviceTokens -> ALLOW', true);
+  } catch (e) {
+    reportTest('Gate.26 Admin query on deviceTokens -> ALLOW', false);
+  }
+
+  // ── 3. Server-Only Collections Complete Regression (Gate.27 - Gate.38) ──
+  // Gate.27: Anonymous read server-only _authChallenges -> DENY
+  try {
+    await assertFails(unauthDb.collection('_authChallenges').doc('challenge_1').get());
+    reportTest('Gate.27 Anonymous read server-only _authChallenges -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.27 Anonymous read server-only _authChallenges -> DENY', false);
+  }
+
+  // Gate.28: Customer query server-only _authChallenges -> DENY
+  try {
+    await assertFails(customerDb.collection('_authChallenges').get());
+    reportTest('Gate.28 Customer query server-only _authChallenges -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.28 Customer query server-only _authChallenges -> DENY', false);
+  }
+
+  // Gate.29: Shopkeeper write server-only _authChallenges -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('_authChallenges').doc('hack_chal').set({ otp: '123456' }));
+    reportTest('Gate.29 Shopkeeper write server-only _authChallenges -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.29 Shopkeeper write server-only _authChallenges -> DENY', false);
+  }
+
+  // Gate.30: Admin write server-only _authChallenges -> DENY (Client SDK blocked)
+  try {
+    await assertFails(adminDb.collection('_authChallenges').doc('admin_chal').set({ otp: '123456' }));
+    reportTest('Gate.30 Admin write server-only _authChallenges -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.30 Admin write server-only _authChallenges -> DENY', false);
+  }
+
+  // Gate.31: Anonymous read server-only auditLogs -> DENY
+  try {
+    await assertFails(unauthDb.collection('auditLogs').doc('audit_1').get());
+    reportTest('Gate.31 Anonymous read server-only auditLogs -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.31 Anonymous read server-only auditLogs -> DENY', false);
+  }
+
+  // Gate.32: Customer query server-only auditLogs -> DENY
+  try {
+    await assertFails(customerDb.collection('auditLogs').get());
+    reportTest('Gate.32 Customer query server-only auditLogs -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.32 Customer query server-only auditLogs -> DENY', false);
+  }
+
+  // Gate.33: Shopkeeper write server-only auditLogs -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('auditLogs').doc('hack_log').set({ event: 'tamper' }));
+    reportTest('Gate.33 Shopkeeper write server-only auditLogs -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.33 Shopkeeper write server-only auditLogs -> DENY', false);
+  }
+
+  // Gate.34: Admin write server-only auditLogs -> DENY (Client SDK blocked)
+  try {
+    await assertFails(adminDb.collection('auditLogs').doc('admin_log').set({ event: 'manual' }));
+    reportTest('Gate.34 Admin write server-only auditLogs -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.34 Admin write server-only auditLogs -> DENY', false);
+  }
+
+  // Gate.35: Customer read server-only internal_metrics -> DENY
+  try {
+    await assertFails(customerDb.collection('internal_metrics').doc('metric_1').get());
+    reportTest('Gate.35 Customer read server-only internal_metrics -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.35 Customer read server-only internal_metrics -> DENY', false);
+  }
+
+  // Gate.36: Admin write server-only internal_metrics -> DENY (Client SDK blocked)
+  try {
+    await assertFails(adminDb.collection('internal_metrics').doc('metric_hack').set({ value: 100 }));
+    reportTest('Gate.36 Admin write server-only internal_metrics -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.36 Admin write server-only internal_metrics -> DENY', false);
+  }
+
+  // Gate.37: Shopkeeper read server-only adminSettings -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('adminSettings').doc('system').get());
+    reportTest('Gate.37 Shopkeeper read server-only adminSettings -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.37 Shopkeeper read server-only adminSettings -> DENY', false);
+  }
+
+  // Gate.38: Admin write server-only adminSettings -> DENY (Client SDK blocked)
+  try {
+    await assertFails(adminDb.collection('adminSettings').doc('system').set({ maintenanceMode: true }));
+    reportTest('Gate.38 Admin write server-only adminSettings -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.38 Admin write server-only adminSettings -> DENY', false);
+  }
+
+  // ── 4. Cross-Role, Deletion & Atomic Field Edge Cases (Gate.39 - Gate.50) ──
+  // Gate.39: Customer attempts to delete own order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').delete());
+    reportTest('Gate.39 Customer attempts to delete own order -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.39 Customer attempts to delete own order -> DENY', false);
+  }
+
+  // Gate.40: Shopkeeper attempts to delete shop order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').delete());
+    reportTest('Gate.40 Shopkeeper attempts to delete shop order -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.40 Shopkeeper attempts to delete shop order -> DENY', false);
+  }
+
+  // Gate.41: Admin attempts to delete order -> DENY (allow delete: if false)
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_cust_a_shop_a').delete());
+    reportTest('Gate.41 Admin attempts to delete order -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.41 Admin attempts to delete order -> DENY', false);
+  }
+
+  // Gate.42: Customer attempts to delete supportQuery -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').delete());
+    reportTest('Gate.42 Customer attempts to delete supportQuery -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.42 Customer attempts to delete supportQuery -> DENY', false);
+  }
+
+  // Gate.43: Customer attempts to delete profile doc -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_a').delete());
+    reportTest('Gate.43 Customer attempts to delete profile doc -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.43 Customer attempts to delete profile doc -> DENY', false);
+  }
+
+  // Gate.44: Admin attempts to delete profile doc -> DENY (allow delete: if false)
+  try {
+    await assertFails(adminDb.collection('users').doc('customer_a').delete());
+    reportTest('Gate.44 Admin attempts to delete profile doc -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.44 Admin attempts to delete profile doc -> DENY', false);
+  }
+
+  // Gate.45: User profile atomic mixed: valid displayName + forbidden role -> DENY
+  try {
+    await assertFails(customerDb.collection('profiles').doc('customer_a').update({
+      displayName: 'New Name',
+      role: 'admin',
+    }));
+    reportTest('Gate.45 User profile atomic mixed: valid displayName + forbidden role -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.45 User profile atomic mixed: valid displayName + forbidden role -> DENY', false);
+  }
+
+  // Gate.46: User profile atomic mixed: valid bio + forbidden phone -> DENY
+  try {
+    await assertFails(customerDb.collection('profiles').doc('customer_a').update({
+      bio: 'New Bio',
+      phone: '+919999999999',
+    }));
+    reportTest('Gate.46 User profile atomic mixed: valid bio + forbidden phone -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.46 User profile atomic mixed: valid bio + forbidden phone -> DENY', false);
+  }
+
+  // Gate.47: Device token atomic mixed: valid platform + forbidden token -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      platform: 'web',
+      token: 'hacked_token',
+    }));
+    reportTest('Gate.47 Device token atomic mixed: valid platform + forbidden token -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.47 Device token atomic mixed: valid platform + forbidden token -> DENY', false);
+  }
+
+  // Gate.48: Device token atomic mixed: valid updatedAt + forbidden role -> DENY
+  try {
+    await assertFails(customerDb.collection('deviceTokens').doc('token_cust_a').update({
+      updatedAt: new Date(),
+      role: 'admin',
+    }));
+    reportTest('Gate.48 Device token atomic mixed: valid updatedAt + forbidden role -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.48 Device token atomic mixed: valid updatedAt + forbidden role -> DENY', false);
+  }
+
+  // Gate.49: Customer attempts to update shop configuration -> DENY
+  try {
+    await assertFails(customerDb.collection('shops').doc('shop_a').update({
+      isOpen: false,
+    }));
+    reportTest('Gate.49 Customer attempts to update shop configuration -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.49 Customer attempts to update shop configuration -> DENY', false);
+  }
+
+  // Gate.50: Customer attempts to delete category -> DENY
+  try {
+    await assertFails(customerDb.collection('shops').doc('shop_a').collection('categories').doc('cat_a1').delete());
+    reportTest('Gate.50 Customer attempts to delete category -> DENY', true);
+  } catch (e) {
+    reportTest('Gate.50 Customer attempts to delete category -> DENY', false);
+  }
+
   console.log('\n=================================================================');
   console.log(`  RESULTS: ${passCount} / ${totalTests} TESTS PASSED  `);
   console.log('=================================================================\n');
