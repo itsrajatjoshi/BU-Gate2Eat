@@ -3467,6 +3467,106 @@ async function runTests() {
     pass("Test 82: Security boundary preservation verified: Identity, pricing, validation, and idempotency all hold");
   }
 
+  // ─── Test 83: Client Cannot Enable allowMissingIdempotencyKey via Input ──────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 1. Client attempts to inject allowMissingIdempotencyKey in payload
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        allowMissingIdempotencyKey: true,
+      }, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes('Prohibited security/internal field detected: "allowMissingIdempotencyKey"'));
+        return true;
+      }
+    );
+
+    // 2. Client attempts to inject options in payload
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        options: { allowMissingIdempotencyKey: true },
+      }, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes('Prohibited security/internal field detected: "options"'));
+        return true;
+      }
+    );
+
+    // 3. Omitting idempotencyKey without internal options flag fails with invalid-argument
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: fixedNow }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes("idempotencyKey is required"));
+        return true;
+      }
+    );
+
+    pass("Test 83: Client cannot enable allowMissingIdempotencyKey; required key strictly enforced");
+  }
+
+  // ─── Test 84: Same Cart Distinct Purchase Attempts Produce Distinct Orders (No False Deduplication) ───
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const baseTime = fixedNow.getTime();
+
+    const cartPayload = {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 2 }],
+      specialInstructions: "Extra spicy",
+      deliveryNote: "Gate 3",
+      orderMethod: "app",
+    };
+
+    // Purchase Attempt 1 with cryptographically unique key 1
+    const key1 = "idem_attempt_1_abc12345";
+    const res1 = await processServerAuthoritativeOrder(db, authContext, {
+      ...cartPayload,
+      idempotencyKey: key1,
+    }, { now: new Date(baseTime) });
+
+    assert(res1.success);
+    assert.strictEqual(res1.isIdempotentReplay, undefined);
+    const orderId1 = res1.orderId;
+
+    // Purchase Attempt 2 with same user, same cart, same options, but distinct key 2
+    const key2 = "idem_attempt_2_xyz98765";
+    const res2 = await processServerAuthoritativeOrder(db, authContext, {
+      ...cartPayload,
+      idempotencyKey: key2,
+    }, { now: new Date(baseTime + 1000) });
+
+    assert(res2.success);
+    assert.strictEqual(res2.isIdempotentReplay, undefined);
+    const orderId2 = res2.orderId;
+
+    // Must be two distinct orders!
+    assert.notStrictEqual(orderId1, orderId2, "Distinct purchase attempts must produce distinct orders");
+    assert(db.data.has(`orders/${orderId1}`), "Order 1 must exist in Firestore");
+    assert(db.data.has(`orders/${orderId2}`), "Order 2 must exist in Firestore");
+
+    // Both idempotency records must exist independently
+    const docId1 = computeIdempotencyDocId("cust_verified", key1);
+    const docId2 = computeIdempotencyDocId("cust_verified", key2);
+    assert.notStrictEqual(docId1, docId2);
+    assert.strictEqual(db.data.get(`idempotency/${docId1}`).orderId, orderId1);
+    assert.strictEqual(db.data.get(`idempotency/${docId2}`).orderId, orderId2);
+
+    pass("Test 84: Same-cart distinct purchase attempts produce two distinct orders without false deduplication");
+  }
+
   console.log("==================================================");
   console.log(`ALL ${passed}/${passed} SERVER-AUTHORITATIVE TESTS PASSED!`);
   console.log("==================================================");

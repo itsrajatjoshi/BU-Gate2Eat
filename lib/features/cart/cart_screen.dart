@@ -18,6 +18,7 @@ import '../../models/cart_state_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../models/order_model.dart';
 import '../../models/shop_model.dart';
+import '../../services/order_service.dart';
 import '../../services/whatsapp_service.dart';
 import '../shop/shop_detail_screen.dart';
 import 'cart_provider.dart';
@@ -36,6 +37,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   bool _isDialogOpen = false;
   String? _pendingOrderId;
   int? _pendingCartHash;
+  String? _pendingIdempotencyKey;
 
   @override
   void dispose() {
@@ -539,10 +541,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           Object.hash(shopId, cartItems.length, grandTotal);
       if (_pendingCartHash != currentCartHash) {
         _pendingOrderId = null;
+        _pendingIdempotencyKey = null;
       }
       final orderId = _pendingOrderId ?? _generateOrderId();
       _pendingOrderId = orderId;
       _pendingCartHash = currentCartHash;
+      final idempotencyKey = _pendingIdempotencyKey ?? OrderService.generateSecureIdempotencyKey();
+      _pendingIdempotencyKey = idempotencyKey;
 
       final currentStoragePhone =
           AppAuthRoles.normalizeCleanPhone(localStorage.userPhone);
@@ -604,7 +609,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       );
 
       // 3. Create real Firestore order document
-      await ref.read(orderServiceProvider).createOrder(newOrder);
+      await ref.read(orderServiceProvider).createOrder(
+            newOrder,
+            idempotencyKey: idempotencyKey,
+          );
 
       // Non-blocking notification token sync safety net (failsafe)
       try {
@@ -614,6 +622,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       // Reset idempotency state on confirmed creation
       _pendingOrderId = null;
       _pendingCartHash = null;
+      _pendingIdempotencyKey = null;
 
       // 4. Temporary UI bridge: update local dummy state so existing screens reflect it
       ref.read(dummyOrdersProvider.notifier).addOrder(newOrder);

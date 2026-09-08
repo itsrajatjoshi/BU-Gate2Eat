@@ -2,6 +2,8 @@
 // Firestore Order Service & Repository Layer (Phase 3 — Part 3.1)
 // Handles order creation, retrieval, real-time streams, status transitions, and lifecycle validation.
 
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -175,6 +177,20 @@ class OrderService {
 
   /// Creates a new order document via the server-authoritative creation path.
   /// Validates customer identity against authenticated session.
+  static final Random _secureRandom = Random.secure();
+
+  /// Generates a cryptographically random, collision-resistant idempotency key
+  /// conforming strictly to the server format: 8-128 chars of [a-zA-Z0-9_-].
+  /// Combines millisecond timestamp with 128 bits of CSPRNG entropy.
+  static String generateSecureIdempotencyKey() {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final bytes = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return 'idem_${nowMs}_$hex';
+  }
+
+  /// Creates a new order document via the server-authoritative creation path.
+  /// Validates customer identity against authenticated session.
   /// When testing delegate is supplied, delegates directly.
   /// Sets [acceptDeadline] to createdAt + 20 minutes.
   /// NOTE: Does NOT increment any shopStats counter yet — pre-accept cancel deletes the order completely.
@@ -194,14 +210,9 @@ class OrderService {
       }
 
       final now = customNow ?? DateTime.now();
-      final safeUid = (authUid != null && authUid.isNotEmpty)
-          ? authUid.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')
-          : 'anon';
-      final defaultKey = 'idem_${now.millisecondsSinceEpoch}_${safeUid}_${order.items.length}';
-      final rawKey = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+      final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
           ? idempotencyKey.trim()
-          : defaultKey;
-      final key = rawKey.length > 128 ? rawKey.substring(0, 128) : rawKey;
+          : generateSecureIdempotencyKey();
 
       // 1. If testing delegate is provided, execute it directly (Server-Authoritative)
       // Client does NOT provide orderId — order identity is generated authoritatively by the backend.

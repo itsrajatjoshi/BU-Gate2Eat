@@ -72,6 +72,8 @@ const PROHIBITED_SECURITY_KEYS = new Set([
   "serverTotal",
   "shopId2",
   "orderId",
+  "allowMissingIdempotencyKey",
+  "options",
 ]);
 
 /**

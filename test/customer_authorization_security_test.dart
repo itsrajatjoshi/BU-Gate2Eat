@@ -708,5 +708,98 @@ void main() {
       expect(receivedPayload!['items'], isA<List<dynamic>>());
       expect((receivedPayload!['items'] as List<dynamic>).length, 1);
     });
+
+    // ─── 32. Secure Idempotency Key Generation & Uniqueness ─────────────────────
+    test('32. OrderService.generateSecureIdempotencyKey produces cryptographically unique keys conforming to server schema', () {
+      final keyRegex = RegExp(r'^[a-zA-Z0-9_-]{8,128}$');
+      final keys = <String>{};
+
+      for (var i = 0; i < 1000; i++) {
+        final key = OrderService.generateSecureIdempotencyKey();
+        expect(key.startsWith('idem_'), isTrue);
+        expect(key.length, greaterThanOrEqualTo(8));
+        expect(key.length, lessThanOrEqualTo(128));
+        expect(keyRegex.hasMatch(key), isTrue, reason: 'Key "$key" must match server regex');
+        keys.add(key);
+      }
+
+      // Zero collisions across 1,000 rapid iterations
+      expect(keys.length, equals(1000), reason: 'All 1,000 generated keys must be unique');
+    });
+
+    // ─── 33. Same Cart Distinct Purchase Attempts Produce Distinct Keys ─────────
+    test('33. Distinct purchase attempts with identical user and cart generate distinct keys', () async {
+      final keys = <String>[];
+      final service = OrderService(
+        currentUserIdResolver: () => 'UID_A',
+        orderCreatorForTesting: (payload) async {
+          keys.add(payload['idempotencyKey'] as String);
+          return {'success': true, 'orderId': 'ORD_TEST_1'};
+        },
+      );
+
+      final order = AppOrder(
+        orderId: 'ORD_TEST_CART',
+        shopId: 'shop_001',
+        shopName: 'Shop Name',
+        customerId: 'UID_A',
+        customerName: 'Customer A',
+        customerPhone: '9876543210',
+        items: const [
+          OrderItem(menuItemId: 'item_1', name: 'Item 1', price: 100, quantity: 2),
+        ],
+        totalAmount: 200,
+        createdAt: DateTime.now(),
+      );
+
+      // Attempt 1
+      await service.createOrder(order);
+
+      // Attempt 2 (same cart, same customer, distinct attempt)
+      await service.createOrder(order);
+
+      expect(keys.length, equals(2));
+      expect(keys[0], isNot(equals(keys[1])), reason: 'Distinct purchase attempts must generate distinct keys');
+    });
+
+    // ─── 34. Retry of Same Purchase Attempt Reuses Key ──────────────────────────
+    test('34. Retry of same purchase attempt reuses exact same idempotency key', () async {
+      final keys = <String>[];
+      final service = OrderService(
+        currentUserIdResolver: () => 'UID_A',
+        orderCreatorForTesting: (payload) async {
+          keys.add(payload['idempotencyKey'] as String);
+          return {'success': true, 'orderId': 'ORD_TEST_RETRY'};
+        },
+      );
+
+      final order = AppOrder(
+        orderId: 'ORD_TEST_RETRY',
+        shopId: 'shop_001',
+        shopName: 'Shop Name',
+        customerId: 'UID_A',
+        customerName: 'Customer A',
+        customerPhone: '9876543210',
+        items: const [
+          OrderItem(menuItemId: 'item_1', name: 'Item 1', price: 100, quantity: 1),
+        ],
+        totalAmount: 100,
+        createdAt: DateTime.now(),
+      );
+
+      // Explicit attempt key (e.g. from CartScreen _pendingIdempotencyKey)
+      final attemptKey = OrderService.generateSecureIdempotencyKey();
+
+      // Initial attempt
+      await service.createOrder(order, idempotencyKey: attemptKey);
+
+      // Network retry of the same attempt
+      await service.createOrder(order, idempotencyKey: attemptKey);
+
+      expect(keys.length, equals(2));
+      expect(keys[0], equals(attemptKey));
+      expect(keys[1], equals(attemptKey));
+      expect(keys[0], equals(keys[1]), reason: 'Retry must reuse identical idempotency key');
+    });
   });
 }
