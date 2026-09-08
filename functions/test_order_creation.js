@@ -27,6 +27,15 @@ const {
   MAX_TOTAL_QUANTITY,
   MAX_ITEM_PRICE,
   MAX_ORDER_GRAND_TOTAL,
+  MAX_OPTIONS_PER_ITEM,
+  MAX_CUSTOMER_NAME_LENGTH,
+  MAX_CUSTOMER_PHONE_LENGTH,
+  MAX_SPECIAL_INSTRUCTIONS_LENGTH,
+  MAX_DELIVERY_NOTE_LENGTH,
+  ID_REGEX,
+  CONTROL_CHAR_REGEX,
+  PROHIBITED_SECURITY_KEYS,
+  ALLOWED_ORDER_METHODS,
 } = require("./order_creation");
 
 // ─── Lightweight Mock Firestore for Offline Verification ────────────────────
@@ -1843,8 +1852,699 @@ async function runTests() {
     pass("Stored order satisfies all 4 mathematical consistency invariants");
   }
 
+  // ===========================================================================
+  // PHASE 4.3 — REQUEST SHAPE, INPUT VALIDATION & SCHEMA HARDENING TEST SUITE
+  // ===========================================================================
+
+  // ─── Test 55: Request Body Shape & Primitive Type Confusion Matrix ──────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    const invalidBodies = [
+      null,
+      undefined,
+      [],
+      [1, 2, 3],
+      "invalid string payload",
+      12345,
+      true,
+      false,
+    ];
+
+    for (const body of invalidBodies) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, body, { now: fixedNow }),
+        (err) => err.code === "invalid-argument" && err.message.includes("Invalid request payload: expected an object")
+      );
+    }
+    pass("Test 55: Request body shape matrix rejects non-objects, arrays, primitives, and null");
+  }
+
+  // ─── Test 56: Prohibited Security & Identity Fields Matrix (Category A Rejection) ──
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    const prohibitedKeys = [
+      "role",
+      "admin",
+      "isAdmin",
+      "isShopkeeper",
+      "isDeliveryPerson",
+      "ownerUid",
+      "claims",
+      "internalFlags",
+      "securityFlags",
+      "serverTotal",
+      "shopId2",
+    ];
+
+    // Sub-test A: Root-level prohibited security key injection
+    for (const key of prohibitedKeys) {
+      const hostilePayload = {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        [key]: true,
+      };
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, hostilePayload, { now: fixedNow }),
+        (err) => err.code === "invalid-argument" && err.message.includes(`Prohibited security/internal field detected: "${key}"`)
+      );
+    }
+
+    // Sub-test B: Item-level prohibited security key injection
+    for (const key of prohibitedKeys) {
+      const hostileItemPayload = {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1, [key]: "evil_value" }],
+      };
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, hostileItemPayload, { now: fixedNow }),
+        (err) => err.code === "invalid-argument" && err.message.includes(`Prohibited field "${key}" detected in item`)
+      );
+    }
+
+    // Sub-test C: Option-level prohibited security key injection
+    for (const key of prohibitedKeys) {
+      const hostileOptPayload = {
+        shopId: "shop_active",
+        items: [
+          {
+            menuItemId: "item_coffee",
+            quantity: 1,
+            selectedOptions: [{ groupId: "grp_flavour", optionId: "opt_vanilla", [key]: "evil_value" }],
+          },
+        ],
+      };
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, hostileOptPayload, { now: fixedNow }),
+        (err) => err.code === "invalid-argument" && err.message.includes(`Prohibited field "${key}" detected in option`)
+      );
+    }
+
+    pass("Test 56: Prohibited security & identity fields strictly rejected across root, item, and option levels");
+  }
+
+  // ─── Test 57: ID Syntactic Validation Matrix (shopId, menuItemId, groupId, optionId) ──
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 1. shopId invalid formats
+    const badShopIds = [
+      "",
+      "   ",
+      123,
+      null,
+      {},
+      [],
+      "../traversal",
+      "shop/with/slashes",
+      "shop@123",
+      "shop with space",
+      "a".repeat(65), // > 64 chars
+    ];
+
+    for (const badShop of badShopIds) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, {
+          shopId: badShop,
+          items: [{ menuItemId: "item_momos", quantity: 1 }],
+        }, { now: fixedNow }),
+        (err) => err.code === "invalid-argument"
+      );
+    }
+
+    // 2. menuItemId invalid formats
+    const badMenuItemIds = [
+      "",
+      "   ",
+      123,
+      null,
+      {},
+      [],
+      "../../etc/passwd",
+      "item/with/slashes",
+      "item*deluxe",
+      "item with space",
+      "m".repeat(65),
+    ];
+
+    for (const badItem of badMenuItemIds) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, {
+          shopId: "shop_active",
+          items: [{ menuItemId: badItem, quantity: 1 }],
+        }, { now: fixedNow }),
+        (err) => err.code === "invalid-argument"
+      );
+    }
+
+    // 3. groupId and optionId invalid formats
+    const badGroupIds = ["", "  ", null, 123, "grp/evil", "g".repeat(65)];
+    for (const badG of badGroupIds) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, {
+          shopId: "shop_active",
+          items: [{
+            menuItemId: "item_coffee",
+            quantity: 1,
+            selectedOptions: [{ groupId: badG, optionId: "opt_vanilla" }],
+          }],
+        }, { now: fixedNow }),
+        (err) => err.code === "invalid-argument"
+      );
+    }
+
+    const badOptionIds = ["", "  ", null, 456, "opt/evil", "o".repeat(65)];
+    for (const badO of badOptionIds) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, {
+          shopId: "shop_active",
+          items: [{
+            menuItemId: "item_coffee",
+            quantity: 1,
+            selectedOptions: [{ groupId: "grp_flavour", optionId: badO }],
+          }],
+        }, { now: fixedNow }),
+        (err) => err.code === "invalid-argument"
+      );
+    }
+
+    pass("Test 57: ID syntactic validation matrix strictly rejects malformed IDs across shopId, menuItemId, groupId, optionId");
+  }
+
+  // ─── Test 58: Items Array & Item Structure Matrix ───────────────────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    const invalidItemsPayloads = [
+      null,
+      123,
+      "item_momos",
+      {},
+      true,
+      false,
+      [null],
+      [123],
+      ["string_item"],
+      [{}],
+      [{ menuItemId: "item_momos" }], // missing quantity
+      [{ quantity: 1 }], // missing menuItemId
+    ];
+
+    for (const badItems of invalidItemsPayloads) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, {
+          shopId: "shop_active",
+          items: badItems,
+        }, { now: fixedNow }),
+        (err) => err.code === "invalid-argument"
+      );
+    }
+
+    pass("Test 58: Items array & item structure matrix rejects malformed arrays, non-objects, and missing fields");
+  }
+
+  // ─── Test 59: Nested Option Structural Validation Matrix ────────────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    const invalidOptionsPayloads = [
+      "opt_vanilla", // non-array
+      123,
+      {},
+      true,
+      [null],
+      [123],
+      ["opt_vanilla"],
+      [{}],
+      [{ groupId: "grp_flavour" }], // missing optionId
+      [{ optionId: "opt_vanilla" }], // missing groupId
+    ];
+
+    for (const badOpts of invalidOptionsPayloads) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, {
+          shopId: "shop_active",
+          items: [{
+            menuItemId: "item_coffee",
+            quantity: 1,
+            selectedOptions: badOpts,
+          }],
+        }, { now: fixedNow }),
+        (err) => err.code === "invalid-argument"
+      );
+    }
+
+    // Exceeding MAX_OPTIONS_PER_ITEM (20)
+    const twentyOneOptions = [];
+    for (let i = 1; i <= 21; i++) {
+      twentyOneOptions.push({ groupId: `grp_${i}`, optionId: `opt_${i}` });
+    }
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{
+          menuItemId: "item_coffee",
+          quantity: 1,
+          selectedOptions: twentyOneOptions,
+        }],
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("Too many selectedOptions")
+    );
+
+    pass("Test 59: Nested option structural validation rejects non-arrays, primitives, missing keys, and oversized option sets");
+  }
+
+  // ─── Test 60: User Text Fields Validation & No Silent Truncation (Mandatory Correction 1) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 1. customerName: wrong type, oversized, control characters, null byte
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        customerName: 12345,
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("expected a string")
+    );
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        customerName: null,
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("null is not a valid string")
+    );
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        customerName: "A".repeat(101), // > MAX_CUSTOMER_NAME_LENGTH
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("exceeds maximum allowable length of 100")
+    );
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        customerName: "Alice\x00Smith", // null byte
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("disallowed control characters or null bytes")
+    );
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        customerName: "Alice\x07Smith", // BEL control char
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("disallowed control characters or null bytes")
+    );
+
+    // 2. customerPhone: wrong type, oversized, control characters
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        customerPhone: 9876543210, // number instead of string
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("expected a string")
+    );
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        customerPhone: "1".repeat(21), // > MAX_CUSTOMER_PHONE_LENGTH
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("exceeds maximum allowable length of 20")
+    );
+
+    // 3. specialInstructions: wrong type, oversized, control characters
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        specialInstructions: 999,
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        specialInstructions: "E".repeat(501), // > 500 chars
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("exceeds maximum allowable length of 500")
+    );
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        specialInstructions: "Extra spicy\x00Injection",
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    // 4. deliveryNote: wrong type, oversized, control characters
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        deliveryNote: true,
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        deliveryNote: "D".repeat(201), // > 200 chars
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("exceeds maximum allowable length of 200")
+    );
+
+    // 5. VALID TEXT PRESERVATION (NO SILENT TRUNCATION!)
+    // If input is within limits, it MUST be preserved exactly as-is without .slice() mutation
+    const exact100Name = "A".repeat(100);
+    const exact20Phone = "+91-9876543210-ABC"; // exactly 18 chars <= 20
+    const exact500Instructions = "Please make it extra spicy, add green chutney and oregano. ".repeat(8).slice(0, 500);
+    const exact200DeliveryNote = "Hostel 3, Room 402, Block B, Bennett University, Greater Noida. ".repeat(3).slice(0, 200);
+
+    const validTextRes = await processServerAuthoritativeOrder(db, { uid: "user_unregistered_no_doc" }, {
+      shopId: "shop_active",
+      customerName: exact100Name,
+      customerPhone: exact20Phone,
+      specialInstructions: exact500Instructions,
+      deliveryNote: exact200DeliveryNote,
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: fixedNow });
+
+    assert.strictEqual(validTextRes.order.customerName, exact100Name, "customerName must be preserved exactly as-is");
+    assert.strictEqual(validTextRes.order.customerPhone, exact20Phone, "customerPhone must be preserved exactly as-is");
+    assert.strictEqual(validTextRes.order.specialInstructions, exact500Instructions, "specialInstructions must be preserved exactly as-is");
+    assert.strictEqual(validTextRes.order.deliveryNote, exact200DeliveryNote, "deliveryNote must be preserved exactly as-is");
+
+    pass("Test 60: User text fields strictly validated without silent truncation; invalid types/lengths/controls rejected");
+  }
+
+  // ─── Test 61: Order Placement Method (orderMethod) Validation (Mandatory Correction 2) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 1. All valid supported production values succeed:
+    const validModes = ["app", "whatsapp", "wa", "in_app", "both"];
+    for (const mode of validModes) {
+      const res = await processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        orderMethod: mode,
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: fixedNow });
+
+      if (mode === "whatsapp" || mode === "wa") {
+        assert.strictEqual(res.order.orderMethod, "whatsapp");
+      } else if (mode === "both") {
+        assert.strictEqual(res.order.orderMethod, "both");
+      } else {
+        assert.strictEqual(res.order.orderMethod, "app");
+      }
+    }
+
+    // 2. Omitted orderMethod defaults to "app":
+    const defaultRes = await processServerAuthoritativeOrder(db, authContext, {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: fixedNow });
+    assert.strictEqual(defaultRes.order.orderMethod, "app");
+
+    // 3. Invalid or unknown orderMethod values rejected:
+    const badModes = [
+      "telepathy",
+      "web",
+      "unknown",
+      "",
+      "   ",
+      123,
+      true,
+      false,
+      null,
+      {},
+      [],
+    ];
+
+    for (const badMode of badModes) {
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(db, authContext, {
+          shopId: "shop_active",
+          orderMethod: badMode,
+          items: [{ menuItemId: "item_momos", quantity: 1 }],
+        }, { now: fixedNow }),
+        (err) => err.code === "invalid-argument" && (err.message.includes("Invalid orderMethod") || err.message.includes("expected a string"))
+      );
+    }
+
+    pass("Test 61: OrderMethod strictly validated against actual production values; unknown values/types rejected");
+  }
+
+  // ─── Test 62: Unknown Field Policy: Category A vs Category B vs Category C (Mandatory Correction 3) ──
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // Category A: Prohibited security field -> REJECT
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        ownerUid: "attacker_uid",
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes('Prohibited security/internal field detected: "ownerUid"')
+    );
+
+    // Category B: Known legacy client convenience field (client financial / metadata) -> IGNORED
+    // Category C: Arbitrary unknown client fields -> NEVER COPIED TO finalOrderDoc
+    const requestWithMixedFields = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_momos",
+          quantity: 2,
+          // Category B inside item:
+          price: 1, // Client lies about item price
+          subtotal: 2,
+          name: "Client Overridden Name",
+          imageUrl: "http://fake.url/img.png",
+          cartKey: "fake_cart_key",
+          // Category C inside item:
+          extraItemNotes: "don't put onion",
+        },
+      ],
+      // Category B at root:
+      subtotal: 10,
+      grandTotal: 10,
+      totalAmount: 10,
+      totalItems: 1,
+      deliveryCharges: 0,
+      status: "delivered",
+      rejectionReason: "none",
+      // Category C at root:
+      clientAppVersion: "2.4.1",
+      deviceTelemetry: { os: "Android", model: "Pixel 7" },
+      sessionTrackingUuid: "9f823-1123-5566",
+    };
+
+    const res = await processServerAuthoritativeOrder(db, authContext, requestWithMixedFields, {
+      now: fixedNow,
+      _serverOrderId: "ORD_POLICY_TEST_1",
+    });
+
+    const storedDoc = db.data.get("orders/ORD_POLICY_TEST_1");
+    assert(storedDoc, "Stored document must exist");
+
+    // Verify Category B had NO influence on server authority:
+    assert.strictEqual(storedDoc.subtotal, 160, "Authoritative subtotal (80 * 2)");
+    assert.strictEqual(storedDoc.grandTotal, 190, "Authoritative grandTotal (160 + 30)");
+    assert.strictEqual(storedDoc.status, "placed", "Authoritative status strictly 'placed'");
+
+    // Verify Category C fields were NEVER copied into finalOrderDoc:
+    assert.strictEqual(storedDoc.clientAppVersion, undefined, "Category C root field clientAppVersion must NOT be stored");
+    assert.strictEqual(storedDoc.deviceTelemetry, undefined, "Category C root field deviceTelemetry must NOT be stored");
+    assert.strictEqual(storedDoc.sessionTrackingUuid, undefined, "Category C root field sessionTrackingUuid must NOT be stored");
+    assert.strictEqual(storedDoc.items[0].extraItemNotes, undefined, "Category C item field extraItemNotes must NOT be stored");
+
+    // Verify exact keys in stored order document match official server schema whitelist
+    const expectedKeys = new Set([
+      "orderId",
+      "shopId",
+      "shopName",
+      "customerId",
+      "customerName",
+      "customerPhone",
+      "items",
+      "subtotal",
+      "deliveryCharges",
+      "totalItems",
+      "grandTotal",
+      "totalAmount",
+      "specialInstructions",
+      "deliveryNote",
+      "status",
+      "rejectionReason",
+      "orderMethod",
+      "createdAt",
+      "updatedAt",
+      "acceptDeadline",
+    ]);
+
+    for (const key of Object.keys(storedDoc)) {
+      assert(expectedKeys.has(key), `Unexpected key "${key}" found in stored order document!`);
+    }
+
+    pass("Test 62: Unknown fields policy verified: Category A rejected, Category B ignored, Category C never copied to Firestore");
+  }
+
+  // ─── Test 63: Compound Attack Vectors Matrix ─────────────────────────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+
+    // 1. Valid request + 1 malformed field (malformed shopId)
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: 12345,
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    // 2. Valid request + multiple malformed fields (shopId number + negative quantity + oversized note)
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        deliveryNote: "A".repeat(500),
+        items: [{ menuItemId: "item_momos", quantity: -1 }],
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    // 3. Valid request + security field injection
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        isAdmin: true,
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    // 4. Valid request + malformed nested option (optionId contains directory traversal)
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        items: [{
+          menuItemId: "item_coffee",
+          quantity: 1,
+          selectedOptions: [{ groupId: "grp_flavour", optionId: "../traversal" }],
+        }],
+      }, { now: fixedNow }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    pass("Test 63: Compound attack vectors strictly rejected across multiple simultaneous failure modes");
+  }
+
+  // ─── Test 64: Pre-Database Shielding Proof (Zero Firestore Reads on Malformed Requests) ─
+  {
+    const authContext = { uid: "cust_verified" };
+
+    const hostileInputs = [
+      { shopId: "../invalid_path", items: [{ menuItemId: "item_momos", quantity: 1 }] },
+      { shopId: "shop_active", items: [] },
+      { shopId: "shop_active", items: [{ menuItemId: "../invalid_item", quantity: 1 }] },
+      { shopId: "shop_active", items: [{ menuItemId: "item_momos", quantity: 0 }] },
+      { shopId: "shop_active", items: [{ menuItemId: "item_momos", quantity: 100 }] },
+      { shopId: "shop_active", items: [{ menuItemId: "item_momos", quantity: 1 }], role: "admin" },
+      { shopId: "shop_active", items: [{ menuItemId: "item_momos", quantity: 1 }], specialInstructions: "X".repeat(501) },
+      { shopId: "shop_active", items: [{ menuItemId: "item_momos", quantity: 1 }], orderMethod: "telepathy" },
+    ];
+
+    for (const badReq of hostileInputs) {
+      const freshDb = createSeededFirestore();
+      await assert.rejects(
+        async () => processServerAuthoritativeOrder(freshDb, authContext, badReq, { now: fixedNow }),
+        (err) => err.code === "invalid-argument"
+      );
+      assert.strictEqual(
+        freshDb.readCounts.size,
+        0,
+        `Zero Firestore reads must occur on structurally invalid request: ${JSON.stringify(badReq)}`
+      );
+    }
+
+    pass("Test 64: Pre-database shielding verified: Zero Firestore reads performed on malformed requests");
+  }
+
+  // ─── Test 65: Comprehensive Positive Regression Across All Order Methods ─────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified", phone: "+919876543210" };
+
+    const testScenarios = [
+      { mode: "app", expected: "app" },
+      { mode: "whatsapp", expected: "whatsapp" },
+      { mode: "both", expected: "both" },
+    ];
+
+    for (const sc of testScenarios) {
+      const orderRes = await processServerAuthoritativeOrder(db, authContext, {
+        shopId: "shop_active",
+        orderMethod: sc.mode,
+        customerName: "Ayush Goyal",
+        specialInstructions: "Please pack properly and provide tissue napkins.",
+        deliveryNote: "Hostel 2 front porch",
+        items: [
+          { menuItemId: "item_momos", quantity: 2 },
+          {
+            menuItemId: "item_coffee",
+            quantity: 1,
+            selectedOptions: [{ groupId: "grp_flavour", optionId: "opt_vanilla" }],
+          },
+        ],
+      }, { now: fixedNow });
+
+      assert(orderRes.success);
+      assert(orderRes.orderId.startsWith("ORD_"));
+      assert.strictEqual(orderRes.order.orderMethod, sc.expected);
+      assert.strictEqual(orderRes.order.customerName, "Rajat Sharma", "Authoritative profile name from users collection used");
+      assert.strictEqual(orderRes.order.customerPhone, "9876543210");
+      assert.strictEqual(orderRes.order.specialInstructions, "Please pack properly and provide tissue napkins.");
+      assert.strictEqual(orderRes.order.deliveryNote, "Hostel 2 front porch");
+      assert.strictEqual(orderRes.order.status, "placed");
+      assert.strictEqual(orderRes.order.subtotal, 225); // (80*2) + (50+15) = 160 + 65 = 225
+      assert.strictEqual(orderRes.order.deliveryCharges, 30);
+      assert.strictEqual(orderRes.order.grandTotal, 255);
+      assert.strictEqual(orderRes.order.totalItems, 3);
+    }
+
+    pass("Test 65: Positive regression succeeded across all supported order methods with valid complex payloads");
+  }
+
   console.log("==================================================");
-  console.log(`ALL ${passed}/${passed} SERVER-AUTHORITATIVE PRICING TESTS PASSED!`);
+  console.log(`ALL ${passed}/${passed} SERVER-AUTHORITATIVE TESTS PASSED!`);
   console.log("==================================================");
 }
 

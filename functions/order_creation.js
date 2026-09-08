@@ -25,12 +25,138 @@ const { FieldValue, Timestamp } = require("firebase-admin/firestore");
  * - MAX_TOTAL_QUANTITY: 500 total units. Prevents physical fulfillment impossibility / inventory denial of service.
  * - MAX_ITEM_PRICE: 100,000 INR (1 Lakh). Matches Flutter model clamp(0, 100000).
  * - MAX_ORDER_GRAND_TOTAL: 500,000 INR (5 Lakhs). Standard payment gateway single-transaction ceiling in India.
+ * - MAX_OPTIONS_PER_ITEM: 20 option selections per line item.
+ * - MAX_CUSTOMER_NAME_LENGTH: 100 characters.
+ * - MAX_CUSTOMER_PHONE_LENGTH: 20 characters.
+ * - MAX_SPECIAL_INSTRUCTIONS_LENGTH: 500 characters.
+ * - MAX_DELIVERY_NOTE_LENGTH: 200 characters.
  */
 const MAX_ITEMS_PER_ORDER = 50;
 const MAX_ITEM_QUANTITY = 99;
 const MAX_TOTAL_QUANTITY = 500;
 const MAX_ITEM_PRICE = 100000;
 const MAX_ORDER_GRAND_TOTAL = 500000;
+
+const MAX_OPTIONS_PER_ITEM = 20;
+const MAX_CUSTOMER_NAME_LENGTH = 100;
+const MAX_CUSTOMER_PHONE_LENGTH = 20;
+const MAX_SPECIAL_INSTRUCTIONS_LENGTH = 500;
+const MAX_DELIVERY_NOTE_LENGTH = 200;
+
+/**
+ * Standard identifier syntax: 1-64 alphanumeric characters, underscores, or hyphens.
+ * Syntactic validation only; authoritative existence & tenancy checks remain mandatory.
+ */
+const ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/**
+ * Disallowed control characters: null byte (\x00) and unprintable ASCII control characters.
+ * Standard whitespace (\t, \n, \r) is permitted.
+ */
+const CONTROL_CHAR_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+
+/**
+ * Category A: Prohibited security, identity, and internal privileged fields.
+ * Any presence of these keys anywhere in the request results in strict rejection.
+ */
+const PROHIBITED_SECURITY_KEYS = new Set([
+  "role",
+  "admin",
+  "isAdmin",
+  "isShopkeeper",
+  "isDeliveryPerson",
+  "ownerUid",
+  "claims",
+  "internalFlags",
+  "securityFlags",
+  "serverTotal",
+  "shopId2",
+  "orderId",
+]);
+
+/**
+ * Actual supported production order placement methods.
+ * Discovered from Flutter client models (ShopOrderMethod, AppOrder) and test suites.
+ */
+const ALLOWED_ORDER_METHODS = new Set(["app", "whatsapp", "wa", "in_app", "both"]);
+
+/**
+ * Validates user-supplied text fields without silent truncation.
+ *
+ * Policy:
+ * - wrong type        -> REJECT
+ * - null when invalid -> REJECT
+ * - oversized         -> REJECT
+ * - invalid/control   -> REJECT
+ * - valid string      -> PRESERVE as-is
+ *
+ * @param {string} fieldName - Field name for error reporting
+ * @param {any} value - User supplied value
+ * @param {number} maxLength - Maximum allowable string length
+ * @returns {string} Preserved string value (empty string if omitted/undefined)
+ */
+function validateSafeText(fieldName, value, maxLength) {
+  if (value === undefined) {
+    return "";
+  }
+  if (value === null) {
+    const err = new Error(`Invalid field "${fieldName}": null is not a valid string.`);
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+  if (typeof value !== "string") {
+    const err = new Error(`Invalid field "${fieldName}": expected a string, got ${typeof value}.`);
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+  if (value.length > maxLength) {
+    const err = new Error(
+      `Field "${fieldName}" exceeds maximum allowable length of ${maxLength} characters (received ${value.length}).`
+    );
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+  if (CONTROL_CHAR_REGEX.test(value)) {
+    const err = new Error(`Field "${fieldName}" contains disallowed control characters or null bytes.`);
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+  return value;
+}
+
+/**
+ * Validates orderMethod against actual supported production values.
+ *
+ * @param {any} rawMethod - User supplied orderMethod
+ * @returns {string} Canonical orderMethod string ("app", "whatsapp", or "both")
+ */
+function validateOrderMethod(rawMethod) {
+  if (rawMethod === undefined) {
+    return "app";
+  }
+  if (rawMethod === null || typeof rawMethod !== "string") {
+    const err = new Error(`Invalid orderMethod: expected a string, got ${rawMethod === null ? "null" : typeof rawMethod}.`);
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+  const clean = rawMethod.trim().toLowerCase();
+  if (!ALLOWED_ORDER_METHODS.has(clean)) {
+    const err = new Error(
+      `Invalid orderMethod "${rawMethod}". Allowed values are: ${Array.from(ALLOWED_ORDER_METHODS).join(", ")}.`
+    );
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+  if (clean === "whatsapp" || clean === "wa") return "whatsapp";
+  if (clean === "both") return "both";
+  return "app";
+}
 
 /**
  * Converts INR rupees to integer paise (minor units).
@@ -100,29 +226,43 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
   }
   const canonicalCustomerId = authContext.uid.trim();
 
-  if (!requestData || typeof requestData !== "object") {
+  // ─── 2. Pre-Database Structural & Shape Validation (Phase 4.3) ─────────────
+  // Validates payload structure and data types before touching Firestore,
+  // preventing resource exhaustion, type confusion, and injection attacks.
+
+  if (!requestData || typeof requestData !== "object" || Array.isArray(requestData)) {
     const err = new Error("Invalid request payload: expected an object.");
     err.code = "invalid-argument";
     err.status = 400;
     throw err;
   }
 
-  // Reject client-supplied orderId (Phase 4.1 Hardening: Order Identity Authority)
-  if (
-    requestData.orderId !== undefined &&
-    requestData.orderId !== null &&
-    String(requestData.orderId).trim().length > 0
-  ) {
-    const err = new Error(
-      "Client-supplied orderId is strictly prohibited. Order identity is server-authoritative."
-    );
-    err.code = "invalid-argument";
-    err.status = 400;
-    throw err;
+  // Category A: Prohibited security & identity fields check at root
+  for (const key of Object.keys(requestData)) {
+    if (key === "orderId") {
+      const err = new Error(
+        "Client-supplied orderId is strictly prohibited. Order identity is server-authoritative."
+      );
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+    if (PROHIBITED_SECURITY_KEYS.has(key)) {
+      const err = new Error(`Prohibited security/internal field detected: "${key}".`);
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
   }
 
-  // Reject spoofed / conflicting customerId
-  if (requestData.customerId && typeof requestData.customerId === "string") {
+  // Customer ID check: Reject spoofed / conflicting customerId
+  if (requestData.customerId !== undefined && requestData.customerId !== null) {
+    if (typeof requestData.customerId !== "string") {
+      const err = new Error("Invalid customerId: expected a string.");
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
     if (requestData.customerId.trim() !== canonicalCustomerId) {
       const err = new Error(
         `Unauthorized: Conflicting customerId "${requestData.customerId}" does not match authenticated user "${canonicalCustomerId}".`
@@ -133,15 +273,168 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     }
   }
 
-  // ─── 2. Validate Shop Identity & Authoritative Delivery Charges ────────────
-  const shopId = typeof requestData.shopId === "string" ? requestData.shopId.trim() : "";
-  if (!shopId) {
+  // Validate shopId syntax and length
+  if (typeof requestData.shopId !== "string") {
     const err = new Error("Invalid request: shopId is required.");
     err.code = "invalid-argument";
     err.status = 400;
     throw err;
   }
+  const shopId = requestData.shopId.trim();
+  if (!shopId) {
+    const err = new Error("Invalid request: shopId cannot be empty.");
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+  if (shopId.length > 64 || !ID_REGEX.test(shopId)) {
+    const err = new Error(`Invalid shopId format: "${shopId}". Must be 1-64 alphanumeric characters, underscores, or hyphens.`);
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
 
+  // Validate orderMethod against actual supported production values (Mandatory Correction 2)
+  const validatedOrderMethod = validateOrderMethod(requestData.orderMethod);
+
+  // Validate User Text fields without silent truncation (Mandatory Correction 1)
+  const validatedCustomerName = validateSafeText("customerName", requestData.customerName, MAX_CUSTOMER_NAME_LENGTH);
+  const validatedCustomerPhone = validateSafeText("customerPhone", requestData.customerPhone, MAX_CUSTOMER_PHONE_LENGTH);
+  const validatedSpecialInstructions = validateSafeText("specialInstructions", requestData.specialInstructions, MAX_SPECIAL_INSTRUCTIONS_LENGTH);
+  const validatedDeliveryNote = validateSafeText("deliveryNote", requestData.deliveryNote, MAX_DELIVERY_NOTE_LENGTH);
+
+  // Validate items array structure before database reads
+  const rawItems = requestData.items;
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    const err = new Error("Invalid request: items must be a non-empty array.");
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+
+  if (rawItems.length > MAX_ITEMS_PER_ORDER) {
+    const err = new Error(
+      `Invalid request: Order cannot contain more than ${MAX_ITEMS_PER_ORDER} distinct items (received ${rawItems.length}).`
+    );
+    err.code = "invalid-argument";
+    err.status = 400;
+    throw err;
+  }
+
+  // Validate each item and nested options structurally
+  for (let idx = 0; idx < rawItems.length; idx++) {
+    const it = rawItems[idx];
+    if (!it || typeof it !== "object" || Array.isArray(it)) {
+      const err = new Error(`Invalid item payload at index ${idx}: expected an object.`);
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+
+    // Check prohibited keys inside item payload
+    for (const k of Object.keys(it)) {
+      if (PROHIBITED_SECURITY_KEYS.has(k)) {
+        const err = new Error(`Prohibited field "${k}" detected in item at index ${idx}.`);
+        err.code = "invalid-argument";
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    if (typeof it.menuItemId !== "string") {
+      const err = new Error(`Invalid request: Each item must specify a valid menuItemId (item at index ${idx}).`);
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+    const mId = it.menuItemId.trim();
+    if (!mId) {
+      const err = new Error("Invalid request: Each item must specify a valid menuItemId.");
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+    if (mId.length > 64 || !ID_REGEX.test(mId)) {
+      const err = new Error(`Invalid menuItemId format at index ${idx}: "${mId}".`);
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+
+    // Validate item quantity: integer between 1 and MAX_ITEM_QUANTITY (99)
+    const q = it.quantity;
+    if (typeof q !== "number" || !Number.isInteger(q) || q < 1 || q > MAX_ITEM_QUANTITY) {
+      const err = new Error(
+        `Invalid quantity "${q}" for item "${mId}". Quantity must be an integer between 1 and ${MAX_ITEM_QUANTITY}.`
+      );
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+
+    // Validate selectedOptions structure if present
+    if (it.selectedOptions !== undefined && it.selectedOptions !== null) {
+      if (!Array.isArray(it.selectedOptions)) {
+        const err = new Error(`Invalid selectedOptions for item "${mId}": expected an array.`);
+        err.code = "invalid-argument";
+        err.status = 400;
+        throw err;
+      }
+      if (it.selectedOptions.length > MAX_OPTIONS_PER_ITEM) {
+        const err = new Error(
+          `Too many selectedOptions for item "${mId}": maximum allowed is ${MAX_OPTIONS_PER_ITEM}, received ${it.selectedOptions.length}.`
+        );
+        err.code = "invalid-argument";
+        err.status = 400;
+        throw err;
+      }
+      for (let optIdx = 0; optIdx < it.selectedOptions.length; optIdx++) {
+        const opt = it.selectedOptions[optIdx];
+        if (!opt || typeof opt !== "object" || Array.isArray(opt)) {
+          const err = new Error(`Malformed selectedOption entry at item "${mId}" option index ${optIdx}.`);
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
+        for (const k of Object.keys(opt)) {
+          if (PROHIBITED_SECURITY_KEYS.has(k)) {
+            const err = new Error(`Prohibited field "${k}" detected in option at item "${mId}" index ${optIdx}.`);
+            err.code = "invalid-argument";
+            err.status = 400;
+            throw err;
+          }
+        }
+        if (typeof opt.groupId !== "string" || !opt.groupId.trim()) {
+          const err = new Error("Each selectedOption must contain valid groupId and optionId.");
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
+        const gId = opt.groupId.trim();
+        if (gId.length > 64 || !ID_REGEX.test(gId)) {
+          const err = new Error(`Invalid groupId format in selectedOption for item "${mId}": "${gId}".`);
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
+        if (typeof opt.optionId !== "string" || !opt.optionId.trim()) {
+          const err = new Error("Each selectedOption must contain valid groupId and optionId.");
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
+        const oId = opt.optionId.trim();
+        if (oId.length > 64 || !ID_REGEX.test(oId)) {
+          const err = new Error(`Invalid optionId format in selectedOption for item "${mId}": "${oId}".`);
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
+      }
+    }
+  }
+
+  // ─── 3. Validate Shop Identity & Authoritative Delivery Charges ────────────
   const shopDoc = await db.collection("shops").doc(shopId).get();
   if (!shopDoc.exists) {
     const err = new Error(`Shop with ID "${shopId}" does not exist.`);
@@ -172,32 +465,8 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
   const deliveryChargesPaise = toPaise(rawDelivery);
   const authoritativeDeliveryCharges = fromPaise(deliveryChargesPaise);
 
-  // ─── 3. Validate Requested Items & Enforce Cost Efficiency ─────────────────
-  const rawItems = requestData.items;
-  if (!Array.isArray(rawItems) || rawItems.length === 0) {
-    const err = new Error("Invalid request: items must be a non-empty array.");
-    err.code = "invalid-argument";
-    err.status = 400;
-    throw err;
-  }
-
-  if (rawItems.length > MAX_ITEMS_PER_ORDER) {
-    const err = new Error(
-      `Invalid request: Order cannot contain more than ${MAX_ITEMS_PER_ORDER} distinct items (received ${rawItems.length}).`
-    );
-    err.code = "invalid-argument";
-    err.status = 400;
-    throw err;
-  }
-
   // Read efficiency: Deduplicate catalog menu item lookups
-  const uniqueItemIds = [...new Set(rawItems.map((it) => (it && typeof it.menuItemId === "string" ? it.menuItemId.trim() : "")))];
-  if (uniqueItemIds.some((id) => !id)) {
-    const err = new Error("Invalid request: Each item must specify a valid menuItemId.");
-    err.code = "invalid-argument";
-    err.status = 400;
-    throw err;
-  }
+  const uniqueItemIds = [...new Set(rawItems.map((it) => it.menuItemId.trim()))];
 
   const catalogItemDocs = new Map();
   await Promise.all(
@@ -528,22 +797,20 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     }
   } catch (_) {}
 
-  // Fallback to request metadata if user record was incomplete, with sanitization
-  if (customerName === "Student" && typeof requestData.customerName === "string" && requestData.customerName.trim().length > 0) {
-    customerName = requestData.customerName.trim().slice(0, 100);
+  // Fallback to request metadata if user record was incomplete, preserving valid user input (No silent truncation)
+  if (customerName === "Student" && validatedCustomerName.length > 0) {
+    customerName = validatedCustomerName;
   }
-  if (!customerPhone && typeof requestData.customerPhone === "string" && requestData.customerPhone.trim().length > 0) {
-    customerPhone = requestData.customerPhone.trim().slice(0, 20);
+  if (!customerPhone && validatedCustomerPhone.length > 0) {
+    customerPhone = validatedCustomerPhone;
   }
 
-  const specialInstructions = typeof requestData.specialInstructions === "string"
-    ? requestData.specialInstructions.trim().slice(0, 500)
-    : "";
-  const deliveryNote = typeof requestData.deliveryNote === "string" && requestData.deliveryNote.trim().length > 0
-    ? requestData.deliveryNote.trim().slice(0, 200)
+  const specialInstructions = validatedSpecialInstructions;
+  const deliveryNote = validatedDeliveryNote.length > 0
+    ? validatedDeliveryNote
     : (shopData.deliveryNote || "Bennett University");
 
-  const orderMethod = requestData.orderMethod === "whatsapp" ? "whatsapp" : "app";
+  const orderMethod = validatedOrderMethod;
 
   // ─── 7. Timestamps and Lifecycle Deadlines ──────────────────────────────────
   const now = options.now instanceof Date ? options.now : new Date();
@@ -641,4 +908,13 @@ module.exports = {
   MAX_TOTAL_QUANTITY,
   MAX_ITEM_PRICE,
   MAX_ORDER_GRAND_TOTAL,
+  MAX_OPTIONS_PER_ITEM,
+  MAX_CUSTOMER_NAME_LENGTH,
+  MAX_CUSTOMER_PHONE_LENGTH,
+  MAX_SPECIAL_INSTRUCTIONS_LENGTH,
+  MAX_DELIVERY_NOTE_LENGTH,
+  ID_REGEX,
+  CONTROL_CHAR_REGEX,
+  PROHIBITED_SECURITY_KEYS,
+  ALLOWED_ORDER_METHODS,
 };
