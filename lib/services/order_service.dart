@@ -194,9 +194,14 @@ class OrderService {
       }
 
       final now = customNow ?? DateTime.now();
-      final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+      final safeUid = (authUid != null && authUid.isNotEmpty)
+          ? authUid.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')
+          : 'anon';
+      final defaultKey = 'idem_${now.millisecondsSinceEpoch}_${safeUid}_${order.items.length}';
+      final rawKey = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
           ? idempotencyKey.trim()
-          : 'idem_${now.millisecondsSinceEpoch}_${authUid ?? 'anon'}_${order.items.length}';
+          : defaultKey;
+      final key = rawKey.length > 128 ? rawKey.substring(0, 128) : rawKey;
 
       // 1. If testing delegate is provided, execute it directly (Server-Authoritative)
       // Client does NOT provide orderId — order identity is generated authoritatively by the backend.

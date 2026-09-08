@@ -326,8 +326,6 @@ function buildDeterministicCartKey(menuItemId, options) {
 }
 
 /**
- * Validates request input, loads catalog data, computes authoritative pricing,
-/**
  * Validates request input, loads catalog data, enforces atomic rate limits and idempotency,
  * computes authoritative pricing, and atomically persists the verified order document.
  * 
