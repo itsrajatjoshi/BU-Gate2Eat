@@ -289,27 +289,10 @@ service cloud.firestore {
         || isAdmin();
 
       // ── CREATE POLICY ──
-      // Customer: can create an order ONLY for themselves:
-      //   - request.auth.uid == request.resource.data.customerId
-      //   - valid non-empty shopId string
-      //   - initial status must be 'placed'
-      //   - docId matches orderId if provided
-      //   - lifecycle completion timestamps strictly prohibited on creation
-      // Admin: platform administrative creation allowed
-      // Shopkeeper / Anonymous: strictly denied
-      allow create: if (
-        isCustomer()
-        && request.auth.uid == request.resource.data.customerId
-        && ('shopId' in request.resource.data)
-        && request.resource.data.shopId is string
-        && request.resource.data.shopId.size() > 0
-        && request.resource.data.status == 'placed'
-        && (!('orderId' in request.resource.data) || request.resource.data.orderId == orderId)
-        && !('acceptedAt' in request.resource.data)
-        && !('rejectedAt' in request.resource.data)
-        && !('deliveredAt' in request.resource.data)
-        && !('cancelledAt' in request.resource.data)
-      ) || isAdmin();
+      // Direct client order creation is strictly DENIED across ALL client roles (Anonymous, Customer, Shopkeeper, Admin).
+      // All order creation must occur exclusively via the server-authoritative Cloud Function / trusted backend.
+      // Firebase Admin SDK bypasses security rules by design to write verified authoritative order documents.
+      allow create: if false;
 
       // ── UPDATE POLICY ──
       // Invariant across ALL roles (Customer, Shopkeeper, Admin):

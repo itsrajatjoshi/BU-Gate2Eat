@@ -1526,9 +1526,10 @@ async function runRulesSecuritySuite() {
     reportTest('O.6 Customer reads another customer order -> DENY', false);
   }
 
-  // O.7 Customer creates own order -> ALLOW
+  // O.7 Customer direct Firestore order create -> DENY (Phase 4.1 Server-Authoritative Boundary)
   try {
-    await assertSucceeds(customerDb.collection('orders').doc('order_new_cust_a').set({
+    // 1. Normal customer direct creation -> DENY
+    await assertFails(customerDb.collection('orders').doc('order_new_cust_a').set({
       orderId: 'order_new_cust_a',
       customerId: 'customer_a',
       shopId: 'shop_a',
@@ -1537,9 +1538,47 @@ async function runRulesSecuritySuite() {
       items: [{ itemId: 'item_1', name: 'Burger', price: 200, quantity: 1 }],
       createdAt: new Date(),
     }));
-    reportTest('O.7 Customer creates own order -> ALLOW', true);
+
+    // 2. Malicious client direct creation with forged financial totals -> DENY
+    await assertFails(customerDb.collection('orders').doc('order_attacker_direct').set({
+      orderId: 'order_attacker_direct',
+      customerId: 'customer_a',
+      shopId: 'shop_a',
+      items: [{ itemId: 'item_1', name: 'Burger', price: 1, quantity: 1 }],
+      subtotal: 1,
+      deliveryCharges: 0,
+      grandTotal: 1,
+      totalAmount: 1,
+      status: 'placed',
+      createdAt: new Date(),
+    }));
+
+    // 3. Admin client direct creation via Client SDK -> DENY
+    await assertFails(adminDb.collection('orders').doc('order_admin_client_direct').set({
+      orderId: 'order_admin_client_direct',
+      customerId: 'customer_a',
+      shopId: 'shop_a',
+      status: 'placed',
+      totalAmount: 100,
+      items: [],
+    }));
+
+    // 4. Trusted backend Admin SDK creation -> SUCCESS
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await assertSucceeds(context.firestore().collection('orders').doc('order_admin_sdk_backend').set({
+        orderId: 'order_admin_sdk_backend',
+        customerId: 'customer_a',
+        shopId: 'shop_a',
+        status: 'placed',
+        totalAmount: 200,
+        items: [{ itemId: 'item_1', name: 'Burger', price: 200, quantity: 1 }],
+        createdAt: new Date(),
+      }));
+    });
+
+    reportTest('O.7 Direct client order creation blocked & Admin SDK allowed -> VERIFIED', true);
   } catch (e) {
-    reportTest('O.7 Customer creates own order -> ALLOW', false);
+    reportTest('O.7 Direct client order creation blocked & Admin SDK allowed -> VERIFIED', false);
   }
 
   // O.8 Customer creates order with foreign customerId -> DENY

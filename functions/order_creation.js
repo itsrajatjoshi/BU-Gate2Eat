@@ -188,18 +188,45 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     const reqOptions = Array.isArray(reqItem.selectedOptions) ? reqItem.selectedOptions : [];
     const catalogOptionGroups = Array.isArray(menuData.optionGroups) ? menuData.optionGroups : [];
 
+    if (catalogOptionGroups.length === 0 && reqOptions.length > 0) {
+      const err = new Error(`Menu item "${menuItemId}" does not accept option selections.`);
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+
     if (catalogOptionGroups.length > 0) {
       for (const reqOpt of reqOptions) {
-        if (!reqOpt || typeof reqOpt !== "object") continue;
+        if (!reqOpt || typeof reqOpt !== "object") {
+          const err = new Error("Malformed selectedOption entry.");
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
         const groupId = reqOpt.groupId;
         const optionId = reqOpt.optionId;
-        if (!groupId || !optionId) continue;
+        if (!groupId || !optionId) {
+          const err = new Error("Each selectedOption must contain valid groupId and optionId.");
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
 
         const group = catalogOptionGroups.find((g) => g.id === groupId);
-        if (!group) continue;
+        if (!group) {
+          const err = new Error(`Invalid option group "${groupId}" does not exist for menu item "${menuItemId}".`);
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
 
         const catalogOpt = (group.options || []).find((o) => o.id === optionId);
-        if (!catalogOpt) continue;
+        if (!catalogOpt) {
+          const err = new Error(`Invalid option "${optionId}" does not exist in group "${groupId}" for item "${menuItemId}".`);
+          err.code = "invalid-argument";
+          err.status = 400;
+          throw err;
+        }
 
         const pricingType = catalogOpt.pricingType || (group.groupType === "fixed" ? "fixedPrice" : "priceAdjustment");
         const catalogOptPrice = pricingType === "selectionOnly"
@@ -223,6 +250,19 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
         });
         if (catalogOpt.name) {
           optionsDescriptionTokens.push(catalogOpt.name);
+        }
+      }
+
+      // Validate required groups
+      for (const group of catalogOptionGroups) {
+        if (group.required === true || group.groupType === "fixed") {
+          const hasSelection = authoritativeSelectedOptions.some((o) => o.groupId === group.id);
+          if (!hasSelection) {
+            const err = new Error(`Missing required option selection for group "${group.name || group.id}".`);
+            err.code = "invalid-argument";
+            err.status = 400;
+            throw err;
+          }
         }
       }
 
@@ -294,14 +334,6 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     customerPhone = requestData.customerPhone.trim().slice(0, 20);
   }
 
-  // ─── 7. Timestamps and Lifecycle Deadlines ──────────────────────────────────
-  const now = options.now instanceof Date ? options.now : new Date();
-  const acceptDeadlineDate = new Date(now.getTime() + 20 * 60 * 1000); // 20 minutes
-
-  const orderId = typeof options.orderId === "string" && options.orderId.trim().length > 0
-    ? options.orderId.trim()
-    : `ORD_${Date.now()}_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
   const specialInstructions = typeof requestData.specialInstructions === "string"
     ? requestData.specialInstructions.trim().slice(0, 500)
     : "";
@@ -310,6 +342,36 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     : (shopData.deliveryNote || "Bennett University");
 
   const orderMethod = requestData.orderMethod === "whatsapp" ? "whatsapp" : "app";
+
+  // ─── 7. Timestamps and Lifecycle Deadlines ──────────────────────────────────
+  const now = options.now instanceof Date ? options.now : new Date();
+  const acceptDeadlineDate = new Date(now.getTime() + 20 * 60 * 1000); // 20 minutes
+
+  // Server-Authoritative orderId generation:
+  // Client requestData.orderId is untrusted and rejected if attempting path traversal / overwrite.
+  let orderId;
+  if (typeof options.orderId === "string" && options.orderId.trim().length > 0) {
+    const rawId = options.orderId.trim();
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(rawId)) {
+      const err = new Error(`Malformed or unsafe orderId identifier: "${rawId}".`);
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+    orderId = rawId;
+  } else {
+    const randomHex = require("crypto").randomBytes(4).toString("hex").toUpperCase();
+    orderId = `ORD_${now.getTime()}_${randomHex}`;
+  }
+
+  // Overwrite protection: prevent overwriting existing order documents
+  const existingOrderSnap = await db.collection("orders").doc(orderId).get();
+  if (existingOrderSnap.exists) {
+    const err = new Error(`Order with ID "${orderId}" already exists. Overwrite prohibited.`);
+    err.code = "already-exists";
+    err.status = 409;
+    throw err;
+  }
 
   // ─── 8. Construct Final Authoritative Order Document ───────────────────────
   const createdAtTimestamp = options.now ? Timestamp.fromDate(now) : FieldValue.serverTimestamp();

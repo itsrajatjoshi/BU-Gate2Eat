@@ -163,6 +163,26 @@ function createSeededFirestore() {
     ],
   });
 
+  // Seed Menu Item 5: Item with only optional choice group (Filter Coffee, base ₹50)
+  db.setDoc("shops/shop_active/menuItems/item_coffee", {
+    id: "item_coffee",
+    shopId: "shop_active",
+    name: "Filter Coffee",
+    price: 50,
+    isAvailable: true,
+    optionGroups: [
+      {
+        id: "grp_flavour",
+        name: "Add Flavour",
+        groupType: "choice",
+        required: false,
+        options: [
+          { id: "opt_vanilla", name: "Vanilla", price: 15, pricingType: "priceAdjustment" },
+        ],
+      },
+    ],
+  });
+
   // Seed Menu Item 4: Belongs to shop_other (wrong shop)
   db.setDoc("shops/shop_other/menuItems/item_other_shop", {
     id: "item_other_shop",
@@ -460,12 +480,12 @@ async function runTests() {
       shopId: "shop_active",
       items: [
         {
-          menuItemId: "item_custom_burger", // base price ₹100
+          menuItemId: "item_coffee", // base price ₹50
           quantity: 1,
           selectedOptions: [
             {
-              groupId: "grp_cheese",
-              optionId: "opt_extra_cheese", // +₹25
+              groupId: "grp_flavour",
+              optionId: "opt_vanilla", // +₹15
             },
           ],
         },
@@ -474,9 +494,9 @@ async function runTests() {
 
     const res = await processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow });
     const item = res.order.items[0];
-    // No fixed option selected -> base price ₹100 + cheese ₹25 = ₹125
-    assert.strictEqual(item.price, 125);
-    assert.strictEqual(item.subtotal, 125);
+    // No fixed option selected -> base price ₹50 + vanilla ₹15 = ₹65
+    assert.strictEqual(item.price, 65);
+    assert.strictEqual(item.subtotal, 65);
     pass("Option selection without fixed group adds base catalog price accurately");
   }
 
@@ -686,6 +706,166 @@ async function runTests() {
     assert.strictEqual(key2, key3, "CartKey must be identical regardless of selection array ordering");
     assert.strictEqual(key2, "item_burger|grp_cheese:opt_extra|grp_size:opt_large");
     pass("Deterministic cartKey generation matches Flutter client invariant");
+  }
+
+  // ─── Test 25: Fake option group not on menu item is rejected ────────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_custom_burger",
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_size", optionId: "opt_regular" },
+            { groupId: "grp_hacked_group", optionId: "opt_fake" }, // Nonexistent group!
+          ],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes('Invalid option group "grp_hacked_group"')
+    );
+    pass("Invalid option group not present on menu item is rejected");
+  }
+
+  // ─── Test 26: Fake option ID not in group is rejected ───────────────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_custom_burger",
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_size", optionId: "opt_super_cheap_1_rupee" }, // Nonexistent option!
+          ],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes('Invalid option "opt_super_cheap_1_rupee"')
+    );
+    pass("Invalid option ID not defined in catalog option group is rejected");
+  }
+
+  // ─── Test 27: Options sent for item with no option groups is rejected ───────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_momos", // Standard item without option groups
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_cheese", optionId: "opt_cheese" },
+          ],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("does not accept option selections")
+    );
+    pass("Option selections sent for non-configurable menu item are rejected");
+  }
+
+  // ─── Test 28: Missing required option group is rejected ─────────────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [
+        {
+          menuItemId: "item_custom_burger", // grp_size is required
+          quantity: 1,
+          selectedOptions: [
+            { groupId: "grp_cheese", optionId: "opt_extra_cheese" }, // only cheese, no size!
+          ],
+        },
+      ],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("Missing required option selection")
+    );
+    pass("Order missing required option group selection is rejected");
+  }
+
+  // ─── Test 29: Malicious orderId with path traversal rejected ────────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, {
+        now: fixedNow,
+        orderId: "../../orders/hacked_target",
+      }),
+      (err) => err.code === "invalid-argument" && err.message.includes("Malformed or unsafe orderId")
+    );
+    pass("Malicious orderId with path traversal or invalid characters is rejected");
+  }
+
+  // ─── Test 30: Overwrite existing order document is strictly prohibited ──────
+  {
+    const db = createSeededFirestore();
+    // Pre-populate an existing order
+    db.setDoc("orders/ORD_EXISTING_TARGET", {
+      orderId: "ORD_EXISTING_TARGET",
+      customerId: "victim_user",
+      grandTotal: 500,
+    });
+
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, {
+        now: fixedNow,
+        orderId: "ORD_EXISTING_TARGET",
+      }),
+      (err) => err.code === "already-exists" && err.status === 409
+    );
+    pass("Attempt to overwrite existing order document is rejected with already-exists");
+  }
+
+  // ─── Test 31: Autonomous server-generated orderId is cryptographically unique
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    const res1 = await processServerAuthoritativeOrder(db, authContext, request);
+    const res2 = await processServerAuthoritativeOrder(db, authContext, request);
+
+    assert(res1.orderId.startsWith("ORD_"));
+    assert(res2.orderId.startsWith("ORD_"));
+    assert.notStrictEqual(res1.orderId, res2.orderId, "Each server-generated orderId must be unique");
+    pass("Autonomous server-generated orderId is unique and prefixed with ORD_");
   }
 
   console.log("==================================================");
