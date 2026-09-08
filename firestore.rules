@@ -200,13 +200,13 @@ service cloud.firestore {
       // Read allowed for verified Platform Administrator
       allow read: if isAuthorizedAdmin();
 
-      // Submission allowed with strict validation:
-      // If caller is authenticated, customerId MUST match their authenticated UID.
-      // Unauthenticated submissions cannot claim an authenticated customerId.
+      // Submission allowed strictly for authenticated customers binding customerId to auth UID.
+      // Anonymous submission and claiming another user's customerId are strictly denied.
       allow create: if isValidSupportQuery()
-        && (isSignedIn()
-            ? (request.resource.data.get('customerId', '') == request.auth.uid)
-            : (!('customerId' in request.resource.data) || request.resource.data.customerId == '' || request.resource.data.customerId == null));
+        && (
+          (isCustomer() && request.resource.data.customerId == request.auth.uid) ||
+          isAdmin()
+        );
 
       // Updates and deletes are permanently denied across all client roles.
       // Support inquiries represent permanent customer audit records.
@@ -295,29 +295,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ─── 5. SHOP STATISTICS (PHASE 3.4) ────────────────────────────────
+    // ─── 5. SHOP STATISTICS (SERVER-OWNED DATA) ────────────────────────
     match /shopStats/{shopId} {
-      // Shopkeeper can read only their assigned shop stats.
-      // Admin has platform-wide visibility.
-      // Customer and Anonymous are strictly denied.
+      // Client read: assigned shopkeeper can read own shop stats, admin platform-wide
       allow read: if isShopOwner(shopId) || isAdmin();
 
-      // Assigned shopkeeper or platform admin can update stats.
-      // The shopId field cannot be reassigned to another shop.
-      allow create, update: if (isShopOwner(shopId) || isAdmin())
-        && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId);
-
-      // Metric documents must not be deleted by clients.
-      allow delete: if false;
+      // Client writes (create, update, delete): strictly DENIED
+      // All stats mutations must occur through trusted backend / Admin SDK
+      allow write: if false;
 
       // Subcollection for monthly stats breakdown
       match /monthlyStats/{monthKey} {
         allow read: if isShopOwner(shopId) || isAdmin();
-
-        allow create, update: if (isShopOwner(shopId) || isAdmin())
-          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId);
-
-        allow delete: if false;
+        allow write: if false;
       }
     }
 
@@ -341,13 +331,26 @@ service cloud.firestore {
         || isAdmin();
     }
 
-    // ─── 7. USER & PROFILE DOCUMENTS (PHASE 3.4) ───────────────────────
+    // ─── 7. USER & PROFILE DOCUMENTS (PHASE 3.4 REMEDIATION) ───────────
     match /users/{userId} {
       // User can read their own profile document; Admin can inspect platform users.
       allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
 
-      // User can create or update only their own profile document.
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      // Creation allowed only for user's own document with approved client fields only.
+      // Server-owned fields (uid, phone, role, shopId, status) cannot be client-created.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'name', 'displayName', 'photoUrl', 'avatar', 'email', 'bio', 'address', 'createdAt', 'updatedAt'
+        ]);
+
+      // Updates restricted strictly to approved client-editable profile fields.
+      // Server-owned fields (uid, phone, role, shopId, status) are strictly immutable to clients.
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'displayName', 'photoUrl', 'avatar', 'email', 'bio', 'address', 'updatedAt'
+        ]);
 
       // Deletions permanently denied via client SDK.
       allow delete: if false;
@@ -357,8 +360,19 @@ service cloud.firestore {
       // User can read their own profile document; Admin can inspect platform profiles.
       allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
 
-      // User can create or update only their own profile document.
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      // Creation allowed only for user's own document with approved client fields only.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'name', 'displayName', 'photoUrl', 'avatar', 'email', 'bio', 'address', 'createdAt', 'updatedAt'
+        ]);
+
+      // Updates restricted strictly to approved client-editable profile fields.
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'displayName', 'photoUrl', 'avatar', 'email', 'bio', 'address', 'updatedAt'
+        ]);
 
       // Deletions permanently denied via client SDK.
       allow delete: if false;

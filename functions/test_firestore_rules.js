@@ -1924,71 +1924,257 @@ async function runRulesSecuritySuite() {
   }
 
   // ═════════════════════════════════════════════════════════════════════
-  // CHECKPOINT 3.4 SENSITIVE COLLECTIONS SUITE (Sens.1 - Sens.30)
+  // CHECKPOINT 3.4 SENSITIVE COLLECTIONS REMEDIATION SUITE (Sens.1 - Sens.38)
   // ═════════════════════════════════════════════════════════════════════
-  console.log('\n--- Phase 3.4: Sensitive Collections Suite (Sens.1 - Sens.30) ---');
+  console.log('\n--- Phase 3.4: Sensitive Collections Suite (Sens.1 - Sens.38) ---');
 
-  // ── 1. shopStats Tests (Sens.1 - Sens.6) ──
-  // Sens.1: Shopkeeper own stats read -> ALLOW
+  // ── 1. shopStats Server-Owned Tests (Sens.1 - Sens.10) ──
+  // Sens.1: Shopkeeper reads own stats -> ALLOW
   try {
     const p1 = assertSucceeds(shopkeeperADb.collection('shopStats').doc('shop_a').get());
     const p2 = assertSucceeds(shopkeeperADb.collection('shopStats').doc('shop_a').collection('monthlyStats').doc('2026-09').get());
     await Promise.all([p1, p2]);
-    reportTest('Sens.1 Shopkeeper own stats read -> ALLOW', true);
+    reportTest('Sens.1 Shopkeeper reads own stats -> ALLOW', true);
   } catch (e) {
-    reportTest('Sens.1 Shopkeeper own stats read -> ALLOW', false);
+    reportTest('Sens.1 Shopkeeper reads own stats -> ALLOW', false);
   }
 
-  // Sens.2: Shopkeeper foreign stats read -> DENY
+  // Sens.2: Shopkeeper reads foreign stats -> DENY
   try {
     const p1 = assertFails(shopkeeperADb.collection('shopStats').doc('shop_b').get());
     const p2 = assertFails(shopkeeperADb.collection('shopStats').doc('shop_b').collection('monthlyStats').doc('2026-09').get());
     await Promise.all([p1, p2]);
-    reportTest('Sens.2 Shopkeeper foreign stats read -> DENY', true);
+    reportTest('Sens.2 Shopkeeper reads foreign stats -> DENY', true);
   } catch (e) {
-    reportTest('Sens.2 Shopkeeper foreign stats read -> DENY', false);
+    reportTest('Sens.2 Shopkeeper reads foreign stats -> DENY', false);
   }
 
-  // Sens.3: Customer stats read -> DENY
+  // Sens.3: Customer reads stats -> DENY
   try {
     const p1 = assertFails(customerDb.collection('shopStats').doc('shop_a').get());
     const p2 = assertFails(customerDb.collection('shopStats').doc('shop_b').get());
     await Promise.all([p1, p2]);
-    reportTest('Sens.3 Customer stats read -> DENY', true);
+    reportTest('Sens.3 Customer reads stats -> DENY', true);
   } catch (e) {
-    reportTest('Sens.3 Customer stats read -> DENY', false);
+    reportTest('Sens.3 Customer reads stats -> DENY', false);
   }
 
-  // Sens.4: Anonymous stats read -> DENY
+  // Sens.4: Anonymous reads stats -> DENY
   try {
     await assertFails(unauthDb.collection('shopStats').doc('shop_a').get());
-    reportTest('Sens.4 Anonymous stats read -> DENY', true);
+    reportTest('Sens.4 Anonymous reads stats -> DENY', true);
   } catch (e) {
-    reportTest('Sens.4 Anonymous stats read -> DENY', false);
+    reportTest('Sens.4 Anonymous reads stats -> DENY', false);
   }
 
-  // Sens.5: Unauthorized stats write -> DENY
+  // Sens.5: Shopkeeper creates stats -> DENY
   try {
-    const p1 = assertFails(customerDb.collection('shopStats').doc('shop_a').update({ totalOrders: 99 }));
-    const p2 = assertFails(unauthDb.collection('shopStats').doc('shop_a').set({ totalOrders: 99 }));
+    await assertFails(shopkeeperADb.collection('shopStats').doc('shop_a_new').set({ shopId: 'shop_a_new', totalOrders: 0 }));
+    reportTest('Sens.5 Shopkeeper creates stats -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.5 Shopkeeper creates stats -> DENY', false);
+  }
+
+  // Sens.6: Shopkeeper updates stats -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shopStats').doc('shop_a').update({ totalOrders: 99 }));
+    reportTest('Sens.6 Shopkeeper updates stats -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.6 Shopkeeper updates stats -> DENY', false);
+  }
+
+  // Sens.7: Shopkeeper modifies revenue/counters -> DENY
+  try {
+    const p1 = assertFails(shopkeeperADb.collection('shopStats').doc('shop_a').update({ revenue: 500000 }));
+    const p2 = assertFails(shopkeeperADb.collection('shopStats').doc('shop_a').collection('monthlyStats').doc('2026-09').update({ totalOrders: 999 }));
     await Promise.all([p1, p2]);
-    reportTest('Sens.5 Unauthorized stats write -> DENY', true);
+    reportTest('Sens.7 Shopkeeper modifies revenue/counters -> DENY', true);
   } catch (e) {
-    reportTest('Sens.5 Unauthorized stats write -> DENY', false);
+    reportTest('Sens.7 Shopkeeper modifies revenue/counters -> DENY', false);
   }
 
-  // Sens.6: Shopkeeper cross-shop write -> DENY & own write -> ALLOW
+  // Sens.8: Admin client creates stats -> DENY
   try {
-    await assertFails(shopkeeperADb.collection('shopStats').doc('shop_b').update({ totalOrders: 99 }));
-    await assertFails(shopkeeperADb.collection('shopStats').doc('shop_a').update({ shopId: 'shop_b' }));
-    await assertSucceeds(shopkeeperADb.collection('shopStats').doc('shop_a').update({ totalOrders: 11, shopId: 'shop_a' }));
-    reportTest('Sens.6 Shopkeeper cross-shop write -> DENY & own write -> ALLOW', true);
+    await assertFails(adminDb.collection('shopStats').doc('shop_admin_test').set({ totalOrders: 0 }));
+    reportTest('Sens.8 Admin client creates stats -> DENY', true);
   } catch (e) {
-    reportTest('Sens.6 Shopkeeper cross-shop write -> DENY & own write -> ALLOW', false);
+    reportTest('Sens.8 Admin client creates stats -> DENY', false);
   }
 
-  // ── 2. deviceTokens Tests (Sens.7 - Sens.12) ──
-  // Sens.7: Customer own token operation -> ALLOW
+  // Sens.9: Admin client updates stats -> DENY
+  try {
+    await assertFails(adminDb.collection('shopStats').doc('shop_a').update({ totalOrders: 99 }));
+    reportTest('Sens.9 Admin client updates stats -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.9 Admin client updates stats -> DENY', false);
+  }
+
+  // Sens.10: Client deletes stats -> DENY
+  try {
+    const p1 = assertFails(shopkeeperADb.collection('shopStats').doc('shop_a').delete());
+    const p2 = assertFails(adminDb.collection('shopStats').doc('shop_a').delete());
+    const p3 = assertFails(customerDb.collection('shopStats').doc('shop_a').delete());
+    const p4 = assertFails(unauthDb.collection('shopStats').doc('shop_a').delete());
+    await Promise.all([p1, p2, p3, p4]);
+    reportTest('Sens.10 Delete -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.10 Delete -> DENY', false);
+  }
+
+  // ── 2. Users / Profiles Field Protection Tests (Sens.11 - Sens.19) ──
+  // Sens.11: User reads own profile -> ALLOW
+  try {
+    const p1 = assertSucceeds(customerDb.collection('users').doc('customer_a').get());
+    const p2 = assertSucceeds(customerDb.collection('profiles').doc('customer_a').get());
+    await Promise.all([p1, p2]);
+    reportTest('Sens.11 User reads own profile -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.11 User reads own profile -> ALLOW', false);
+  }
+
+  // Sens.12: User reads foreign profile -> DENY
+  try {
+    const p1 = assertFails(customerDb.collection('users').doc('customer_b').get());
+    const p2 = assertFails(customerDb.collection('profiles').doc('customer_b').get());
+    await Promise.all([p1, p2]);
+    reportTest('Sens.12 User reads foreign profile -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.12 User reads foreign profile -> DENY', false);
+  }
+
+  // Sens.13: User updates allowed display/profile field -> ALLOW
+  try {
+    const p1 = assertSucceeds(customerDb.collection('users').doc('customer_a').update({ displayName: 'Customer A Valid', updatedAt: new Date() }));
+    const p2 = assertSucceeds(customerDb.collection('profiles').doc('customer_a').update({ displayName: 'Customer A Profile Nickname' }));
+    await Promise.all([p1, p2]);
+    reportTest('Sens.13 User updates allowed display/profile field -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.13 User updates allowed display/profile field -> ALLOW', false);
+  }
+
+  // Sens.14: User modifies role -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_a').update({ role: 'admin' }));
+    reportTest('Sens.14 User modifies role -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.14 User modifies role -> DENY', false);
+  }
+
+  // Sens.15: User modifies shopId -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_a').update({ shopId: 'shop_b' }));
+    reportTest('Sens.15 User modifies shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.15 User modifies shopId -> DENY', false);
+  }
+
+  // Sens.16: User modifies status -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_a').update({ status: 'banned' }));
+    reportTest('Sens.16 User modifies status -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.16 User modifies status -> DENY', false);
+  }
+
+  // Sens.17: User modifies phone -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_a').update({ phone: '+919999999999' }));
+    reportTest('Sens.17 User modifies phone -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.17 User modifies phone -> DENY', false);
+  }
+
+  // Sens.18: User modifies uid -> DENY
+  try {
+    await assertFails(customerDb.collection('users').doc('customer_a').update({ uid: 'other_uid' }));
+    reportTest('Sens.18 User modifies uid -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.18 User modifies uid -> DENY', false);
+  }
+
+  // Sens.19: User writes another user\'s profile -> DENY
+  try {
+    const p1 = assertFails(customerDb.collection('users').doc('customer_b').update({ displayName: 'Hacked' }));
+    const p2 = assertFails(customerDb.collection('profiles').doc('customer_b').update({ displayName: 'Hacked' }));
+    await Promise.all([p1, p2]);
+    reportTest('Sens.19 User writes another user\'s profile -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.19 User writes another user\'s profile -> DENY', false);
+  }
+
+  // ── 3. Support Queries Tests (Sens.20 - Sens.25) ──
+  // Sens.20: Authenticated customer creates own query -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('supportQueries').doc('query_rem_good').set({
+      name: 'Cust A',
+      query: 'Legitimate Query',
+      phone: '9876543210',
+      phoneNumber: '9876543210',
+      status: 'unread',
+      customerId: 'customer_a',
+    }));
+    reportTest('Sens.20 Authenticated customer creates own query -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.20 Authenticated customer creates own query -> ALLOW', false);
+  }
+
+  // Sens.21: Customer claims another customerId -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_rem_bad').set({
+      name: 'Cust A',
+      query: 'Spoofed Query',
+      phone: '9876543210',
+      phoneNumber: '9876543210',
+      status: 'unread',
+      customerId: 'customer_b',
+    }));
+    reportTest('Sens.21 Customer claims another customerId -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.21 Customer claims another customerId -> DENY', false);
+  }
+
+  // Sens.22: Anonymous create -> DENY
+  try {
+    await assertFails(unauthDb.collection('supportQueries').doc('query_rem_anon').set({
+      name: 'Anon',
+      query: 'Anon Query',
+      phone: '9876543210',
+      phoneNumber: '9876543210',
+      status: 'unread',
+    }));
+    reportTest('Sens.22 Anonymous create -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.22 Anonymous create -> DENY', false);
+  }
+
+  // Sens.23: Customer reads foreign query -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_b').get());
+    reportTest('Sens.23 Customer reads foreign query -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.23 Customer reads foreign query -> DENY', false);
+  }
+
+  // Sens.24: Customer updates query -> DENY
+  try {
+    const p1 = assertFails(customerDb.collection('supportQueries').doc('query_cust_a').update({ status: 'resolved' }));
+    const p2 = assertFails(customerDb.collection('supportQueries').doc('query_cust_a').update({ customerId: 'customer_b' }));
+    await Promise.all([p1, p2]);
+    reportTest('Sens.24 Customer updates query -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.24 Customer updates query -> DENY', false);
+  }
+
+  // Sens.25: Customer deletes query -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').delete());
+    reportTest('Sens.25 Customer deletes query -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.25 Customer deletes query -> DENY', false);
+  }
+
+  // ── 4. deviceTokens Tests (Sens.26 - Sens.32) ──
+  // Sens.26: Customer own token operation -> ALLOW
   try {
     await assertSucceeds(customerDb.collection('deviceTokens').doc('token_new_a').set({
       token: 'token_new_a',
@@ -1999,21 +2185,21 @@ async function runRulesSecuritySuite() {
     }));
     await assertSucceeds(customerDb.collection('deviceTokens').doc('token_new_a').get());
     await assertSucceeds(customerDb.collection('deviceTokens').doc('token_for_delete').delete());
-    reportTest('Sens.7 Customer own token operation -> ALLOW', true);
+    reportTest('Sens.26 Customer own token operation -> ALLOW', true);
   } catch (e) {
-    reportTest('Sens.7 Customer own token operation -> ALLOW', false);
+    reportTest('Sens.26 Customer own token operation -> ALLOW', false);
   }
 
-  // Sens.8: Customer foreign token -> DENY
+  // Sens.27: Customer foreign token -> DENY
   try {
     await assertFails(customerDb.collection('deviceTokens').doc('token_cust_b').get());
     await assertFails(customerDb.collection('deviceTokens').doc('token_cust_b').delete());
-    reportTest('Sens.8 Customer foreign token -> DENY', true);
+    reportTest('Sens.27 Customer foreign token -> DENY', true);
   } catch (e) {
-    reportTest('Sens.8 Customer foreign token -> DENY', false);
+    reportTest('Sens.27 Customer foreign token -> DENY', false);
   }
 
-  // Sens.9: Customer token role/shop tampering -> DENY
+  // Sens.28: Customer token role/shop tampering -> DENY
   try {
     await assertFails(customerDb.collection('deviceTokens').doc('token_t1').set({
       token: 'token_t1',
@@ -2031,12 +2217,12 @@ async function runRulesSecuritySuite() {
       uid: 'customer_b',
       role: 'customer',
     }));
-    reportTest('Sens.9 Customer token role/shop tampering -> DENY', true);
+    reportTest('Sens.28 Customer token role/shop tampering -> DENY', true);
   } catch (e) {
-    reportTest('Sens.9 Customer token role/shop tampering -> DENY', false);
+    reportTest('Sens.28 Customer token role/shop tampering -> DENY', false);
   }
 
-  // Sens.10: Shopkeeper cross-shop token manipulation -> DENY
+  // Sens.29: Shopkeeper cross-shop token manipulation -> DENY
   try {
     await assertFails(shopkeeperADb.collection('deviceTokens').doc('token_sk_bad').set({
       token: 'token_sk_bad',
@@ -2050,12 +2236,12 @@ async function runRulesSecuritySuite() {
       role: 'shopkeeper',
       shopId: 'shop_a',
     }));
-    reportTest('Sens.10 Shopkeeper cross-shop token manipulation -> DENY', true);
+    reportTest('Sens.29 Shopkeeper cross-shop token manipulation -> DENY', true);
   } catch (e) {
-    reportTest('Sens.10 Shopkeeper cross-shop token manipulation -> DENY', false);
+    reportTest('Sens.29 Shopkeeper cross-shop token manipulation -> DENY', false);
   }
 
-  // Sens.11: Anonymous token access -> DENY
+  // Sens.30: Anonymous token access -> DENY
   try {
     await assertFails(unauthDb.collection('deviceTokens').doc('token_anon').set({
       token: 'token_anon',
@@ -2064,204 +2250,87 @@ async function runRulesSecuritySuite() {
     }));
     await assertFails(unauthDb.collection('deviceTokens').doc('token_cust_a').get());
     await assertFails(unauthDb.collection('deviceTokens').doc('token_cust_a').delete());
-    reportTest('Sens.11 Anonymous token access -> DENY', true);
+    reportTest('Sens.30 Anonymous token access -> DENY', true);
   } catch (e) {
-    reportTest('Sens.11 Anonymous token access -> DENY', false);
+    reportTest('Sens.30 Anonymous token access -> DENY', false);
   }
 
-  // Sens.12: Global token enumeration -> DENY
+  // Sens.31: Global token enumeration -> DENY
   try {
     await assertFails(customerDb.collection('deviceTokens').get());
     await assertFails(shopkeeperADb.collection('deviceTokens').get());
     await assertFails(unauthDb.collection('deviceTokens').get());
-    reportTest('Sens.12 Global token enumeration -> DENY', true);
+    reportTest('Sens.31 Global token enumeration -> DENY', true);
   } catch (e) {
-    reportTest('Sens.12 Global token enumeration -> DENY', false);
+    reportTest('Sens.31 Global token enumeration -> DENY', false);
   }
 
-  // ── 3. supportQueries Tests (Sens.13 - Sens.19) ──
-  // Sens.13: Customer own support query -> ALLOW
-  try {
-    await assertSucceeds(customerDb.collection('supportQueries').doc('query_cust_a').get());
-    reportTest('Sens.13 Customer own support query -> ALLOW', true);
-  } catch (e) {
-    reportTest('Sens.13 Customer own support query -> ALLOW', false);
-  }
-
-  // Sens.14: Customer foreign support query -> DENY
-  try {
-    await assertFails(customerDb.collection('supportQueries').doc('query_cust_b').get());
-    reportTest('Sens.14 Customer foreign support query -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.14 Customer foreign support query -> DENY', false);
-  }
-
-  // Sens.15: Customer foreign create -> DENY
-  try {
-    await assertFails(customerDb.collection('supportQueries').doc('query_bad_create').set({
-      name: 'Customer A',
-      query: 'Tampered Customer ID',
-      phone: '9876543210',
-      phoneNumber: '9876543210',
-      status: 'unread',
-      customerId: 'customer_b',
-    }));
-    await assertSucceeds(customerDb.collection('supportQueries').doc('query_good_create').set({
-      name: 'Customer A',
-      query: 'Legitimate Customer Query',
-      phone: '9876543210',
-      phoneNumber: '9876543210',
-      status: 'unread',
-      customerId: 'customer_a',
-    }));
-    reportTest('Sens.15 Customer foreign create -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.15 Customer foreign create -> DENY', false);
-  }
-
-  // Sens.16: Customer ownership mutation -> DENY
-  try {
-    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').update({ customerId: 'customer_b' }));
-    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').update({ status: 'resolved' }));
-    await assertFails(customerDb.collection('supportQueries').doc('query_cust_a').delete());
-    reportTest('Sens.16 Customer ownership mutation -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.16 Customer ownership mutation -> DENY', false);
-  }
-
-  // Sens.17: Shopkeeper support access -> DENY
-  try {
-    await assertFails(shopkeeperADb.collection('supportQueries').doc('query_cust_a').get());
-    await assertFails(shopkeeperADb.collection('supportQueries').get());
-    reportTest('Sens.17 Shopkeeper support access -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.17 Shopkeeper support access -> DENY', false);
-  }
-
-  // Sens.18: Anonymous support access -> DENY
-  try {
-    await assertFails(unauthDb.collection('supportQueries').doc('query_cust_a').get());
-    await assertFails(unauthDb.collection('supportQueries').get());
-    reportTest('Sens.18 Anonymous support access -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.18 Anonymous support access -> DENY', false);
-  }
-
-  // Sens.19: Admin intended support access -> ALLOW
-  try {
-    await assertSucceeds(adminDb.collection('supportQueries').doc('query_cust_a').get());
-    await assertSucceeds(adminDb.collection('supportQueries').get());
-    reportTest('Sens.19 Admin intended support access -> ALLOW', true);
-  } catch (e) {
-    reportTest('Sens.19 Admin intended support access -> ALLOW', false);
-  }
-
-  // ── 4. users & profiles Tests (Sens.20 - Sens.23) ──
-  // Sens.20: User reads own profile -> ALLOW
-  try {
-    await assertSucceeds(customerDb.collection('users').doc('customer_a').get());
-    await assertSucceeds(customerDb.collection('profiles').doc('customer_a').get());
-    reportTest('Sens.20 User reads own profile -> ALLOW', true);
-  } catch (e) {
-    reportTest('Sens.20 User reads own profile -> ALLOW', false);
-  }
-
-  // Sens.21: User reads another user\'s profile -> DENY
-  try {
-    await assertFails(customerDb.collection('users').doc('customer_b').get());
-    await assertFails(customerDb.collection('profiles').doc('customer_b').get());
-    reportTest('Sens.21 User reads another user\'s profile -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.21 User reads another user\'s profile -> DENY', false);
-  }
-
-  // Sens.22: User writes another user\'s profile -> DENY
-  try {
-    await assertFails(customerDb.collection('users').doc('customer_b').set({ name: 'Tampered' }));
-    await assertFails(customerDb.collection('profiles').doc('customer_b').set({ displayName: 'Tampered' }));
-    await assertSucceeds(customerDb.collection('users').doc('customer_a').set({ name: 'Customer A Updated', phone: '+919876543210' }));
-    await assertSucceeds(customerDb.collection('profiles').doc('customer_a').set({ displayName: 'Customer A Nickname' }));
-    reportTest('Sens.22 User writes another user\'s profile -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.22 User writes another user\'s profile -> DENY', false);
-  }
-
-  // Sens.23: Anonymous profile access -> DENY
-  try {
-    await assertFails(unauthDb.collection('users').doc('customer_a').get());
-    await assertFails(unauthDb.collection('users').doc('customer_a').set({ name: 'Anon' }));
-    await assertFails(unauthDb.collection('profiles').doc('customer_a').get());
-    reportTest('Sens.23 Anonymous profile access -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.23 Anonymous profile access -> DENY', false);
-  }
-
-  // ── 5. Server-Only Collections Tests (Sens.24 - Sens.25) ──
-  // Sens.24: Client reads server-only collection -> DENY
-  try {
-    await assertFails(customerDb.collection('_authChallenges').doc('challenge_1').get());
-    await assertFails(adminDb.collection('_authChallenges').doc('challenge_1').get());
-    await assertFails(customerDb.collection('auditLogs').doc('audit_1').get());
-    await assertFails(adminDb.collection('auditLogs').doc('audit_1').get());
-    reportTest('Sens.24 Client reads server-only collection -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.24 Client reads server-only collection -> DENY', false);
-  }
-
-  // Sens.25: Client writes server-only collection -> DENY
-  try {
-    await assertFails(customerDb.collection('_authChallenges').doc('challenge_bad').set({ fake: true }));
-    await assertFails(adminDb.collection('_authChallenges').doc('challenge_bad').set({ fake: true }));
-    await assertFails(customerDb.collection('internal_metrics').doc('m1').set({ hacked: true }));
-    await assertFails(adminDb.collection('internal_metrics').doc('m1').set({ hacked: true }));
-    reportTest('Sens.25 Client writes server-only collection -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.25 Client writes server-only collection -> DENY', false);
-  }
-
-  // ── 6. Query Safety & Direct Bypass Tests (Sens.26 - Sens.30) ──
-  // Sens.26: Query Safety: Customer scoped query on own support queries -> ALLOW
-  try {
-    await assertSucceeds(customerDb.collection('supportQueries').where('customerId', '==', 'customer_a').get());
-    reportTest('Sens.26 Query Safety: Customer scoped query on own support queries -> ALLOW', true);
-  } catch (e) {
-    reportTest('Sens.26 Query Safety: Customer scoped query on own support queries -> ALLOW', false);
-  }
-
-  // Sens.27: Query Safety: Customer unfiltered query on all support queries -> DENY
-  try {
-    await assertFails(customerDb.collection('supportQueries').get());
-    reportTest('Sens.27 Query Safety: Customer unfiltered query on all support queries -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.27 Query Safety: Customer unfiltered query on all support queries -> DENY', false);
-  }
-
-  // Sens.28: Query Safety: Admin unfiltered query on all shopStats -> ALLOW
-  try {
-    await assertSucceeds(adminDb.collection('shopStats').get());
-    reportTest('Sens.28 Query Safety: Admin unfiltered query on all shopStats -> ALLOW', true);
-  } catch (e) {
-    reportTest('Sens.28 Query Safety: Admin unfiltered query on all shopStats -> ALLOW', false);
-  }
-
-  // Sens.29: Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY
-  try {
-    await assertFails(shopkeeperADb.collection('shopStats').get());
-    reportTest('Sens.29 Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY', true);
-  } catch (e) {
-    reportTest('Sens.29 Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY', false);
-  }
-
-  // Sens.30: Direct bypass: Token ID mismatch with payload -> DENY
+  // Sens.32: Direct bypass: Token ID mismatch with payload -> DENY
   try {
     await assertFails(customerDb.collection('deviceTokens').doc('doc_id_123').set({
       token: 'different_token_456',
       uid: 'customer_a',
       role: 'customer',
     }));
-    reportTest('Sens.30 Direct bypass: Token ID mismatch with payload -> DENY', true);
+    reportTest('Sens.32 Direct bypass: Token ID mismatch with payload -> DENY', true);
   } catch (e) {
-    reportTest('Sens.30 Direct bypass: Token ID mismatch with payload -> DENY', false);
+    reportTest('Sens.32 Direct bypass: Token ID mismatch with payload -> DENY', false);
+  }
+
+  // ── 5. Server-Only Collections Tests (Sens.33 - Sens.34) ──
+  // Sens.33: Client reads server-only collection -> DENY
+  try {
+    await assertFails(customerDb.collection('_authChallenges').doc('challenge_1').get());
+    await assertFails(adminDb.collection('_authChallenges').doc('challenge_1').get());
+    await assertFails(customerDb.collection('auditLogs').doc('audit_1').get());
+    await assertFails(adminDb.collection('auditLogs').doc('audit_1').get());
+    reportTest('Sens.33 Client reads server-only collection -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.33 Client reads server-only collection -> DENY', false);
+  }
+
+  // Sens.34: Client writes server-only collection -> DENY
+  try {
+    await assertFails(customerDb.collection('_authChallenges').doc('challenge_bad').set({ fake: true }));
+    await assertFails(adminDb.collection('_authChallenges').doc('challenge_bad').set({ fake: true }));
+    await assertFails(customerDb.collection('internal_metrics').doc('m1').set({ hacked: true }));
+    await assertFails(adminDb.collection('internal_metrics').doc('m1').set({ hacked: true }));
+    reportTest('Sens.34 Client writes server-only collection -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.34 Client writes server-only collection -> DENY', false);
+  }
+
+  // ── 6. Query Safety Tests (Sens.35 - Sens.38) ──
+  // Sens.35: Query Safety: Customer scoped query on own support queries -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('supportQueries').where('customerId', '==', 'customer_a').get());
+    reportTest('Sens.35 Query Safety: Customer scoped query on own support queries -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.35 Query Safety: Customer scoped query on own support queries -> ALLOW', false);
+  }
+
+  // Sens.36: Query Safety: Customer unfiltered query on all support queries -> DENY
+  try {
+    await assertFails(customerDb.collection('supportQueries').get());
+    reportTest('Sens.36 Query Safety: Customer unfiltered query on all support queries -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.36 Query Safety: Customer unfiltered query on all support queries -> DENY', false);
+  }
+
+  // Sens.37: Query Safety: Admin unfiltered query on all shopStats -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('shopStats').get());
+    reportTest('Sens.37 Query Safety: Admin unfiltered query on all shopStats -> ALLOW', true);
+  } catch (e) {
+    reportTest('Sens.37 Query Safety: Admin unfiltered query on all shopStats -> ALLOW', false);
+  }
+
+  // Sens.38: Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shopStats').get());
+    reportTest('Sens.38 Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY', true);
+  } catch (e) {
+    reportTest('Sens.38 Query Safety: Shopkeeper unfiltered query on all shopStats -> DENY', false);
   }
 
   console.log('\n=================================================================');
