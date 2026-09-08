@@ -103,8 +103,9 @@ service cloud.firestore {
       // Public catalog browsing allowed for all callers (unauthenticated and authenticated)
       allow read: if true;
 
-      // Shop creation: Platform administrator or assigned shopkeeper for their own shop
-      allow create: if (isAdmin() || isShopOwner(shopId))
+      // Shop creation: Platform administrator responsibility only.
+      // Shopkeepers manage already-assigned shops; they cannot bootstrap/create shops.
+      allow create: if isAdmin()
         && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
         && (!('id' in request.resource.data) || request.resource.data['id'] == shopId);
 
@@ -126,15 +127,18 @@ service cloud.firestore {
         allow read: if true;
 
         // Creation allowed for assigned shopkeeper or platform administrator.
-        // shopId if present in data must match path shopId.
+        // shopId is strictly mandatory and must match the path tenant shopId.
         allow create: if (isAdmin() || isShopOwner(shopId))
-          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId);
+          && ('shopId' in request.resource.data)
+          && request.resource.data.shopId == shopId;
 
         // Updates allowed for assigned shopkeeper or platform administrator.
-        // shopId cannot be mutated to another tenant.
+        // Both existing resource and update payload must have matching valid shopId.
         allow update: if (isAdmin() || isShopOwner(shopId))
-          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
-          && (!('shopId' in resource.data) || !('shopId' in request.resource.data) || request.resource.data.shopId == resource.data.shopId);
+          && ('shopId' in resource.data)
+          && resource.data.shopId == shopId
+          && ('shopId' in request.resource.data)
+          && request.resource.data.shopId == shopId;
 
         // Deletion allowed for assigned shopkeeper or platform administrator.
         allow delete: if isAdmin() || isShopOwner(shopId);
@@ -146,15 +150,18 @@ service cloud.firestore {
         allow read: if true;
 
         // Creation allowed for assigned shopkeeper or platform administrator.
-        // shopId if present in data must match path shopId.
+        // shopId is strictly mandatory and must match the path tenant shopId.
         allow create: if (isAdmin() || isShopOwner(shopId))
-          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId);
+          && ('shopId' in request.resource.data)
+          && request.resource.data.shopId == shopId;
 
         // Updates allowed for assigned shopkeeper or platform administrator.
-        // shopId cannot be mutated to another tenant.
+        // Both existing resource and update payload must have matching valid shopId.
         allow update: if (isAdmin() || isShopOwner(shopId))
-          && (!('shopId' in request.resource.data) || request.resource.data.shopId == shopId)
-          && (!('shopId' in resource.data) || !('shopId' in request.resource.data) || request.resource.data.shopId == resource.data.shopId);
+          && ('shopId' in resource.data)
+          && resource.data.shopId == shopId
+          && ('shopId' in request.resource.data)
+          && request.resource.data.shopId == shopId;
 
         // Deletion allowed for assigned shopkeeper or platform administrator.
         allow delete: if isAdmin() || isShopOwner(shopId);

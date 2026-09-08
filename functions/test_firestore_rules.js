@@ -1,15 +1,17 @@
 /**
  * YummBU / BU Gate2Eat — Firestore Security Rules Unit Tests
  * 
- * Checkpoint 3.2: Shops / Categories / Menu Rules & Tenant Isolation
+ * Checkpoint 3.2 Remediation: Shops / Categories / Menu Rules & Tenant Isolation
  * 
  * Tests against live Firebase Firestore Emulator using @firebase/rules-unit-testing.
  * Proves that database-level authorization enforces:
  *  - Public catalog browsing where intended
- *  - Customer & anonymous write denial across all catalog tiers
+ *  - Shop creation strictly Admin-only
+ *  - Category/Menu creation strictly requires valid matching shopId (mandatory tenant field)
+ *  - Category/Menu update strictly requires both existing and updated docs to possess valid matching shopId
+ *  - Existing malformed/missing-tenant documents cannot be updated as valid tenant documents
  *  - Strict tenant boundary: shopkeepers write ONLY to their assigned shopId
  *  - Cross-tenant attack rejection (Shopkeeper A -> Shopkeeper B denied)
- *  - Shop ownership / shopId immutability (cannot mutate shopId)
  *  - Admin authority restricted strictly to canonical custom claim role == 'admin'
  *  - Default-deny preserved on all protected & unconfigured collections
  */
@@ -22,6 +24,7 @@ const {
   assertFails,
   assertSucceeds,
 } = require('@firebase/rules-unit-testing');
+const { deleteField } = require('@firebase/firestore');
 
 const PROJECT_ID = 'bugate2eat-rules-test';
 const RULES_PATH = path.resolve(__dirname, '../firestore.rules');
@@ -175,6 +178,12 @@ async function setup() {
       isActive: true,
       sortOrder: 1,
     });
+    // Seed malformed category (missing shopId field)
+    await adminFs.collection('shops').doc('shop_a').collection('categories').doc('cat_malformed_no_shopid').set({
+      name: 'Malformed Category',
+      isActive: true,
+      sortOrder: 9,
+    });
 
     // Seed menu items
     await adminFs.collection('shops').doc('shop_a').collection('menuItems').doc('item_a1').set({
@@ -193,6 +202,12 @@ async function setup() {
       name: 'Margherita Pizza',
       price: 150,
       shopId: 'shop_b',
+      isAvailable: true,
+    });
+    // Seed malformed menu item (missing shopId field)
+    await adminFs.collection('shops').doc('shop_a').collection('menuItems').doc('item_malformed_no_shopid').set({
+      name: 'Malformed Legacy Item',
+      price: 99,
       isAvailable: true,
     });
   });
@@ -289,18 +304,17 @@ async function runRulesSecuritySuite() {
     reportTest('Test 10: Customer shop delete -> DENY', false);
   }
 
-  // 11. Shopkeeper own-shop create -> ALLOW where intended
+  // 11. Shopkeeper own-shop create -> DENY (Admin-only creation policy)
   try {
-    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').set({
-      name: 'Rajat Shop Updated',
-      id: 'shop_a',
-      shopId: 'shop_a',
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_uncreated_a').set({
+      name: 'Rajat Shop New',
+      id: 'shop_uncreated_a',
+      shopId: 'shop_uncreated_a',
       isActive: true,
-      isClosedOverride: false,
     }));
-    reportTest('Test 11: Shopkeeper own-shop create/set -> ALLOW', true);
+    reportTest('Test 11: Shopkeeper own-shop create -> DENY (Admin-only creation policy)', true);
   } catch (e) {
-    reportTest('Test 11: Shopkeeper own-shop create/set -> ALLOW', false);
+    reportTest('Test 11: Shopkeeper own-shop create -> DENY (Admin-only creation policy)', false);
   }
 
   // 12. Shopkeeper own-shop update -> ALLOW
@@ -641,7 +655,249 @@ async function runRulesSecuritySuite() {
   }
 
   // ═════════════════════════════════════════════════════════════════════
-  // CHECKPOINT 3.1 REGRESSION BASELINE SUITE
+  // PHASE 3.2 REMEDIATION: STRICT TENANT FIELD INVARIANTS (Rem.1 - 19)
+  // ═════════════════════════════════════════════════════════════════════
+  console.log('\n--- Phase 3.2 Remediation: Admin-Only Shop Creation (Rem.1 - 5) ---');
+
+  // Rem.1 Admin can create shop with valid path/identity -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('shops').doc('shop_admin_remediation').set({
+      name: 'Admin Rem Shop',
+      id: 'shop_admin_remediation',
+      shopId: 'shop_admin_remediation',
+      isActive: true,
+    }));
+    await assertSucceeds(adminDb.collection('shops').doc('shop_admin_remediation').delete());
+    reportTest('Rem.1: Admin can create shop with valid path/identity -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem.1: Admin can create shop with valid path/identity -> ALLOW', false);
+  }
+
+  // Rem.2 Shopkeeper attempting to create assigned shop -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_uncreated_a_rem').set({
+      name: 'Shopkeeper Created Shop',
+      id: 'shop_uncreated_a_rem',
+      shopId: 'shop_uncreated_a_rem',
+      isActive: true,
+    }));
+    reportTest('Rem.2: Shopkeeper attempting to create assigned shop -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.2: Shopkeeper attempting to create assigned shop -> DENY', false);
+  }
+
+  // Rem.3 Shopkeeper attempting to create another shop -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_uncreated_b_rem').set({
+      name: 'Shopkeeper Cross Shop',
+      id: 'shop_uncreated_b_rem',
+      shopId: 'shop_uncreated_b_rem',
+      isActive: true,
+    }));
+    reportTest('Rem.3: Shopkeeper attempting to create another shop -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.3: Shopkeeper attempting to create another shop -> DENY', false);
+  }
+
+  // Rem.4 Customer shop creation -> DENY
+  try {
+    await assertFails(customerDb.collection('shops').doc('shop_cust_rem').set({
+      name: 'Customer Shop',
+      id: 'shop_cust_rem',
+    }));
+    reportTest('Rem.4: Customer shop creation -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.4: Customer shop creation -> DENY', false);
+  }
+
+  // Rem.5 Anonymous shop creation -> DENY
+  try {
+    await assertFails(unauthDb.collection('shops').doc('shop_anon_rem').set({
+      name: 'Anon Shop',
+      id: 'shop_anon_rem',
+    }));
+    reportTest('Rem.5: Anonymous shop creation -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.5: Anonymous shop creation -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.2 Remediation: Category Creation Invariants (Rem.6 - 10) ---');
+
+  // Rem.6 Shopkeeper creates category with matching shopId -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_rem_valid').set({
+      name: 'Valid Category',
+      shopId: 'shop_a',
+      isActive: true,
+    }));
+    reportTest('Rem.6: Shopkeeper creates category with matching shopId -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem.6: Shopkeeper creates category with matching shopId -> ALLOW', false);
+  }
+
+  // Rem.7 Shopkeeper creates category with missing shopId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_rem_missing').set({
+      name: 'Missing ShopId Category',
+      isActive: true,
+    }));
+    reportTest('Rem.7: Shopkeeper creates category with missing shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.7: Shopkeeper creates category with missing shopId -> DENY', false);
+  }
+
+  // Rem.8 Shopkeeper creates category with foreign shopId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_rem_foreign').set({
+      name: 'Foreign ShopId Category',
+      shopId: 'shop_b',
+    }));
+    reportTest('Rem.8: Shopkeeper creates category with foreign shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.8: Shopkeeper creates category with foreign shopId -> DENY', false);
+  }
+
+  // Rem.9 Admin creates category with matching path shopId -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('shops').doc('shop_a').collection('categories').doc('cat_admin_rem_valid').set({
+      name: 'Admin Category',
+      shopId: 'shop_a',
+      isActive: true,
+    }));
+    reportTest('Rem.9: Admin creates category with matching path shopId -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem.9: Admin creates category with matching path shopId -> ALLOW', false);
+  }
+
+  // Rem.10 Admin creates category with foreign/mismatched shopId -> DENY
+  try {
+    await assertFails(adminDb.collection('shops').doc('shop_a').collection('categories').doc('cat_admin_rem_mismatch').set({
+      name: 'Mismatched Admin Category',
+      shopId: 'shop_b',
+    }));
+    reportTest('Rem.10: Admin creates category with foreign/mismatched shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.10: Admin creates category with foreign/mismatched shopId -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.2 Remediation: Menu Creation Invariants (Rem.11 - 15) ---');
+
+  // Rem.11 Shopkeeper creates menu item with matching shopId -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_rem_valid').set({
+      name: 'Valid Item',
+      price: 100,
+      shopId: 'shop_a',
+      isAvailable: true,
+    }));
+    reportTest('Rem.11: Shopkeeper creates menu item with matching shopId -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem.11: Shopkeeper creates menu item with matching shopId -> ALLOW', false);
+  }
+
+  // Rem.12 Shopkeeper creates menu item with missing shopId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_rem_missing').set({
+      name: 'Missing ShopId Item',
+      price: 100,
+      isAvailable: true,
+    }));
+    reportTest('Rem.12: Shopkeeper creates menu item with missing shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.12: Shopkeeper creates menu item with missing shopId -> DENY', false);
+  }
+
+  // Rem.13 Shopkeeper creates menu item with foreign shopId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_rem_foreign').set({
+      name: 'Foreign ShopId Item',
+      price: 100,
+      shopId: 'shop_b',
+      isAvailable: true,
+    }));
+    reportTest('Rem.13: Shopkeeper creates menu item with foreign shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.13: Shopkeeper creates menu item with foreign shopId -> DENY', false);
+  }
+
+  // Rem.14 Admin creates menu item with matching path shopId -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('shops').doc('shop_a').collection('menuItems').doc('item_admin_rem_valid').set({
+      name: 'Admin Menu Item',
+      price: 120,
+      shopId: 'shop_a',
+      isAvailable: true,
+    }));
+    reportTest('Rem.14: Admin creates menu item with matching path shopId -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem.14: Admin creates menu item with matching path shopId -> ALLOW', false);
+  }
+
+  // Rem.15 Admin creates menu item with mismatched shopId -> DENY
+  try {
+    await assertFails(adminDb.collection('shops').doc('shop_a').collection('menuItems').doc('item_admin_rem_mismatch').set({
+      name: 'Admin Mismatched Item',
+      price: 120,
+      shopId: 'shop_b',
+      isAvailable: true,
+    }));
+    reportTest('Rem.15: Admin creates menu item with mismatched shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.15: Admin creates menu item with mismatched shopId -> DENY', false);
+  }
+
+  console.log('\n--- Phase 3.2 Remediation: Update Integrity Invariants (Rem.16 - 19) ---');
+
+  // Rem.16 Valid shopkeeper update preserves matching shopId -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_a1').update({
+      price: 75,
+      shopId: 'shop_a',
+    }));
+    reportTest('Rem.16: Valid shopkeeper update preserves matching shopId -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem.16: Valid shopkeeper update preserves matching shopId -> ALLOW', false);
+  }
+
+  // Rem.17 Shopkeeper removes shopId during update -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_a1').update({
+      shopId: deleteField(),
+    }));
+    reportTest('Rem.17: Shopkeeper removes shopId during update -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.17: Shopkeeper removes shopId during update -> DENY', false);
+  }
+
+  // Rem.18 Shopkeeper changes shopId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_a1').update({
+      shopId: 'shop_b',
+    }));
+    reportTest('Rem.18: Shopkeeper changes shopId -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.18: Shopkeeper changes shopId -> DENY', false);
+  }
+
+  // Rem.19 Existing malformed/missing-tenant resource cannot be updated as if valid tenant resource -> DENY
+  try {
+    // Both for category and menu item lacking stored shopId in resource.data
+    const p1 = assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_malformed_no_shopid').update({
+      name: 'Attempted Patch',
+      shopId: 'shop_a',
+    }));
+    const p2 = assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_malformed_no_shopid').update({
+      price: 150,
+      shopId: 'shop_a',
+    }));
+    await Promise.all([p1, p2]);
+    reportTest('Rem.19: Existing malformed/missing-tenant resource cannot be updated -> DENY', true);
+  } catch (e) {
+    reportTest('Rem.19: Existing malformed/missing-tenant resource cannot be updated -> DENY', false);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // CHECKPOINT 3.1 REGRESSION BASELINE SUITE (R.1 - 34)
   // ═════════════════════════════════════════════════════════════════════
   console.log('\n--- Regression: Protected Default-Deny Collections ---');
 
