@@ -189,10 +189,10 @@ class OrderService {
         }
       }
 
-      // 1. If testing delegate is provided, execute it directly
+      // 1. If testing delegate is provided, execute it directly (Server-Authoritative)
+      // Client does NOT provide orderId — order identity is generated authoritatively by the backend.
       if (_orderCreatorForTesting != null) {
         final payload = {
-          'orderId': order.orderId,
           'shopId': order.shopId,
           'customerId': authUid ?? order.customerId,
           'customerName': order.customerName,

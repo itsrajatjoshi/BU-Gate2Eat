@@ -56,6 +56,15 @@ class MockFirestore {
           async set(data) {
             self.data.set(docPath, { ...data });
           },
+          async create(data) {
+            if (self.data.has(docPath)) {
+              const err = new Error(`Document already exists at ${docPath}`);
+              err.code = 6;
+              err.status = 409;
+              throw err;
+            }
+            self.data.set(docPath, { ...data });
+          },
           collection(subColName) {
             return {
               doc(subDocId) {
@@ -678,7 +687,7 @@ async function runTests() {
 
     const res = await processServerAuthoritativeOrder(db, authContext, request, {
       now: fixedNow,
-      orderId: "ORD_TEST_ATOMIC_1",
+      _serverOrderId: "ORD_TEST_ATOMIC_1",
     });
 
     const storedKey = `orders/${res.orderId}`;
@@ -805,7 +814,24 @@ async function runTests() {
     pass("Order missing required option group selection is rejected");
   }
 
-  // ─── Test 29: Malicious orderId with path traversal rejected ────────────────
+  // ─── Test 29: Client-supplied orderId is strictly rejected (Explicit Rejection)
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      orderId: "ORD_CLIENT_SUPPLIED_SPOOF",
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("Client-supplied orderId is strictly prohibited")
+    );
+    pass("Client-supplied orderId is strictly rejected (server-authoritative identity)");
+  }
+
+  // ─── Test 30: Server-generated orderId -> SUCCESS & autonomous uniqueness ─────
   {
     const db = createSeededFirestore();
     const authContext = { uid: "cust_verified" };
@@ -814,22 +840,38 @@ async function runTests() {
       items: [{ menuItemId: "item_momos", quantity: 1 }],
     };
 
-    await assert.rejects(
-      async () => processServerAuthoritativeOrder(db, authContext, request, {
-        now: fixedNow,
-        orderId: "../../orders/hacked_target",
-      }),
-      (err) => err.code === "invalid-argument" && err.message.includes("Malformed or unsafe orderId")
-    );
-    pass("Malicious orderId with path traversal or invalid characters is rejected");
+    const res1 = await processServerAuthoritativeOrder(db, authContext, request);
+    const res2 = await processServerAuthoritativeOrder(db, authContext, request);
+
+    assert(res1.orderId.startsWith("ORD_"), "Server-generated orderId must start with ORD_");
+    assert(res2.orderId.startsWith("ORD_"), "Server-generated orderId must start with ORD_");
+    assert.notStrictEqual(res1.orderId, res2.orderId, "Each server-generated orderId must be unique");
+    pass("Server-generated orderId succeeds with cryptographically unique identifiers");
   }
 
-  // ─── Test 30: Overwrite existing order document is strictly prohibited ──────
+  // ─── Test 31: Malformed client-supplied orderId cannot influence server identity
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const request = {
+      orderId: "../../orders/hacked_target",
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    await assert.rejects(
+      async () => processServerAuthoritativeOrder(db, authContext, request, { now: fixedNow }),
+      (err) => err.code === "invalid-argument" && err.message.includes("Client-supplied orderId is strictly prohibited")
+    );
+    pass("Malformed client-supplied orderId is rejected without influencing server identity");
+  }
+
+  // ─── Test 32: Same final orderId cannot overwrite existing order ─────────────
   {
     const db = createSeededFirestore();
     // Pre-populate an existing order
-    db.setDoc("orders/ORD_EXISTING_TARGET", {
-      orderId: "ORD_EXISTING_TARGET",
+    db.setDoc("orders/ORD_EXISTING_COLLISION", {
+      orderId: "ORD_EXISTING_COLLISION",
       customerId: "victim_user",
       grandTotal: 500,
     });
@@ -843,29 +885,51 @@ async function runTests() {
     await assert.rejects(
       async () => processServerAuthoritativeOrder(db, authContext, request, {
         now: fixedNow,
-        orderId: "ORD_EXISTING_TARGET",
+        _serverOrderId: "ORD_EXISTING_COLLISION",
       }),
       (err) => err.code === "already-exists" && err.status === 409
     );
-    pass("Attempt to overwrite existing order document is rejected with already-exists");
+    pass("Same final orderId cannot overwrite existing order (atomic create defense)");
   }
 
-  // ─── Test 31: Autonomous server-generated orderId is cryptographically unique
+  // ─── Test 33: Concurrent collision cannot create two orders at the same ID ───
   {
     const db = createSeededFirestore();
     const authContext = { uid: "cust_verified" };
-    const request = {
+    const request1 = {
       shopId: "shop_active",
       items: [{ menuItemId: "item_momos", quantity: 1 }],
     };
+    const request2 = {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 2 }],
+    };
 
-    const res1 = await processServerAuthoritativeOrder(db, authContext, request);
-    const res2 = await processServerAuthoritativeOrder(db, authContext, request);
+    const collisionId = "ORD_CONCURRENT_RACE_TARGET";
 
-    assert(res1.orderId.startsWith("ORD_"));
-    assert(res2.orderId.startsWith("ORD_"));
-    assert.notStrictEqual(res1.orderId, res2.orderId, "Each server-generated orderId must be unique");
-    pass("Autonomous server-generated orderId is unique and prefixed with ORD_");
+    // Simulate two concurrent requests that attempt to use the same final ID
+    const results = await Promise.allSettled([
+      processServerAuthoritativeOrder(db, authContext, request1, {
+        now: fixedNow,
+        _serverOrderId: collisionId,
+      }),
+      processServerAuthoritativeOrder(db, authContext, request2, {
+        now: fixedNow,
+        _serverOrderId: collisionId,
+      }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+
+    assert.strictEqual(fulfilled.length, 1, "Exactly one concurrent creation must succeed");
+    assert.strictEqual(rejected.length, 1, "Exactly one concurrent creation must fail atomically");
+    assert.strictEqual(rejected[0].reason.code, "already-exists");
+    assert.strictEqual(rejected[0].reason.status, 409);
+
+    // Verify exactly one order exists in storage at that path
+    assert(db.data.has(`orders/${collisionId}`));
+    pass("Concurrent collision cannot create two orders at the same ID");
   }
 
   console.log("==================================================");

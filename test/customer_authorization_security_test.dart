@@ -676,12 +676,12 @@ void main() {
         currentUserIdResolver: () => 'UID_A',
         orderCreatorForTesting: (payload) async {
           receivedPayload = payload;
-          return {'success': true, 'orderId': payload['orderId']};
+          return {'success': true, 'orderId': 'ORD_SERVER_AUTH_001'};
         },
       );
 
       final order = AppOrder(
-        orderId: 'ORD_SERVER_AUTH_001',
+        orderId: 'ORD_CLIENT_IGNORED_OR_FORBIDDEN',
         shopId: 'shop_001',
         shopName: 'Client Spoofed Shop Name',
         customerId: 'UID_A',
@@ -702,7 +702,7 @@ void main() {
       await service.createOrder(order);
 
       expect(receivedPayload, isNotNull);
-      expect(receivedPayload!['orderId'], 'ORD_SERVER_AUTH_001');
+      expect(receivedPayload!.containsKey('orderId'), isFalse, reason: 'Client must NOT send orderId to server');
       expect(receivedPayload!['shopId'], 'shop_001');
       expect(receivedPayload!['customerId'], 'UID_A');
       expect(receivedPayload!['items'], isA<List<dynamic>>());
