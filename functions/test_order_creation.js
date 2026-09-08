@@ -18,8 +18,10 @@
 
 const assert = require("assert");
 const {
-  processServerAuthoritativeOrder,
+  processServerAuthoritativeOrder: _rawProcessOrder,
   buildDeterministicCartKey,
+  computeIdempotencyDocId,
+  computeRequestFingerprint,
   toPaise,
   fromPaise,
   MAX_ITEMS_PER_ORDER,
@@ -36,12 +38,31 @@ const {
   CONTROL_CHAR_REGEX,
   PROHIBITED_SECURITY_KEYS,
   ALLOWED_ORDER_METHODS,
+  IDEMPOTENCY_KEY_REGEX,
+  RATE_LIMIT_USER_MAX,
+  RATE_LIMIT_USER_WINDOW_MS,
+  RATE_LIMIT_USER_BURST_MAX,
+  RATE_LIMIT_USER_BURST_WINDOW_MS,
+  RATE_LIMIT_SHOP_MAX,
+  RATE_LIMIT_SHOP_WINDOW_MS,
+  IDEMPOTENCY_EXPIRY_MS,
+  IDEMPOTENCY_PENDING_STALE_MS,
 } = require("./order_creation");
+
+/**
+ * Migration fallback wrapper for legacy Tests 1–65.
+ * Defaults allowMissingIdempotencyKey: true unless explicitly overridden,
+ * preserving existing test assertions while allowing Phase 4.4 tests to test strict key requirements.
+ */
+const processServerAuthoritativeOrder = (db, authContext, requestData, options = {}) => {
+  return _rawProcessOrder(db, authContext, requestData, { allowMissingIdempotencyKey: true, ...options });
+};
 
 // ─── Lightweight Mock Firestore for Offline Verification ────────────────────
 class MockFirestore {
   constructor() {
     this.data = new Map();
+    this.versions = new Map();
     this.readCounts = new Map();
   }
 
@@ -51,6 +72,7 @@ class MockFirestore {
 
   setDoc(path, docData) {
     this.data.set(path, { ...docData });
+    this.versions.set(path, (this.versions.get(path) || 0) + 1);
   }
 
   collection(colName) {
@@ -58,54 +80,148 @@ class MockFirestore {
     return {
       doc(docId) {
         const docPath = self._getKey(colName, docId);
+        return self._makeDocRef(docPath, docId);
+      },
+    };
+  }
+
+  _makeDocRef(docPath, docId) {
+    const self = this;
+    return {
+      _path: docPath,
+      id: docId,
+      async get() {
+        const count = self.readCounts.get(docPath) || 0;
+        self.readCounts.set(docPath, count + 1);
+        const exists = self.data.has(docPath);
         return {
-          async get() {
-            const count = self.readCounts.get(docPath) || 0;
-            self.readCounts.set(docPath, count + 1);
-            const exists = self.data.has(docPath);
-            return {
-              exists,
-              id: docId,
-              data: () => (exists ? { ...self.data.get(docPath) } : undefined),
-            };
-          },
-          async set(data) {
-            self.data.set(docPath, { ...data });
-          },
-          async create(data) {
-            if (self.data.has(docPath)) {
-              const err = new Error(`Document already exists at ${docPath}`);
-              err.code = 6;
-              err.status = 409;
-              throw err;
-            }
-            self.data.set(docPath, { ...data });
-          },
-          collection(subColName) {
-            return {
-              doc(subDocId) {
-                const subPath = `${docPath}/${subColName}/${subDocId}`;
-                return {
-                  async get() {
-                    const count = self.readCounts.get(subPath) || 0;
-                    self.readCounts.set(subPath, count + 1);
-                    const exists = self.data.has(subPath);
-                    return {
-                      exists,
-                      id: subDocId,
-                      data: () => (exists ? { ...self.data.get(subPath) } : undefined),
-                    };
-                  },
-                  async set(data) {
-                    self.data.set(subPath, { ...data });
-                  },
-                };
-              },
-            };
+          exists,
+          id: docId,
+          data: () => (exists ? { ...self.data.get(docPath) } : undefined),
+        };
+      },
+      async set(data) {
+        self.data.set(docPath, { ...data });
+        self.versions.set(docPath, (self.versions.get(docPath) || 0) + 1);
+      },
+      async create(data) {
+        if (self.data.has(docPath)) {
+          const err = new Error(`Document already exists at ${docPath}`);
+          err.code = 6;
+          err.status = 409;
+          throw err;
+        }
+        self.data.set(docPath, { ...data });
+        self.versions.set(docPath, (self.versions.get(docPath) || 0) + 1);
+      },
+      async delete() {
+        self.data.delete(docPath);
+        self.versions.set(docPath, (self.versions.get(docPath) || 0) + 1);
+      },
+      collection(subColName) {
+        return {
+          doc(subDocId) {
+            const subPath = `${docPath}/${subColName}/${subDocId}`;
+            return self._makeDocRef(subPath, subDocId);
           },
         };
       },
     };
+  }
+
+  async runTransaction(updateFunction) {
+    const maxRetries = 10;
+    const self = this;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const readVersions = new Map();
+      const stagedWrites = new Map();
+      const stagedDeletes = new Set();
+
+      const tx = {
+        async get(docRef) {
+          const path = docRef._path;
+          const count = self.readCounts.get(path) || 0;
+          self.readCounts.set(path, count + 1);
+
+          readVersions.set(path, self.versions.get(path) || 0);
+
+          if (stagedDeletes.has(path)) {
+            return { exists: false, id: docRef.id, data: () => undefined };
+          }
+          if (stagedWrites.has(path)) {
+            return { exists: true, id: docRef.id, data: () => ({ ...stagedWrites.get(path) }) };
+          }
+          const exists = self.data.has(path);
+          return {
+            exists,
+            id: docRef.id,
+            data: () => (exists ? { ...self.data.get(path) } : undefined),
+          };
+        },
+        set(docRef, data) {
+          const path = docRef._path;
+          stagedDeletes.delete(path);
+          stagedWrites.set(path, { ...data });
+        },
+        create(docRef, data) {
+          const path = docRef._path;
+          if (self.data.has(path) || stagedWrites.has(path)) {
+            const err = new Error(`Document already exists at ${path}`);
+            err.code = 6;
+            err.status = 409;
+            throw err;
+          }
+          stagedWrites.set(path, { ...data });
+        },
+        delete(docRef) {
+          const path = docRef._path;
+          stagedWrites.delete(path);
+          stagedDeletes.add(path);
+        },
+      };
+
+      let result;
+      try {
+        result = await updateFunction(tx);
+      } catch (fnErr) {
+        // Direct business logic or collision failure: do not retry, abort immediately
+        throw fnErr;
+      }
+
+      // Check for OCC conflict across read documents
+      let hasConflict = false;
+      for (const [path, expectedVer] of readVersions.entries()) {
+        const currentVer = self.versions.get(path) || 0;
+        if (currentVer !== expectedVer) {
+          hasConflict = true;
+          break;
+        }
+      }
+
+      if (hasConflict) {
+        // Contention: wait briefly and retry with refreshed read data
+        await new Promise((r) => setTimeout(r, 5));
+        continue;
+      }
+
+      // Commit atomically
+      for (const [path, data] of stagedWrites.entries()) {
+        self.data.set(path, data);
+        self.versions.set(path, (self.versions.get(path) || 0) + 1);
+      }
+      for (const path of stagedDeletes) {
+        self.data.delete(path);
+        self.versions.set(path, (self.versions.get(path) || 0) + 1);
+      }
+
+      return result;
+    }
+
+    const contentionErr = new Error("Transaction contention limit exceeded.");
+    contentionErr.code = 10;
+    contentionErr.status = 409;
+    throw contentionErr;
   }
 }
 
@@ -2268,12 +2384,13 @@ async function runTests() {
 
     // 1. All valid supported production values succeed:
     const validModes = ["app", "whatsapp", "wa", "in_app", "both"];
-    for (const mode of validModes) {
+    for (let idx = 0; idx < validModes.length; idx++) {
+      const mode = validModes[idx];
       const res = await processServerAuthoritativeOrder(db, authContext, {
         shopId: "shop_active",
         orderMethod: mode,
         items: [{ menuItemId: "item_momos", quantity: 1 }],
-      }, { now: fixedNow });
+      }, { now: new Date(fixedNow.getTime() + idx * 15000) });
 
       if (mode === "whatsapp" || mode === "wa") {
         assert.strictEqual(res.order.orderMethod, "whatsapp");
@@ -2288,7 +2405,7 @@ async function runTests() {
     const defaultRes = await processServerAuthoritativeOrder(db, authContext, {
       shopId: "shop_active",
       items: [{ menuItemId: "item_momos", quantity: 1 }],
-    }, { now: fixedNow });
+    }, { now: new Date(fixedNow.getTime() + 120000) });
     assert.strictEqual(defaultRes.order.orderMethod, "app");
 
     // 3. Invalid or unknown orderMethod values rejected:
@@ -2541,6 +2658,813 @@ async function runTests() {
     }
 
     pass("Test 65: Positive regression succeeded across all supported order methods with valid complex payloads");
+  }
+
+  // ===========================================================================
+  // PHASE 4.4 — ORDER ABUSE CONTROLS & IDEMPOTENCY HARDENING TESTS
+  // ===========================================================================
+
+  // ─── Test 66: Idempotency Key Required Matrix (Mandatory Correction 2) ──────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const validBase = {
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    // 1. Missing idempotencyKey rejected by production canonical endpoint
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, { ...validBase }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes("idempotencyKey is required"));
+        return true;
+      }
+    );
+
+    // 2. Empty string idempotencyKey rejected
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, { ...validBase, idempotencyKey: "" }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    // 3. Null or non-string idempotencyKey rejected
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, { ...validBase, idempotencyKey: null }),
+      (err) => err.code === "invalid-argument"
+    );
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, { ...validBase, idempotencyKey: 12345678 }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    // 4. Too short (< 8 chars) rejected
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, { ...validBase, idempotencyKey: "short_7" }),
+      (err) => {
+        assert.strictEqual(err.code, "invalid-argument");
+        assert(err.message.includes("Invalid idempotencyKey format"));
+        return true;
+      }
+    );
+
+    // 5. Too long (> 128 chars) rejected
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, { ...validBase, idempotencyKey: "a".repeat(129) }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    // 6. Disallowed characters (spaces, special chars) rejected
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, { ...validBase, idempotencyKey: "key with spaces" }),
+      (err) => err.code === "invalid-argument"
+    );
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, { ...validBase, idempotencyKey: "key!@#$%^&*()" }),
+      (err) => err.code === "invalid-argument"
+    );
+
+    // 7. Valid key succeeds
+    const validRes = await _rawProcessOrder(db, authContext, {
+      ...validBase,
+      idempotencyKey: "valid_idemp_key_1234",
+    }, { now: fixedNow });
+    assert(validRes.success);
+    assert(validRes.orderId.startsWith("ORD_"));
+
+    // 8. Pre-database shielding: malformed key produces 0 Firestore reads
+    const freshDb = createSeededFirestore();
+    await assert.rejects(
+      async () => _rawProcessOrder(freshDb, authContext, { ...validBase, idempotencyKey: "bad" }),
+      (err) => err.code === "invalid-argument"
+    );
+    assert.strictEqual(freshDb.readCounts.size, 0, "Zero reads on invalid idempotencyKey");
+
+    pass("Test 66: IdempotencyKey required policy enforced with syntax bounds & pre-database shielding");
+  }
+
+  // ─── Test 67: Fixed-Length SHA-256 Idempotency Doc ID Derivation (Mandatory Correction 3) ─
+  {
+    const uid = "cust_verified";
+    const key = "purchase_attempt_1001";
+    const docId = computeIdempotencyDocId(uid, key);
+
+    // Exactly 64 hex characters (256 bits)
+    assert.strictEqual(typeof docId, "string");
+    assert.strictEqual(docId.length, 64);
+    assert(/^[a-f0-9]{64}$/.test(docId));
+
+    // Deterministic: same uid + key -> identical docId
+    const docId2 = computeIdempotencyDocId(uid, key);
+    assert.strictEqual(docId, docId2);
+
+    // Cross-user isolation: different uid + same key -> distinct docId
+    const docIdOtherUser = computeIdempotencyDocId("cust_other_user", key);
+    assert.notStrictEqual(docId, docIdOtherUser);
+
+    // Distinct keys -> distinct docIds
+    const docIdDiffKey = computeIdempotencyDocId(uid, "purchase_attempt_1002");
+    assert.notStrictEqual(docId, docIdDiffKey);
+
+    pass("Test 67: Fixed-length SHA-256 idempotency doc ID derived deterministically with user isolation");
+  }
+
+  // ─── Test 68: Request Fingerprint Invariant & Exclusion Verification ─────────
+  {
+    const basePayload = {
+      shopId: "shop_active",
+      orderMethod: "app",
+      specialInstructions: "Extra spicy",
+      deliveryNote: "Hostel 1",
+      items: [{ menuItemId: "item_momos", quantity: 2 }],
+    };
+
+    const fp1 = computeRequestFingerprint(basePayload);
+    assert.strictEqual(fp1.length, 64);
+
+    // Excluded fields do NOT change fingerprint:
+    // 1. Injected orderId
+    const fpWithOrderId = computeRequestFingerprint({ ...basePayload, orderId: "ORD_FORGED_999" });
+    assert.strictEqual(fp1, fpWithOrderId, "Fingerprint strictly ignores orderId");
+
+    // 2. Injected financial values (price, grandTotal, deliveryCharges)
+    const fpWithPrices = computeRequestFingerprint({
+      ...basePayload,
+      grandTotal: 99999,
+      deliveryCharges: 0,
+      items: [{ menuItemId: "item_momos", quantity: 2, price: 1, subtotal: 2 }],
+    });
+    assert.strictEqual(fp1, fpWithPrices, "Fingerprint strictly ignores client financial values");
+
+    // 3. Timestamps
+    const fpWithTimestamps = computeRequestFingerprint({
+      ...basePayload,
+      createdAt: new Date(),
+      updatedAt: 123456789,
+    });
+    assert.strictEqual(fp1, fpWithTimestamps, "Fingerprint strictly ignores timestamps");
+
+    pass("Test 68: Request fingerprint excludes orderId, timestamps, financial inputs, and server metadata");
+  }
+
+  // ─── Test 69: Request Fingerprint Sensitivity & Canonical Normalization ──────
+  {
+    const itemsOriginal = [
+      { menuItemId: "item_momos", quantity: 2 },
+      {
+        menuItemId: "item_coffee",
+        quantity: 1,
+        selectedOptions: [
+          { groupId: "grp_flavour", optionId: "opt_vanilla" },
+          { groupId: "grp_flavour", optionId: "opt_caramel" },
+        ],
+      },
+    ];
+
+    // Reordered items + reordered options within item
+    const itemsReordered = [
+      {
+        menuItemId: "item_coffee",
+        quantity: 1,
+        selectedOptions: [
+          { groupId: "grp_flavour", optionId: "opt_caramel" },
+          { groupId: "grp_flavour", optionId: "opt_vanilla" },
+        ],
+      },
+      { menuItemId: "item_momos", quantity: 2 },
+    ];
+
+    const fpOriginal = computeRequestFingerprint({
+      shopId: "shop_active",
+      items: itemsOriginal,
+      orderMethod: "app",
+    });
+
+    const fpReordered = computeRequestFingerprint({
+      shopId: "shop_active",
+      items: itemsReordered,
+      orderMethod: "app",
+    });
+
+    assert.strictEqual(fpOriginal, fpReordered, "Reordered equivalent items/options produce identical canonical fingerprint");
+
+    // Changed quantity -> different fingerprint
+    const fpDiffQty = computeRequestFingerprint({
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 3 }],
+    });
+    assert.notStrictEqual(fpOriginal, fpDiffQty);
+
+    // Changed shopId -> different fingerprint
+    const fpDiffShop = computeRequestFingerprint({
+      shopId: "shop_other",
+      items: itemsOriginal,
+    });
+    assert.notStrictEqual(fpOriginal, fpDiffShop);
+
+    // Changed orderMethod -> different fingerprint
+    const fpDiffMethod = computeRequestFingerprint({
+      shopId: "shop_active",
+      items: itemsOriginal,
+      orderMethod: "whatsapp",
+    });
+    assert.notStrictEqual(fpOriginal, fpDiffMethod);
+
+    pass("Test 69: Request fingerprint is sensitive to business parameters and canonical under reordering");
+  }
+
+  // ─── Test 70: Same-Key Same-Request Replay Safety (Mandatory Correction 1 & 4) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const idempotencyKey = "key_replay_safety_7001";
+    const request = {
+      idempotencyKey,
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 2 }],
+    };
+
+    // First attempt: creates order
+    const firstRes = await _rawProcessOrder(db, authContext, request, { now: fixedNow });
+    assert(firstRes.success);
+    assert.strictEqual(firstRes.isIdempotentReplay, undefined);
+    const createdOrderId = firstRes.orderId;
+
+    // Second attempt with exact same key and request: Replay!
+    const secondRes = await _rawProcessOrder(db, authContext, request, { now: new Date(fixedNow.getTime() + 1000) });
+    assert(secondRes.success);
+    assert.strictEqual(secondRes.isIdempotentReplay, true);
+    assert.strictEqual(secondRes.orderId, createdOrderId);
+    assert.strictEqual(secondRes.order.orderId, createdOrderId);
+    assert.strictEqual(secondRes.order.subtotal, 160);
+    assert.strictEqual(secondRes.order.grandTotal, 190);
+
+    // Third attempt with reordered equivalent request: Replay!
+    const thirdRes = await _rawProcessOrder(db, authContext, {
+      ...request,
+      items: [{ menuItemId: "item_momos", quantity: 2, selectedOptions: [] }],
+    }, { now: new Date(fixedNow.getTime() + 2000) });
+    assert.strictEqual(thirdRes.isIdempotentReplay, true);
+    assert.strictEqual(thirdRes.orderId, createdOrderId);
+
+    // Inspect Firestore storage: Exactly ONE order document exists in orders collection
+    let orderDocCount = 0;
+    for (const key of db.data.keys()) {
+      if (key.startsWith("orders/")) orderDocCount++;
+    }
+    assert.strictEqual(orderDocCount, 1, "Exactly one order document exists in storage");
+
+    pass("Test 70: Same-key same-request replay produces exactly one authoritative order and returns original result");
+  }
+
+  // ─── Test 71: Same-Key Different-Request Conflict Rejection (Mandatory Correction 4) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const idempotencyKey = "key_conflict_rejection_7101";
+
+    // 1. Initial successful order creation
+    const initialRes = await _rawProcessOrder(db, authContext, {
+      idempotencyKey,
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: fixedNow });
+    assert(initialRes.success);
+    const originalOrderId = initialRes.orderId;
+
+    // 2. Retry with same key but changed quantity (2 instead of 1) -> 409 Conflict
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        idempotencyKey,
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 2 }],
+      }, { now: new Date(fixedNow.getTime() + 1000) }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert.strictEqual(err.status, 409);
+        assert(err.message.includes("Idempotency conflict"));
+        return true;
+      }
+    );
+
+    // 3. Retry with same key but changed shopId -> 409 Conflict
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        idempotencyKey,
+        shopId: "shop_other",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(fixedNow.getTime() + 2000) }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert.strictEqual(err.status, 409);
+        return true;
+      }
+    );
+
+    // 4. Retry with same key but changed specialInstructions -> 409 Conflict
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        idempotencyKey,
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+        specialInstructions: "Make it extra mild please",
+      }, { now: new Date(fixedNow.getTime() + 3000) }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert.strictEqual(err.status, 409);
+        return true;
+      }
+    );
+
+    // Verify storage: original order is intact, no second order document created
+    let orderDocCount = 0;
+    for (const key of db.data.keys()) {
+      if (key.startsWith("orders/")) orderDocCount++;
+    }
+    assert.strictEqual(orderDocCount, 1);
+    assert(db.data.has(`orders/${originalOrderId}`));
+
+    pass("Test 71: Same-key different-request conflicts rejected with 409 failed-precondition without mutating state");
+  }
+
+  // ─── Test 72: Cross-User Idempotency Isolation (Mandatory Correction 3) ──────
+  {
+    const db = createSeededFirestore();
+    const sharedKey = "shared_key_user_isolation_7201";
+    const userA = { uid: "cust_alice" };
+    const userB = { uid: "cust_bob" };
+
+    const requestPayload = {
+      idempotencyKey: sharedKey,
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    // Alice creates order with sharedKey
+    const resAlice = await _rawProcessOrder(db, userA, requestPayload, { now: fixedNow });
+    assert(resAlice.success);
+    assert.strictEqual(resAlice.order.customerId, "cust_alice");
+
+    // Bob creates order with the EXACT same sharedKey and same items
+    const resBob = await _rawProcessOrder(db, userB, requestPayload, { now: new Date(fixedNow.getTime() + 1000) });
+    assert(resBob.success);
+    assert.strictEqual(resBob.order.customerId, "cust_bob");
+
+    // Both orders must have distinct order IDs
+    assert.notStrictEqual(resAlice.orderId, resBob.orderId);
+
+    // Verify independent idempotency records in Firestore
+    const docIdAlice = computeIdempotencyDocId("cust_alice", sharedKey);
+    const docIdBob = computeIdempotencyDocId("cust_bob", sharedKey);
+    assert.notStrictEqual(docIdAlice, docIdBob);
+
+    assert(db.data.has(`idempotency/${docIdAlice}`));
+    assert(db.data.has(`idempotency/${docIdBob}`));
+    assert.strictEqual(db.data.get(`idempotency/${docIdAlice}`).uid, "cust_alice");
+    assert.strictEqual(db.data.get(`idempotency/${docIdBob}`).uid, "cust_bob");
+
+    pass("Test 72: Cross-user isolation verified: Identical key across distinct users operates in isolated namespaces");
+  }
+
+  // ─── Test 73: Replay Does Not Consume Rate-Limit Quota (Mandatory Correction 6) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const idempotencyKey = "key_replay_quota_7301";
+    const request = {
+      idempotencyKey,
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    };
+
+    // 1. Initial creation (consumes 1 rate-limit slot)
+    const initialRes = await _rawProcessOrder(db, authContext, request, { now: fixedNow });
+    assert(initialRes.success);
+
+    // 2. Replay 10 times in rapid succession at the EXACT same timestamp
+    // If replay consumed quota, 4th attempt would trip burst limit (3/10s) or minute limit (5/min).
+    for (let i = 0; i < 10; i++) {
+      const replayRes = await _rawProcessOrder(db, authContext, request, { now: fixedNow });
+      assert(replayRes.success);
+      assert.strictEqual(replayRes.isIdempotentReplay, true);
+      assert.strictEqual(replayRes.orderId, initialRes.orderId);
+    }
+
+    // Inspect user rate limit record: must contain exactly 1 order timestamp
+    const userLimit = db.data.get("_rateLimits/user_cust_verified");
+    assert(userLimit, "_rateLimits/user_cust_verified must exist");
+    assert.strictEqual(userLimit.recentOrders.length, 1, "Rate-limit state must reflect exactly 1 consumed order slot");
+
+    pass("Test 73: Replay resolution before rate-limiting verified: 10 rapid retries consumed zero additional quota");
+  }
+
+  // ─── Test 74: Server-Authoritative Rate Limiting: 5 Orders/Minute (Mandatory Correction 5) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_rate_limiter" };
+    const baseTime = fixedNow.getTime();
+
+    // Place 5 legitimate orders spaced 11 seconds apart (to stay under 3/10s burst limit)
+    for (let i = 0; i < 5; i++) {
+      const res = await _rawProcessOrder(db, authContext, {
+        idempotencyKey: `key_rate_min_${i}_7401`,
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime + i * 11000) });
+      assert(res.success);
+    }
+
+    // 6th attempt within the 60-second window: REJECTED with 429
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        idempotencyKey: "key_rate_min_6th_exceeded",
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime + 55000) }), // 55s < 60s
+      (err) => {
+        assert.strictEqual(err.code, "resource-exhausted");
+        assert.strictEqual(err.status, 429);
+        assert(err.message.includes("5 orders per minute"));
+        return true;
+      }
+    );
+
+    // After window expires (> 60s from first order), customer can place orders again
+    const postWindowRes = await _rawProcessOrder(db, authContext, {
+      idempotencyKey: "key_rate_min_post_window",
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: new Date(baseTime + 65000) });
+    assert(postWindowRes.success);
+
+    pass("Test 74: Server-authoritative per-user rate limit (5 orders/min) strictly enforced with automatic recovery");
+  }
+
+  // ─── Test 75: Server-Authoritative Burst Rate Limiting: 3 Orders/10 Seconds ──
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_burst_tester" };
+    const baseTime = fixedNow.getTime();
+
+    // Place 3 rapid orders within 3 seconds
+    for (let i = 0; i < 3; i++) {
+      const res = await _rawProcessOrder(db, authContext, {
+        idempotencyKey: `key_burst_${i}_7501`,
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime + i * 1000) });
+      assert(res.success);
+    }
+
+    // 4th rapid attempt at +4 seconds: REJECTED with 429 burst limit
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        idempotencyKey: "key_burst_4th_exceeded",
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime + 4000) }),
+      (err) => {
+        assert.strictEqual(err.code, "resource-exhausted");
+        assert.strictEqual(err.status, 429);
+        assert(err.message.includes("3 orders per 10 seconds"));
+        return true;
+      }
+    );
+
+    // After 10s burst window elapses, next order succeeds
+    const postBurstRes = await _rawProcessOrder(db, authContext, {
+      idempotencyKey: "key_burst_post_window",
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: new Date(baseTime + 11000) });
+    assert(postBurstRes.success);
+
+    pass("Test 75: Server-authoritative burst rate limit (3 orders/10s) strictly enforced");
+  }
+
+  // ─── Test 76: Shop Aggregate Rate Limiting: 60 Orders/Minute Protection ─────
+  {
+    const db = createSeededFirestore();
+    const baseTime = fixedNow.getTime();
+
+    // Seed shop rate limit doc with 60 recent orders within the last 30s
+    const shopTimestamps = [];
+    for (let i = 0; i < 60; i++) {
+      shopTimestamps.push(baseTime - i * 500); // within last 30 seconds
+    }
+    db.setDoc("_rateLimits/shop_shop_active", {
+      shopId: "shop_active",
+      recentOrders: shopTimestamps,
+      updatedAt: baseTime,
+    });
+
+    // An arbitrary customer attempts to order at saturated shop
+    const authContext = { uid: "cust_fresh_shopper" };
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        idempotencyKey: "key_shop_cap_exceeded",
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime) }),
+      (err) => {
+        assert.strictEqual(err.code, "resource-exhausted");
+        assert.strictEqual(err.status, 429);
+        assert(err.message.includes("Shop rate limit exceeded"));
+        return true;
+      }
+    );
+
+    // Same customer ordering from another un-congested shop succeeds immediately
+    db.setDoc("shops/shop_other/menuItems/item_other_momos", {
+      id: "item_other_momos",
+      shopId: "shop_other",
+      name: "Other Momos",
+      price: 80,
+      isAvailable: true,
+    });
+    const otherShopRes = await _rawProcessOrder(db, authContext, {
+      idempotencyKey: "key_other_shop_success",
+      shopId: "shop_other",
+      items: [{ menuItemId: "item_other_momos", quantity: 1 }],
+    }, { now: new Date(baseTime) });
+    assert(otherShopRes.success);
+
+    pass("Test 76: Shop aggregate rate limiting (60 orders/min) protects shop capacity while isolating other shops");
+  }
+
+  // ─── Test 77: Rate-Limit Multi-Tenant Isolation ─────────────────────────────
+  {
+    const db = createSeededFirestore();
+    const userA = { uid: "cust_quota_maxed" };
+    const userB = { uid: "cust_quota_free" };
+    const baseTime = fixedNow.getTime();
+
+    // Exhaust userA's minute quota (5 orders)
+    for (let i = 0; i < 5; i++) {
+      await _rawProcessOrder(db, userA, {
+        idempotencyKey: `key_iso_usera_${i}`,
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime + i * 11000) });
+    }
+
+    // User A blocked
+    await assert.rejects(
+      async () => _rawProcessOrder(db, userA, {
+        idempotencyKey: "key_iso_usera_blocked",
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime + 56000) }),
+      (err) => err.code === "resource-exhausted"
+    );
+
+    // User B placing an order at the same moment succeeds
+    const userBRes = await _rawProcessOrder(db, userB, {
+      idempotencyKey: "key_iso_userb_allowed",
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: new Date(baseTime + 56000) });
+    assert(userBRes.success);
+
+    pass("Test 77: Multi-tenant rate-limit isolation verified: User A quota exhaustion does not restrict User B");
+  }
+
+  // ─── Test 78: Rate-Limit Concurrency Atomicity (No Read-Then-Write Race) ─────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_race_tester" };
+    const baseTime = fixedNow.getTime();
+
+    // Pre-seed 2 orders for this user (burst limit ceiling is 3)
+    db.setDoc("_rateLimits/user_cust_race_tester", {
+      uid: "cust_race_tester",
+      recentOrders: [baseTime - 2000, baseTime - 1000],
+      updatedAt: baseTime,
+    });
+
+    // Fire two concurrent orders simultaneously trying to claim the single remaining slot
+    const results = await Promise.allSettled([
+      _rawProcessOrder(db, authContext, {
+        idempotencyKey: "key_race_slot_a",
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime) }),
+      _rawProcessOrder(db, authContext, {
+        idempotencyKey: "key_race_slot_b",
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime) }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+
+    assert.strictEqual(fulfilled.length, 1, "Exactly one concurrent request must win the remaining slot");
+    assert.strictEqual(rejected.length, 1, "Exactly one concurrent request must be rejected with rate limit");
+    assert.strictEqual(rejected[0].reason.code, "resource-exhausted");
+    assert.strictEqual(rejected[0].reason.status, 429);
+
+    pass("Test 78: Rate-limit concurrency atomicity verified: Two simultaneous requests cannot both pass the limit");
+  }
+
+  // ─── Test 79: Atomic Reservation & Failure Recovery (Mandatory Correction 1) ─
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const failingKey = "key_failing_atomic_7901";
+
+    // Attempt order at inactive shop -> fails catalog precondition
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        idempotencyKey: failingKey,
+        shopId: "shop_inactive",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: fixedNow }),
+      (err) => err.code === "failed-precondition"
+    );
+
+    // Verify ZERO orphan idempotency records and ZERO order records created
+    const docId = computeIdempotencyDocId("cust_verified", failingKey);
+    assert.strictEqual(db.data.has(`idempotency/${docId}`), false, "No idempotency record created on catalog failure");
+
+    let orderCount = 0;
+    for (const k of db.data.keys()) {
+      if (k.startsWith("orders/")) orderCount++;
+    }
+    assert.strictEqual(orderCount, 0, "No order document created on catalog failure");
+
+    // Verify rate limit doc was NOT updated
+    const userLimit = db.data.get("_rateLimits/user_cust_verified");
+    assert.strictEqual(userLimit, undefined, "Rate limit counter must not be consumed on aborted order");
+
+    // The customer can now reuse or retry with a valid shop without being blocked by an orphan key
+    const successRes = await _rawProcessOrder(db, authContext, {
+      idempotencyKey: failingKey,
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: fixedNow });
+    assert(successRes.success);
+
+    pass("Test 79: Atomic transaction rollback on failure leaves zero orphan idempotency records or orders");
+  }
+
+  // ─── Test 80: Idempotency State Machine: Stale Pending Recovery & In-Flight ───
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const baseTime = fixedNow.getTime();
+
+    // 1. Fresh pending reservation (< 30 seconds old) -> Rejects concurrent in-flight attempt
+    const freshKey = "key_fresh_pending_8001";
+    const freshDocId = computeIdempotencyDocId("cust_verified", freshKey);
+    const freshFingerprint = computeRequestFingerprint({
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+      orderMethod: "app",
+    });
+
+    db.setDoc(`idempotency/${freshDocId}`, {
+      uid: "cust_verified",
+      idempotencyKey: freshKey,
+      requestFingerprint: freshFingerprint,
+      status: "pending",
+      createdAt: baseTime - 10000, // 10s ago (< 30s)
+    });
+
+    await assert.rejects(
+      async () => _rawProcessOrder(db, authContext, {
+        idempotencyKey: freshKey,
+        shopId: "shop_active",
+        items: [{ menuItemId: "item_momos", quantity: 1 }],
+      }, { now: new Date(baseTime) }),
+      (err) => {
+        assert.strictEqual(err.code, "failed-precondition");
+        assert.strictEqual(err.status, 409);
+        assert(err.message.includes("currently being processed"));
+        return true;
+      }
+    );
+
+    // 2. Stale pending reservation (>= 30 seconds old, e.g. previous server died mid-processing)
+    const staleKey = "key_stale_pending_8002";
+    const staleDocId = computeIdempotencyDocId("cust_verified", staleKey);
+    const staleFingerprint = computeRequestFingerprint({
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+      orderMethod: "app",
+    });
+
+    db.setDoc(`idempotency/${staleDocId}`, {
+      uid: "cust_verified",
+      idempotencyKey: staleKey,
+      requestFingerprint: staleFingerprint,
+      status: "pending",
+      createdAt: baseTime - 45000, // 45s ago (>= 30s stale)
+    });
+
+    // The stale pending reservation must be safely reclaimed and completed!
+    const reclaimRes = await _rawProcessOrder(db, authContext, {
+      idempotencyKey: staleKey,
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 1 }],
+    }, { now: new Date(baseTime) });
+
+    assert(reclaimRes.success);
+    assert(reclaimRes.orderId.startsWith("ORD_"));
+
+    // Verify stored record is now completed
+    const updatedRecord = db.data.get(`idempotency/${staleDocId}`);
+    assert.strictEqual(updatedRecord.status, "completed");
+    assert.strictEqual(updatedRecord.orderId, reclaimRes.orderId);
+
+    pass("Test 80: Idempotency state machine handles fresh pending in-flight conflicts and safely reclaims stale reservations");
+  }
+
+  // ─── Test 81: Idempotency Record Stored Document Schema & Expiration ────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified" };
+    const key = "key_schema_verify_8101";
+
+    const res = await _rawProcessOrder(db, authContext, {
+      idempotencyKey: key,
+      shopId: "shop_active",
+      items: [{ menuItemId: "item_momos", quantity: 2 }],
+      specialInstructions: "Ring bell",
+    }, { now: fixedNow });
+
+    const docId = computeIdempotencyDocId("cust_verified", key);
+    const idempDoc = db.data.get(`idempotency/${docId}`);
+
+    assert(idempDoc, "Idempotency document must be persisted in storage");
+    assert.strictEqual(idempDoc.uid, "cust_verified");
+    assert.strictEqual(idempDoc.idempotencyKey, key);
+    assert.strictEqual(idempDoc.status, "completed");
+    assert.strictEqual(idempDoc.orderId, res.orderId);
+    assert(/^[a-f0-9]{64}$/.test(idempDoc.requestFingerprint));
+    assert(idempDoc.createdAt !== undefined);
+    assert(idempDoc.expiresAt !== undefined);
+    assert.strictEqual(idempDoc.orderSummary.orderId, res.orderId);
+    assert.strictEqual(idempDoc.orderSummary.shopId, "shop_active");
+    assert.strictEqual(idempDoc.orderSummary.grandTotal, 190);
+    assert.strictEqual(idempDoc.orderSummary.status, "placed");
+
+    pass("Test 81: Stored idempotency record conforms strictly to authoritative schema with 24-hour expiration");
+  }
+
+  // ─── Test 82: Security Boundary Preservation Across All Phases ──────────────
+  {
+    const db = createSeededFirestore();
+    const authContext = { uid: "cust_verified", phone: "+919876543210" };
+    const key = "key_boundary_preserve_8201";
+
+    // Pass request with price tampering, custom orderId, extra fields, valid idempotencyKey
+    const res = await _rawProcessOrder(db, authContext, {
+      idempotencyKey: key,
+      shopId: "shop_active",
+      customerName: "Ayush",
+      specialInstructions: "Handle with care",
+      orderMethod: "in_app",
+      items: [
+        {
+          menuItemId: "item_momos",
+          quantity: 2,
+          price: 1, // Tampered! Ignored
+          subtotal: 2, // Tampered! Ignored
+        },
+      ],
+      grandTotal: 10, // Tampered! Ignored
+      deliveryCharges: 0, // Tampered! Ignored
+    }, { now: fixedNow });
+
+    assert(res.success);
+    const order = res.order;
+
+    // Phase 4.1 Boundary: Server identity & customer UID
+    assert.strictEqual(order.customerId, "cust_verified");
+    assert.strictEqual(order.customerName, "Rajat Sharma"); // From profile
+    assert(order.orderId.startsWith("ORD_"));
+    assert.strictEqual(order.status, "placed");
+
+    // Phase 4.2 Boundary: Authoritative pricing in paise
+    assert.strictEqual(order.subtotal, 160); // 80 * 2
+    assert.strictEqual(order.deliveryCharges, 30); // shop delivery charge
+    assert.strictEqual(order.grandTotal, 190);
+    assert.strictEqual(order.totalAmount, 190);
+    assert.strictEqual(order.totalItems, 2);
+
+    // Phase 4.3 Boundary: Validated orderMethod & text
+    assert.strictEqual(order.orderMethod, "app");
+    assert.strictEqual(order.specialInstructions, "Handle with care");
+
+    // Phase 4.4 Boundary: Stored idempotency & rate limits
+    const docId = computeIdempotencyDocId("cust_verified", key);
+    assert(db.data.has(`idempotency/${docId}`));
+    assert(db.data.has("_rateLimits/user_cust_verified"));
+    assert(db.data.has("_rateLimits/shop_shop_active"));
+
+    pass("Test 82: Security boundary preservation verified: Identity, pricing, validation, and idempotency all hold");
   }
 
   console.log("==================================================");

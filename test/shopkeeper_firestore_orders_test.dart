@@ -142,7 +142,7 @@ class MockShopkeeperOrderService extends OrderService {
   }
 
   @override
-  Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
+  Future<void> createOrder(AppOrder order, {DateTime? customNow, String? idempotencyKey}) async {
     seedOrder(order);
   }
 

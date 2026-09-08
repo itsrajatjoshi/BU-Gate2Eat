@@ -41,7 +41,7 @@ class FakeOrderService extends OrderService {
   bool get isAvailable => true;
 
   @override
-  Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
+  Future<void> createOrder(AppOrder order, {DateTime? customNow, String? idempotencyKey}) async {
     createOrderCallCount++;
     if (shouldThrowOnCreate) {
       throw const OrderServiceException('Simulated network timeout');

@@ -178,7 +178,11 @@ class OrderService {
   /// When testing delegate is supplied, delegates directly.
   /// Sets [acceptDeadline] to createdAt + 20 minutes.
   /// NOTE: Does NOT increment any shopStats counter yet — pre-accept cancel deletes the order completely.
-  Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
+  Future<void> createOrder(
+    AppOrder order, {
+    DateTime? customNow,
+    String? idempotencyKey,
+  }) async {
     try {
       final authUid = _currentAuthUid;
       if (authUid != null && authUid.isNotEmpty) {
@@ -189,10 +193,16 @@ class OrderService {
         }
       }
 
+      final now = customNow ?? DateTime.now();
+      final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+          ? idempotencyKey.trim()
+          : 'idem_${now.millisecondsSinceEpoch}_${authUid ?? 'anon'}_${order.items.length}';
+
       // 1. If testing delegate is provided, execute it directly (Server-Authoritative)
       // Client does NOT provide orderId — order identity is generated authoritatively by the backend.
       if (_orderCreatorForTesting != null) {
         final payload = {
+          'idempotencyKey': key,
           'shopId': order.shopId,
           'customerId': authUid ?? order.customerId,
           'customerName': order.customerName,
@@ -208,7 +218,6 @@ class OrderService {
 
       final docRef = _ordersRef.doc(order.orderId);
       final data = order.toFirestore();
-      final now = customNow ?? DateTime.now();
 
       // Use server timestamp for precision on creation
       data['createdAt'] = FieldValue.serverTimestamp();

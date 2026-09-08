@@ -54,7 +54,7 @@ class FakeOrderService extends OrderService {
   bool shouldFail = false;
 
   @override
-  Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
+  Future<void> createOrder(AppOrder order, {DateTime? customNow, String? idempotencyKey}) async {
     if (shouldFail) {
       throw const OrderServiceException('Network failure simulation');
     }

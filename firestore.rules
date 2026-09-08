@@ -450,7 +450,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ─── 8. SERVER-ONLY COLLECTIONS (PHASE 3.4) ────────────────────────
+    // ─── 8. SERVER-ONLY COLLECTIONS (PHASE 3.4 & PHASE 4.4) ───────────
     // Internal server collections inaccessible from any client SDK (Admin SDK / Functions only).
     match /_authChallenges/{doc=**} {
       allow read, write: if false;
@@ -462,6 +462,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /adminSettings/{doc=**} {
+      allow read, write: if false;
+    }
+    match /idempotency/{doc=**} {
+      allow read, write: if false;
+    }
+    match /_rateLimits/{doc=**} {
       allow read, write: if false;
     }
 

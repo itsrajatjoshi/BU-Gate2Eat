@@ -86,7 +86,7 @@ class FakeOrderService extends OrderService {
   String? lastCancelledOrderId;
 
   @override
-  Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
+  Future<void> createOrder(AppOrder order, {DateTime? customNow, String? idempotencyKey}) async {
     if (timeoutNextCreate) {
       throw TimeoutException('Transaction timed out after 15s');
     }

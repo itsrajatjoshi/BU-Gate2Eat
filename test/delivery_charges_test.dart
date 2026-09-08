@@ -20,7 +20,7 @@ class _FakeOrderService extends OrderService {
   AppOrder? capturedOrder;
 
   @override
-  Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
+  Future<void> createOrder(AppOrder order, {DateTime? customNow, String? idempotencyKey}) async {
     capturedOrder = order;
   }
 }

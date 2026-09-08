@@ -82,7 +82,7 @@ class FakeOrderService extends OrderService {
   final Map<String, String> orderStatuses = {};
 
   @override
-  Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
+  Future<void> createOrder(AppOrder order, {DateTime? customNow, String? idempotencyKey}) async {
     if (failNextCreate) {
       throw const OrderServiceException(
         'Network error: [cloud_firestore/unavailable] The service is currently unavailable.',

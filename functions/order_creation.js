@@ -81,6 +81,125 @@ const PROHIBITED_SECURITY_KEYS = new Set([
 const ALLOWED_ORDER_METHODS = new Set(["app", "whatsapp", "wa", "in_app", "both"]);
 
 /**
+ * Idempotency Key constraints (Phase 4.4):
+ * 8-128 alphanumeric characters, underscores, or hyphens.
+ */
+const IDEMPOTENCY_KEY_REGEX = /^[a-zA-Z0-9_-]{8,128}$/;
+
+/**
+ * Rate Limiting Constraints (Phase 4.4):
+ * - RATE_LIMIT_USER_MAX: 5 orders per minute per authenticated user.
+ * - RATE_LIMIT_USER_WINDOW_MS: 60,000 ms (1 minute).
+ * - RATE_LIMIT_USER_BURST_MAX: 3 orders per 10 seconds per authenticated user.
+ * - RATE_LIMIT_USER_BURST_WINDOW_MS: 10,000 ms (10 seconds).
+ * - RATE_LIMIT_SHOP_MAX: 60 orders per minute aggregate per shop.
+ * - RATE_LIMIT_SHOP_WINDOW_MS: 60,000 ms (1 minute).
+ */
+const RATE_LIMIT_USER_MAX = 5;
+const RATE_LIMIT_USER_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_USER_BURST_MAX = 3;
+const RATE_LIMIT_USER_BURST_WINDOW_MS = 10 * 1000;
+const RATE_LIMIT_SHOP_MAX = 60;
+const RATE_LIMIT_SHOP_WINDOW_MS = 60 * 1000;
+
+/**
+ * Idempotency Lifecycle Constraints (Phase 4.4):
+ * - IDEMPOTENCY_EXPIRY_MS: 24 hours retention period.
+ * - IDEMPOTENCY_PENDING_STALE_MS: 30 seconds threshold for stale pending reservation recovery.
+ */
+const IDEMPOTENCY_EXPIRY_MS = 24 * 60 * 60 * 1000;
+const IDEMPOTENCY_PENDING_STALE_MS = 30 * 1000;
+
+/**
+ * Derives a deterministic fixed-length (64 hex characters / 256 bits) Firestore document ID
+ * for idempotency records, eliminating raw user-input document paths and bounding path length.
+ *
+ * @param {string} canonicalCustomerUid
+ * @param {string} idempotencyKey
+ * @returns {string} SHA-256 hexadecimal digest
+ */
+function computeIdempotencyDocId(canonicalCustomerUid, idempotencyKey) {
+  return crypto
+    .createHash("sha256")
+    .update(`${canonicalCustomerUid}:${idempotencyKey}`)
+    .digest("hex");
+}
+
+/**
+ * Computes a deterministic SHA-256 request fingerprint from canonical business intent fields only.
+ * Strictly excludes:
+ * - orderId
+ * - timestamps (createdAt, updatedAt, acceptDeadline)
+ * - client-supplied financial values (subtotal, deliveryCharges, grandTotal, etc.)
+ * - server pricing & lifecycle metadata
+ *
+ * Canonicalizes:
+ * - shopId: trimmed string
+ * - orderMethod: validated canonical string ("app", "whatsapp", or "both")
+ * - specialInstructions: trimmed safe text
+ * - deliveryNote: trimmed safe text
+ * - items: canonical array sorted by menuItemId, quantity, and sorted selectedOptions (groupId, optionId).
+ *
+ * @param {object} params
+ * @param {string} params.shopId
+ * @param {Array} params.items
+ * @param {string} [params.specialInstructions]
+ * @param {string} [params.deliveryNote]
+ * @param {string} [params.orderMethod]
+ * @returns {string} SHA-256 hexadecimal fingerprint
+ */
+function computeRequestFingerprint({
+  shopId,
+  items,
+  specialInstructions = "",
+  deliveryNote = "",
+  orderMethod = "app",
+}) {
+  const canonicalItems = (items || []).map((it) => {
+    const menuItemId = typeof it.menuItemId === "string" ? it.menuItemId.trim() : "";
+    const quantity = Number.isInteger(it.quantity) ? it.quantity : 1;
+    const rawOptions = Array.isArray(it.selectedOptions) ? it.selectedOptions : [];
+    const sortedOptions = [...rawOptions]
+      .map((opt) => ({
+        groupId: typeof opt.groupId === "string" ? opt.groupId.trim() : "",
+        optionId: typeof opt.optionId === "string" ? opt.optionId.trim() : "",
+      }))
+      .sort((a, b) => {
+        const gComp = a.groupId.localeCompare(b.groupId);
+        if (gComp !== 0) return gComp;
+        return a.optionId.localeCompare(b.optionId);
+      });
+
+    return {
+      menuItemId,
+      quantity,
+      selectedOptions: sortedOptions,
+    };
+  });
+
+  canonicalItems.sort((a, b) => {
+    const mComp = a.menuItemId.localeCompare(b.menuItemId);
+    if (mComp !== 0) return mComp;
+    const qComp = a.quantity - b.quantity;
+    if (qComp !== 0) return qComp;
+    return JSON.stringify(a.selectedOptions).localeCompare(JSON.stringify(b.selectedOptions));
+  });
+
+  const canonicalIntent = {
+    shopId: typeof shopId === "string" ? shopId.trim() : "",
+    orderMethod: typeof orderMethod === "string" ? orderMethod.trim().toLowerCase() : "app",
+    specialInstructions: typeof specialInstructions === "string" ? specialInstructions.trim() : "",
+    deliveryNote: typeof deliveryNote === "string" ? deliveryNote.trim() : "",
+    items: canonicalItems,
+  };
+
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(canonicalIntent))
+    .digest("hex");
+}
+
+/**
  * Validates user-supplied text fields without silent truncation.
  *
  * Policy:
@@ -208,13 +327,15 @@ function buildDeterministicCartKey(menuItemId, options) {
 
 /**
  * Validates request input, loads catalog data, computes authoritative pricing,
- * and constructs the verified order document.
+/**
+ * Validates request input, loads catalog data, enforces atomic rate limits and idempotency,
+ * computes authoritative pricing, and atomically persists the verified order document.
  * 
  * @param {FirebaseFirestore.Firestore} db - Firestore instance
  * @param {object} authContext - { uid, token, phone } from verified Firebase Auth
  * @param {object} requestData - untrusted client payload
- * @param {object} [options] - execution options (now, orderId, skipPersistence)
- * @returns {Promise<object>} { orderId, order }
+ * @param {object} [options] - execution options (now, orderId, skipPersistence, allowMissingIdempotencyKey)
+ * @returns {Promise<object>} { success: true, orderId, order, isIdempotentReplay? }
  */
 async function processServerAuthoritativeOrder(db, authContext, requestData, options = {}) {
   // ─── 1. Authenticate Customer Identity ─────────────────────────────────────
@@ -226,7 +347,7 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
   }
   const canonicalCustomerId = authContext.uid.trim();
 
-  // ─── 2. Pre-Database Structural & Shape Validation (Phase 4.3) ─────────────
+  // ─── 2. Pre-Database Structural & Shape Validation (Phase 4.3 & 4.4) ────────
   // Validates payload structure and data types before touching Firestore,
   // preventing resource exhaustion, type confusion, and injection attacks.
 
@@ -273,6 +394,32 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     }
   }
 
+  // Validate idempotencyKey (Phase 4.4 Mandatory Correction 2)
+  let idempotencyKey = "";
+  if (typeof requestData.idempotencyKey === "string" && requestData.idempotencyKey.trim().length > 0) {
+    idempotencyKey = requestData.idempotencyKey.trim();
+    if (!IDEMPOTENCY_KEY_REGEX.test(idempotencyKey)) {
+      const err = new Error(
+        `Invalid idempotencyKey format: "${idempotencyKey}". Must be 8-128 alphanumeric characters, underscores, or hyphens.`
+      );
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+  } else {
+    // Migration fallback: allowed ONLY if explicitly configured via options.allowMissingIdempotencyKey
+    if (options.allowMissingIdempotencyKey === true) {
+      idempotencyKey = `legacy_${crypto.randomBytes(8).toString("hex")}`;
+    } else {
+      const err = new Error(
+        "Invalid request: idempotencyKey is required (must be 8-128 alphanumeric characters, underscores, or hyphens)."
+      );
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
+  }
+
   // Validate shopId syntax and length
   if (typeof requestData.shopId !== "string") {
     const err = new Error("Invalid request: shopId is required.");
@@ -294,10 +441,10 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     throw err;
   }
 
-  // Validate orderMethod against actual supported production values (Mandatory Correction 2)
+  // Validate orderMethod against actual supported production values
   const validatedOrderMethod = validateOrderMethod(requestData.orderMethod);
 
-  // Validate User Text fields without silent truncation (Mandatory Correction 1)
+  // Validate User Text fields without silent truncation
   const validatedCustomerName = validateSafeText("customerName", requestData.customerName, MAX_CUSTOMER_NAME_LENGTH);
   const validatedCustomerPhone = validateSafeText("customerPhone", requestData.customerPhone, MAX_CUSTOMER_PHONE_LENGTH);
   const validatedSpecialInstructions = validateSafeText("specialInstructions", requestData.specialInstructions, MAX_SPECIAL_INSTRUCTIONS_LENGTH);
@@ -434,359 +581,518 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
     }
   }
 
-  // ─── 3. Validate Shop Identity & Authoritative Delivery Charges ────────────
-  const shopDoc = await db.collection("shops").doc(shopId).get();
-  if (!shopDoc.exists) {
-    const err = new Error(`Shop with ID "${shopId}" does not exist.`);
-    err.code = "not-found";
-    err.status = 404;
-    throw err;
+  // ─── 3. Deterministic Idempotency Document ID & Request Fingerprint (Phase 4.4) ─
+  const idempotencyDocId = computeIdempotencyDocId(canonicalCustomerId, idempotencyKey);
+  const requestFingerprint = computeRequestFingerprint({
+    shopId,
+    items: rawItems,
+    specialInstructions: validatedSpecialInstructions,
+    deliveryNote: validatedDeliveryNote,
+    orderMethod: validatedOrderMethod,
+  });
+
+  const idempDocRef = db.collection("idempotency").doc(idempotencyDocId);
+
+  // ─── 4. Replay Check BEFORE Rate-Limit Consumption (Mandatory Correction 6) ───
+  // Resolves an existing completed idempotent attempt before touching rate limits,
+  // preventing network retries from consuming user quota or being blocked.
+  const existingIdempSnap = await idempDocRef.get();
+  const now = options.now instanceof Date ? options.now : new Date();
+  const nowMs = now.getTime();
+
+  if (existingIdempSnap.exists) {
+    const record = existingIdempSnap.data() || {};
+    if (record.status === "completed") {
+      if (record.requestFingerprint === requestFingerprint) {
+        // MATCH: Idempotent Replay! Return existing order without consuming quota.
+        let existingOrder = null;
+        if (record.orderId) {
+          try {
+            const orderSnap = await db.collection("orders").doc(record.orderId).get();
+            if (orderSnap.exists) {
+              existingOrder = orderSnap.data();
+            }
+          } catch (_) {}
+        }
+        return {
+          success: true,
+          orderId: record.orderId,
+          order: existingOrder || record.orderSummary || {},
+          isIdempotentReplay: true,
+        };
+      } else {
+        // CONFLICT: Same key reused with different request payload
+        const err = new Error(
+          `Idempotency conflict: key "${idempotencyKey}" was previously completed with different order parameters.`
+        );
+        err.code = "failed-precondition";
+        err.status = 409;
+        throw err;
+      }
+    } else if (record.status === "pending") {
+      const recordCreatedMs = record.createdAt
+        ? (typeof record.createdAt.toMillis === "function"
+            ? record.createdAt.toMillis()
+            : (record.createdAt instanceof Date
+                ? record.createdAt.getTime()
+                : (typeof record.createdAt === "number" ? record.createdAt : 0)))
+        : 0;
+      const isStale = (nowMs - recordCreatedMs) >= IDEMPOTENCY_PENDING_STALE_MS;
+
+      if (!isStale) {
+        if (record.requestFingerprint === requestFingerprint) {
+          const err = new Error(
+            `Order with idempotencyKey "${idempotencyKey}" is currently being processed. Please retry shortly.`
+          );
+          err.code = "failed-precondition";
+          err.status = 409;
+          throw err;
+        } else {
+          const err = new Error(
+            `Idempotency conflict: key "${idempotencyKey}" is currently pending for a different order payload.`
+          );
+          err.code = "failed-precondition";
+          err.status = 409;
+          throw err;
+        }
+      }
+      // If stale, safely reclaim inside transaction below.
+    }
   }
 
-  const shopData = shopDoc.data() || {};
-  if (shopData.isActive === false) {
-    const err = new Error(`Shop "${shopData.name || shopId}" is currently inactive/closed.`);
-    err.code = "failed-precondition";
-    err.status = 400;
-    throw err;
-  }
+  // ─── 5. Atomic Reservation, Rate Limiting & Order Persistence (Mandatory Corrections 1 & 5) ─
+  const userRateLimitRef = db.collection("_rateLimits").doc(`user_${canonicalCustomerId}`);
+  const shopRateLimitRef = db.collection("_rateLimits").doc(`shop_${shopId}`);
+  const shopDocRef = db.collection("shops").doc(shopId);
 
-  const authoritativeShopName = shopData.name || "Shop";
-  const rawDelivery = typeof shopData.deliveryCharges === "number"
-    ? shopData.deliveryCharges
-    : (typeof shopData.delivery_charges === "number" ? shopData.delivery_charges : (shopData.deliveryCharges ?? shopData.delivery_charges ?? 0));
-
-  if (typeof rawDelivery !== "number" || !Number.isFinite(rawDelivery) || rawDelivery < 0) {
-    const err = new Error(`Catalog error: Shop "${shopId}" has invalid or negative delivery charges (${rawDelivery}).`);
-    err.code = "failed-precondition";
-    err.status = 400;
-    throw err;
-  }
-  const deliveryChargesPaise = toPaise(rawDelivery);
-  const authoritativeDeliveryCharges = fromPaise(deliveryChargesPaise);
-
-  // Read efficiency: Deduplicate catalog menu item lookups
   const uniqueItemIds = [...new Set(rawItems.map((it) => it.menuItemId.trim()))];
-
-  const catalogItemDocs = new Map();
-  await Promise.all(
-    uniqueItemIds.map(async (menuItemId) => {
-      const docSnap = await db.collection("shops").doc(shopId).collection("menuItems").doc(menuItemId).get();
-      catalogItemDocs.set(menuItemId, docSnap);
-    })
+  const itemRefs = uniqueItemIds.map((mId) =>
+    db.collection("shops").doc(shopId).collection("menuItems").doc(mId)
   );
+  const userDocRef = db.collection("users").doc(canonicalCustomerId);
 
-  // ─── 4. Process Each Item with Authoritative Catalog & Option Pricing ──────
-  const processedItems = [];
-  let totalItemCount = 0;
-  let calculatedSubtotalPaise = 0;
+  // Derive orderId before transaction read phase so order collision can be tested atomically
+  let orderId;
+  if (typeof options._serverOrderId === "string" && options._serverOrderId.trim().length > 0) {
+    orderId = options._serverOrderId.trim();
+  } else {
+    const randomHex = crypto.randomBytes(6).toString("hex").toUpperCase();
+    orderId = `ORD_${nowMs}_${randomHex}`;
+  }
+  const orderRef = db.collection("orders").doc(orderId);
 
-  for (let idx = 0; idx < rawItems.length; idx++) {
-    const reqItem = rawItems[idx];
-    if (!reqItem || typeof reqItem !== "object") {
-      const err = new Error(`Invalid item payload at index ${idx}.`);
-      err.code = "invalid-argument";
-      err.status = 400;
+  const executeOrderCreationTransaction = async (t) => {
+    // ─── Phase A: Transactional Reads (ALL reads before ANY writes) ───────────
+    // 1. Check idempotency record inside transaction to serialize concurrent attempts
+    const txIdempSnap = await t.get(idempDocRef);
+    if (txIdempSnap.exists) {
+      const txRecord = txIdempSnap.data() || {};
+      if (txRecord.status === "completed") {
+        if (txRecord.requestFingerprint === requestFingerprint) {
+          return {
+            isReplay: true,
+            orderId: txRecord.orderId,
+            orderSummary: txRecord.orderSummary,
+          };
+        } else {
+          const err = new Error(
+            `Idempotency conflict: key "${idempotencyKey}" was previously completed with different order parameters.`
+          );
+          err.code = "failed-precondition";
+          err.status = 409;
+          throw err;
+        }
+      } else if (txRecord.status === "pending") {
+        const txCreatedMs = txRecord.createdAt
+          ? (typeof txRecord.createdAt.toMillis === "function"
+              ? txRecord.createdAt.toMillis()
+              : (txRecord.createdAt instanceof Date
+                  ? txRecord.createdAt.getTime()
+                  : (typeof txRecord.createdAt === "number" ? txRecord.createdAt : 0)))
+          : 0;
+        const isTxStale = (nowMs - txCreatedMs) >= IDEMPOTENCY_PENDING_STALE_MS;
+        if (!isTxStale) {
+          const err = new Error(
+            `Order with idempotencyKey "${idempotencyKey}" is currently being processed. Please retry shortly.`
+          );
+          err.code = "failed-precondition";
+          err.status = 409;
+          throw err;
+        }
+      }
+    }
+
+    // 2. Read order document to prevent collisions
+    const existingOrderSnap = await t.get(orderRef);
+    if (existingOrderSnap.exists) {
+      const err = new Error(`Order collision: document with ID "${orderId}" already exists. Overwrite prohibited.`);
+      err.code = "already-exists";
+      err.status = 409;
       throw err;
     }
 
-    const menuItemId = typeof reqItem.menuItemId === "string" ? reqItem.menuItemId.trim() : "";
-    const quantity = reqItem.quantity;
+    // 3. Read rate limits inside transaction (Atomic protection against read-then-write race)
+    const [userLimitSnap, shopLimitSnap, shopDoc, ...itemDocs] = await Promise.all([
+      t.get(userRateLimitRef),
+      t.get(shopRateLimitRef),
+      t.get(shopDocRef),
+      ...itemRefs.map((ref) => t.get(ref)),
+    ]);
 
-    // Validate quantity: integer between 1 and MAX_ITEM_QUANTITY (99)
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_ITEM_QUANTITY) {
+    let userDoc = null;
+    try {
+      userDoc = await t.get(userDocRef);
+    } catch (_) {}
+
+    const catalogItemDocs = new Map();
+    uniqueItemIds.forEach((mId, i) => {
+      catalogItemDocs.set(mId, itemDocs[i]);
+    });
+
+    // ─── Phase B: In-Memory Validation & Calculation ──────────────────────────
+    // 1. Evaluate User Rate Limits
+    const userData = userLimitSnap && userLimitSnap.exists ? userLimitSnap.data() || {} : {};
+    const rawUserTimestamps = Array.isArray(userData.recentOrders) ? userData.recentOrders : [];
+    const activeUserTimestamps = rawUserTimestamps.filter(
+      (ts) => typeof ts === "number" && (nowMs - ts) < RATE_LIMIT_USER_WINDOW_MS
+    );
+    const burstTimestamps = activeUserTimestamps.filter(
+      (ts) => (nowMs - ts) < RATE_LIMIT_USER_BURST_WINDOW_MS
+    );
+    if (burstTimestamps.length >= RATE_LIMIT_USER_BURST_MAX) {
       const err = new Error(
-        `Invalid quantity "${quantity}" for item "${menuItemId}". Quantity must be an integer between 1 and ${MAX_ITEM_QUANTITY}.`
+        `Rate limit exceeded: Maximum ${RATE_LIMIT_USER_BURST_MAX} orders per 10 seconds. Please wait before placing another order.`
       );
-      err.code = "invalid-argument";
-      err.status = 400;
+      err.code = "resource-exhausted";
+      err.status = 429;
+      throw err;
+    }
+    if (activeUserTimestamps.length >= RATE_LIMIT_USER_MAX) {
+      const err = new Error(
+        `Rate limit exceeded: Maximum ${RATE_LIMIT_USER_MAX} orders per minute. Please wait before placing another order.`
+      );
+      err.code = "resource-exhausted";
+      err.status = 429;
       throw err;
     }
 
-    const docSnap = catalogItemDocs.get(menuItemId);
-    if (!docSnap || !docSnap.exists) {
-      const err = new Error(`Menu item "${menuItemId}" not found in shop "${shopId}".`);
+    // 2. Evaluate Shop Rate Limits
+    const shopLimitData = shopLimitSnap && shopLimitSnap.exists ? shopLimitSnap.data() || {} : {};
+    const rawShopTimestamps = Array.isArray(shopLimitData.recentOrders) ? shopLimitData.recentOrders : [];
+    const activeShopTimestamps = rawShopTimestamps.filter(
+      (ts) => typeof ts === "number" && (nowMs - ts) < RATE_LIMIT_SHOP_WINDOW_MS
+    );
+    if (activeShopTimestamps.length >= RATE_LIMIT_SHOP_MAX) {
+      const err = new Error(
+        `Shop rate limit exceeded: Shop "${shopId}" is currently experiencing peak order volume (${RATE_LIMIT_SHOP_MAX} orders/min). Please try again shortly.`
+      );
+      err.code = "resource-exhausted";
+      err.status = 429;
+      throw err;
+    }
+
+    // 3. Validate Shop Existence and Status
+    if (!shopDoc || !shopDoc.exists) {
+      const err = new Error(`Shop with ID "${shopId}" does not exist.`);
       err.code = "not-found";
       err.status = 404;
       throw err;
     }
 
-    const menuData = docSnap.data() || {};
-
-    // Validate shop tenancy
-    if (menuData.shopId && menuData.shopId !== shopId) {
-      const err = new Error(`Menu item "${menuItemId}" does not belong to shop "${shopId}".`);
+    const shopData = shopDoc.data() || {};
+    if (shopData.isActive === false) {
+      const err = new Error(`Shop "${shopData.name || shopId}" is currently inactive/closed.`);
       err.code = "failed-precondition";
       err.status = 400;
       throw err;
     }
 
-    // Validate availability
-    if (menuData.isAvailable === false) {
-      const err = new Error(`Menu item "${menuData.name || menuItemId}" is currently out of stock / unavailable.`);
+    const authoritativeShopName = shopData.name || "Shop";
+    const rawDelivery = typeof shopData.deliveryCharges === "number"
+      ? shopData.deliveryCharges
+      : (typeof shopData.delivery_charges === "number" ? shopData.delivery_charges : (shopData.deliveryCharges ?? shopData.delivery_charges ?? 0));
+
+    if (typeof rawDelivery !== "number" || !Number.isFinite(rawDelivery) || rawDelivery < 0) {
+      const err = new Error(`Catalog error: Shop "${shopId}" has invalid or negative delivery charges (${rawDelivery}).`);
       err.code = "failed-precondition";
       err.status = 400;
       throw err;
     }
+    const deliveryChargesPaise = toPaise(rawDelivery);
+    const authoritativeDeliveryCharges = fromPaise(deliveryChargesPaise);
 
-    // Validate authoritative base catalog price (No silent clamping)
-    const rawBasePrice = menuData.price;
-    if (typeof rawBasePrice !== "number" || !Number.isFinite(rawBasePrice) || rawBasePrice < 0) {
-      const err = new Error(`Catalog error: Menu item "${menuItemId}" has invalid or negative price (${rawBasePrice}).`);
-      err.code = "failed-precondition";
-      err.status = 400;
-      throw err;
-    }
-    const basePricePaise = toPaise(rawBasePrice);
+    // 4. Process Each Item with Authoritative Catalog & Option Pricing
+    const processedItems = [];
+    let totalItemCount = 0;
+    let calculatedSubtotalPaise = 0;
 
-    let startingPricePaise = 0;
-    if (menuData.startingPrice !== undefined && menuData.startingPrice !== null) {
-      if (typeof menuData.startingPrice !== "number" || !Number.isFinite(menuData.startingPrice) || menuData.startingPrice < 0) {
-        const err = new Error(`Catalog error: Menu item "${menuItemId}" has invalid startingPrice (${menuData.startingPrice}).`);
+    for (let idx = 0; idx < rawItems.length; idx++) {
+      const reqItem = rawItems[idx];
+      const menuItemId = typeof reqItem.menuItemId === "string" ? reqItem.menuItemId.trim() : "";
+      const quantity = reqItem.quantity;
+
+      const docSnap = catalogItemDocs.get(menuItemId);
+      if (!docSnap || !docSnap.exists) {
+        const err = new Error(`Menu item "${menuItemId}" not found in shop "${shopId}".`);
+        err.code = "not-found";
+        err.status = 404;
+        throw err;
+      }
+
+      const menuData = docSnap.data() || {};
+
+      // Validate shop tenancy
+      if (menuData.shopId && menuData.shopId !== shopId) {
+        const err = new Error(`Menu item "${menuItemId}" does not belong to shop "${shopId}".`);
         err.code = "failed-precondition";
         err.status = 400;
         throw err;
       }
-      startingPricePaise = toPaise(menuData.startingPrice);
-    }
 
-    // Compute Authoritative Unit Price and Options
-    let unitPricePaise = 0;
-    let hasAnyFixed = false;
-    const authoritativeSelectedOptions = [];
-    const optionsDescriptionTokens = [];
+      // Validate availability
+      if (menuData.isAvailable === false) {
+        const err = new Error(`Menu item "${menuData.name || menuItemId}" is currently out of stock / unavailable.`);
+        err.code = "failed-precondition";
+        err.status = 400;
+        throw err;
+      }
 
-    const reqOptions = Array.isArray(reqItem.selectedOptions) ? reqItem.selectedOptions : [];
-    const catalogOptionGroups = Array.isArray(menuData.optionGroups)
-      ? menuData.optionGroups
-      : (Array.isArray(menuData.groups) ? menuData.groups : []);
+      // Validate authoritative base catalog price
+      const rawBasePrice = menuData.price;
+      if (typeof rawBasePrice !== "number" || !Number.isFinite(rawBasePrice) || rawBasePrice < 0) {
+        const err = new Error(`Catalog error: Menu item "${menuItemId}" has invalid or negative price (${rawBasePrice}).`);
+        err.code = "failed-precondition";
+        err.status = 400;
+        throw err;
+      }
+      const basePricePaise = toPaise(rawBasePrice);
 
-    if (catalogOptionGroups.length === 0 && reqOptions.length > 0) {
-      const err = new Error(`Menu item "${menuItemId}" does not accept option selections.`);
-      err.code = "invalid-argument";
-      err.status = 400;
-      throw err;
-    }
-
-    if (catalogOptionGroups.length > 0) {
-      // Map to collect requested selections per option group
-      const selectionsByGroup = new Map();
-      const seenOptionKeys = new Set();
-
-      for (const reqOpt of reqOptions) {
-        if (!reqOpt || typeof reqOpt !== "object") {
-          const err = new Error("Malformed selectedOption entry.");
-          err.code = "invalid-argument";
+      let startingPricePaise = 0;
+      if (menuData.startingPrice !== undefined && menuData.startingPrice !== null) {
+        if (typeof menuData.startingPrice !== "number" || !Number.isFinite(menuData.startingPrice) || menuData.startingPrice < 0) {
+          const err = new Error(`Catalog error: Menu item "${menuItemId}" has invalid startingPrice (${menuData.startingPrice}).`);
+          err.code = "failed-precondition";
           err.status = 400;
           throw err;
         }
-        const groupId = typeof reqOpt.groupId === "string" ? reqOpt.groupId.trim() : "";
-        const optionId = typeof reqOpt.optionId === "string" ? reqOpt.optionId.trim() : "";
-        if (!groupId || !optionId) {
-          const err = new Error("Each selectedOption must contain valid groupId and optionId.");
-          err.code = "invalid-argument";
-          err.status = 400;
-          throw err;
-        }
+        startingPricePaise = toPaise(menuData.startingPrice);
+      }
 
-        const group = catalogOptionGroups.find((g) => g.id === groupId);
-        if (!group) {
-          const err = new Error(`Invalid option group "${groupId}" does not exist for menu item "${menuItemId}".`);
-          err.code = "invalid-argument";
-          err.status = 400;
-          throw err;
-        }
+      // Compute Authoritative Unit Price and Options
+      let unitPricePaise = 0;
+      let hasAnyFixed = false;
+      const authoritativeSelectedOptions = [];
+      const optionsDescriptionTokens = [];
 
-        const catalogOpt = (group.options || []).find((o) => o.id === optionId);
-        if (!catalogOpt) {
-          const err = new Error(`Invalid option "${optionId}" does not exist in group "${groupId}" for item "${menuItemId}".`);
-          err.code = "invalid-argument";
-          err.status = 400;
-          throw err;
-        }
+      const reqOptions = Array.isArray(reqItem.selectedOptions) ? reqItem.selectedOptions : [];
+      const catalogOptionGroups = Array.isArray(menuData.optionGroups)
+        ? menuData.optionGroups
+        : (Array.isArray(menuData.groups) ? menuData.groups : []);
 
-        // Prevent duplicate selection of the exact same optionId within a group
-        const optKey = `${groupId}:${optionId}`;
-        if (seenOptionKeys.has(optKey)) {
-          const err = new Error(`Duplicate selection of option "${optionId}" in group "${groupId}".`);
-          err.code = "invalid-argument";
-          err.status = 400;
-          throw err;
-        }
-        seenOptionKeys.add(optKey);
+      if (catalogOptionGroups.length === 0 && reqOptions.length > 0) {
+        const err = new Error(`Menu item "${menuItemId}" does not accept option selections.`);
+        err.code = "invalid-argument";
+        err.status = 400;
+        throw err;
+      }
 
-        // Authoritative option pricing validation (Mandatory Correction 1: No silent clamping)
-        const pricingType = catalogOpt.pricingType || (group.groupType === "fixed" ? "fixedPrice" : "priceAdjustment");
-        let catalogOptPricePaise = 0;
+      if (catalogOptionGroups.length > 0) {
+        const selectionsByGroup = new Map();
+        const seenOptionKeys = new Set();
 
-        if (pricingType !== "selectionOnly") {
-          const rawOptPrice = catalogOpt.price;
-          if (typeof rawOptPrice !== "number" || !Number.isFinite(rawOptPrice) || rawOptPrice < 0) {
-            const err = new Error(
-              `Catalog error: Option "${optionId}" in group "${groupId}" has invalid or negative price (${rawOptPrice}).`
-            );
-            err.code = "failed-precondition";
+        for (const reqOpt of reqOptions) {
+          const groupId = typeof reqOpt.groupId === "string" ? reqOpt.groupId.trim() : "";
+          const optionId = typeof reqOpt.optionId === "string" ? reqOpt.optionId.trim() : "";
+
+          const group = catalogOptionGroups.find((g) => g.id === groupId);
+          if (!group) {
+            const err = new Error(`Invalid option group "${groupId}" does not exist for menu item "${menuItemId}".`);
+            err.code = "invalid-argument";
             err.status = 400;
             throw err;
           }
-          catalogOptPricePaise = toPaise(rawOptPrice);
-        }
 
-        if (!selectionsByGroup.has(groupId)) {
-          selectionsByGroup.set(groupId, []);
-        }
-        selectionsByGroup.get(groupId).push({
-          group,
-          catalogOpt,
-          pricingType,
-          catalogOptPricePaise,
-        });
-      }
-
-      // Validate group-level selection constraints according to authoritative catalog schema (Mandatory Correction 2)
-      for (const group of catalogOptionGroups) {
-        const selections = selectionsByGroup.get(group.id) || [];
-        const count = selections.length;
-
-        const isMulti = group.multiple === true || group.allowMultiple === true || (typeof group.maxSelections === "number" && group.maxSelections > 1);
-
-        let minSelections;
-        let maxSelections;
-
-        if (typeof group.minSelections === "number") {
-          minSelections = group.minSelections;
-        } else if (group.required === true || group.groupType === "fixed") {
-          minSelections = 1;
-        } else {
-          minSelections = 0;
-        }
-
-        if (typeof group.maxSelections === "number") {
-          maxSelections = group.maxSelections;
-        } else if (isMulti) {
-          maxSelections = Array.isArray(group.options) ? group.options.length : 10;
-        } else {
-          maxSelections = 1;
-        }
-
-        if (count < minSelections) {
-          const err = new Error(
-            `Missing required option selection for group "${group.name || group.id}". Expected at least ${minSelections}, got ${count}.`
-          );
-          err.code = "invalid-argument";
-          err.status = 400;
-          throw err;
-        }
-
-        if (count > maxSelections) {
-          const err = new Error(
-            `Too many options selected for group "${group.name || group.id}". Maximum allowed is ${maxSelections}, got ${count}.`
-          );
-          err.code = "invalid-argument";
-          err.status = 400;
-          throw err;
-        }
-
-        // Accumulate option pricing and tokens
-        for (const sel of selections) {
-          if (group.groupType === "fixed" || sel.pricingType === "fixedPrice") {
-            hasAnyFixed = true;
+          const catalogOpt = (group.options || []).find((o) => o.id === optionId);
+          if (!catalogOpt) {
+            const err = new Error(`Invalid option "${optionId}" does not exist in group "${groupId}" for item "${menuItemId}".`);
+            err.code = "invalid-argument";
+            err.status = 400;
+            throw err;
           }
-          unitPricePaise += sel.catalogOptPricePaise;
 
-          authoritativeSelectedOptions.push({
-            groupId: group.id,
-            groupName: group.name || "",
-            optionId: sel.catalogOpt.id,
-            optionName: sel.catalogOpt.name || "",
-            pricingType: sel.pricingType,
-            price: fromPaise(sel.catalogOptPricePaise),
+          const optKey = `${groupId}:${optionId}`;
+          if (seenOptionKeys.has(optKey)) {
+            const err = new Error(`Duplicate selection of option "${optionId}" in group "${groupId}".`);
+            err.code = "invalid-argument";
+            err.status = 400;
+            throw err;
+          }
+          seenOptionKeys.add(optKey);
+
+          const pricingType = catalogOpt.pricingType || (group.groupType === "fixed" ? "fixedPrice" : "priceAdjustment");
+          let catalogOptPricePaise = 0;
+
+          if (pricingType !== "selectionOnly") {
+            const rawOptPrice = catalogOpt.price;
+            if (typeof rawOptPrice !== "number" || !Number.isFinite(rawOptPrice) || rawOptPrice < 0) {
+              const err = new Error(
+                `Catalog error: Option "${optionId}" in group "${groupId}" has invalid or negative price (${rawOptPrice}).`
+              );
+              err.code = "failed-precondition";
+              err.status = 400;
+              throw err;
+            }
+            catalogOptPricePaise = toPaise(rawOptPrice);
+          }
+
+          if (!selectionsByGroup.has(groupId)) {
+            selectionsByGroup.set(groupId, []);
+          }
+          selectionsByGroup.get(groupId).push({
+            group,
+            catalogOpt,
+            pricingType,
+            catalogOptPricePaise,
           });
+        }
 
-          if (sel.catalogOpt.name) {
-            optionsDescriptionTokens.push(sel.catalogOpt.name);
+        // Validate group-level selection constraints
+        for (const group of catalogOptionGroups) {
+          const selections = selectionsByGroup.get(group.id) || [];
+          const count = selections.length;
+
+          const isMulti = group.multiple === true || group.allowMultiple === true || (typeof group.maxSelections === "number" && group.maxSelections > 1);
+
+          let minSelections;
+          let maxSelections;
+
+          if (typeof group.minSelections === "number") {
+            minSelections = group.minSelections;
+          } else if (group.required === true || group.groupType === "fixed") {
+            minSelections = 1;
+          } else {
+            minSelections = 0;
+          }
+
+          if (typeof group.maxSelections === "number") {
+            maxSelections = group.maxSelections;
+          } else if (isMulti) {
+            maxSelections = Array.isArray(group.options) ? group.options.length : 10;
+          } else {
+            maxSelections = 1;
+          }
+
+          if (count < minSelections) {
+            const err = new Error(
+              `Missing required option selection for group "${group.name || group.id}". Expected at least ${minSelections}, got ${count}.`
+            );
+            err.code = "invalid-argument";
+            err.status = 400;
+            throw err;
+          }
+
+          if (count > maxSelections) {
+            const err = new Error(
+              `Too many options selected for group "${group.name || group.id}". Maximum allowed is ${maxSelections}, got ${count}.`
+            );
+            err.code = "invalid-argument";
+            err.status = 400;
+            throw err;
+          }
+
+          for (const sel of selections) {
+            if (group.groupType === "fixed" || sel.pricingType === "fixedPrice") {
+              hasAnyFixed = true;
+            }
+            unitPricePaise += sel.catalogOptPricePaise;
+
+            authoritativeSelectedOptions.push({
+              groupId: group.id,
+              groupName: group.name || "",
+              optionId: sel.catalogOpt.id,
+              optionName: sel.catalogOpt.name || "",
+              pricingType: sel.pricingType,
+              price: fromPaise(sel.catalogOptPricePaise),
+            });
+
+            if (sel.catalogOpt.name) {
+              optionsDescriptionTokens.push(sel.catalogOpt.name);
+            }
           }
         }
+
+        if (!hasAnyFixed) {
+          unitPricePaise += basePricePaise;
+        }
+
+        if (unitPricePaise <= 0) {
+          unitPricePaise = startingPricePaise > 0 ? startingPricePaise : basePricePaise;
+        }
+      } else {
+        unitPricePaise = basePricePaise;
       }
 
-      if (!hasAnyFixed) {
-        unitPricePaise += basePricePaise;
+      if (unitPricePaise > toPaise(MAX_ITEM_PRICE)) {
+        const err = new Error(
+          `Item unit price for "${menuItemId}" (₹${fromPaise(unitPricePaise)}) exceeds allowable maximum limit of ₹${MAX_ITEM_PRICE}.`
+        );
+        err.code = "invalid-argument";
+        err.status = 400;
+        throw err;
       }
 
-      if (unitPricePaise <= 0) {
-        unitPricePaise = startingPricePaise > 0 ? startingPricePaise : basePricePaise;
-      }
-    } else {
-      // Standard item with no option groups
-      unitPricePaise = basePricePaise;
+      const itemSubtotalPaise = unitPricePaise * quantity;
+      calculatedSubtotalPaise += itemSubtotalPaise;
+      totalItemCount += quantity;
+
+      processedItems.push({
+        itemId: menuItemId,
+        menuItemId: menuItemId,
+        name: menuData.name || "Item",
+        price: fromPaise(unitPricePaise),
+        quantity: quantity,
+        subtotal: fromPaise(itemSubtotalPaise),
+        imageUrl: menuData.imageUrl || "",
+        optionsDescription: optionsDescriptionTokens.join(" · "),
+        selectedOptions: authoritativeSelectedOptions,
+        cartKey: buildDeterministicCartKey(menuItemId, authoritativeSelectedOptions),
+      });
     }
 
-    // Check item unit price ceiling
-    if (unitPricePaise > toPaise(MAX_ITEM_PRICE)) {
+    if (totalItemCount > MAX_TOTAL_QUANTITY) {
       const err = new Error(
-        `Item unit price for "${menuItemId}" (₹${fromPaise(unitPricePaise)}) exceeds allowable maximum limit of ₹${MAX_ITEM_PRICE}.`
+        `Total item quantity across all order items (${totalItemCount}) exceeds allowable limit of ${MAX_TOTAL_QUANTITY}.`
       );
       err.code = "invalid-argument";
       err.status = 400;
       throw err;
     }
 
-    const itemSubtotalPaise = unitPricePaise * quantity;
-    calculatedSubtotalPaise += itemSubtotalPaise;
-    totalItemCount += quantity;
+    const grandTotalPaise = calculatedSubtotalPaise + deliveryChargesPaise;
+    if (grandTotalPaise > toPaise(MAX_ORDER_GRAND_TOTAL)) {
+      const err = new Error(
+        `Order grand total (₹${fromPaise(grandTotalPaise)}) exceeds allowable maximum limit of ₹${MAX_ORDER_GRAND_TOTAL}.`
+      );
+      err.code = "invalid-argument";
+      err.status = 400;
+      throw err;
+    }
 
-    processedItems.push({
-      itemId: menuItemId,
-      menuItemId: menuItemId,
-      name: menuData.name || "Item",
-      price: fromPaise(unitPricePaise),
-      quantity: quantity,
-      subtotal: fromPaise(itemSubtotalPaise),
-      imageUrl: menuData.imageUrl || "",
-      optionsDescription: optionsDescriptionTokens.join(" · "),
-      selectedOptions: authoritativeSelectedOptions,
-      cartKey: buildDeterministicCartKey(menuItemId, authoritativeSelectedOptions),
-    });
-  }
+    const calculatedSubtotal = fromPaise(calculatedSubtotalPaise);
+    const grandTotal = fromPaise(grandTotalPaise);
+    const totalAmount = grandTotal;
 
-  // Validate total order quantity ceiling
-  if (totalItemCount > MAX_TOTAL_QUANTITY) {
-    const err = new Error(
-      `Total item quantity across all order items (${totalItemCount}) exceeds allowable limit of ${MAX_TOTAL_QUANTITY}.`
-    );
-    err.code = "invalid-argument";
-    err.status = 400;
-    throw err;
-  }
+    // 5. Derive Customer Details
+    let customerName = "Student";
+    let customerPhone = "";
 
-  // ─── 5. Calculate Authoritative Financials (Paise Minor Units) ──────────────
-  const grandTotalPaise = calculatedSubtotalPaise + deliveryChargesPaise;
-  if (grandTotalPaise > toPaise(MAX_ORDER_GRAND_TOTAL)) {
-    const err = new Error(
-      `Order grand total (₹${fromPaise(grandTotalPaise)}) exceeds allowable maximum limit of ₹${MAX_ORDER_GRAND_TOTAL}.`
-    );
-    err.code = "invalid-argument";
-    err.status = 400;
-    throw err;
-  }
+    if (authContext.token && typeof authContext.token.phone_number === "string") {
+      customerPhone = authContext.token.phone_number;
+    } else if (typeof authContext.phone === "string") {
+      customerPhone = authContext.phone;
+    }
 
-  const calculatedSubtotal = fromPaise(calculatedSubtotalPaise);
-  const grandTotal = fromPaise(grandTotalPaise);
-  const totalAmount = grandTotal;
-
-  // ─── 6. Derive Customer Details ────────────────────────────────────────────
-  let customerName = "Student";
-  let customerPhone = "";
-
-  if (authContext.token && typeof authContext.token.phone_number === "string") {
-    customerPhone = authContext.token.phone_number;
-  } else if (typeof authContext.phone === "string") {
-    customerPhone = authContext.phone;
-  }
-
-  try {
-    const userDoc = await db.collection("users").doc(canonicalCustomerId).get();
-    if (userDoc.exists) {
+    if (userDoc && userDoc.exists) {
       const userData = userDoc.data() || {};
       if (userData.name && typeof userData.name === "string" && userData.name.trim().length > 0) {
         customerName = userData.name.trim();
@@ -795,112 +1101,136 @@ async function processServerAuthoritativeOrder(db, authContext, requestData, opt
         customerPhone = userData.phone.trim();
       }
     }
-  } catch (_) {}
 
-  // Fallback to request metadata if user record was incomplete, preserving valid user input (No silent truncation)
-  if (customerName === "Student" && validatedCustomerName.length > 0) {
-    customerName = validatedCustomerName;
-  }
-  if (!customerPhone && validatedCustomerPhone.length > 0) {
-    customerPhone = validatedCustomerPhone;
-  }
+    if (customerName === "Student" && validatedCustomerName.length > 0) {
+      customerName = validatedCustomerName;
+    }
+    if (!customerPhone && validatedCustomerPhone.length > 0) {
+      customerPhone = validatedCustomerPhone;
+    }
 
-  const specialInstructions = validatedSpecialInstructions;
-  const deliveryNote = validatedDeliveryNote.length > 0
-    ? validatedDeliveryNote
-    : (shopData.deliveryNote || "Bennett University");
+    const specialInstructions = validatedSpecialInstructions;
+    const deliveryNote = validatedDeliveryNote.length > 0
+      ? validatedDeliveryNote
+      : (shopData.deliveryNote || "Bennett University");
 
-  const orderMethod = validatedOrderMethod;
+    const orderMethod = validatedOrderMethod;
 
-  // ─── 7. Timestamps and Lifecycle Deadlines ──────────────────────────────────
-  const now = options.now instanceof Date ? options.now : new Date();
-  const acceptDeadlineDate = new Date(now.getTime() + 20 * 60 * 1000); // 20 minutes
+    // 6. Timestamps and Lifecycle Deadlines
+    const acceptDeadlineDate = new Date(now.getTime() + 20 * 60 * 1000); // 20 minutes
+    const createdAtTimestamp = options.now ? Timestamp.fromDate(now) : FieldValue.serverTimestamp();
+    const updatedAtTimestamp = options.now ? Timestamp.fromDate(now) : FieldValue.serverTimestamp();
 
-  // Server-Authoritative orderId generation:
-  // Strictly generated by the server backend.
-  // Note: options._serverOrderId is reserved strictly for internal test harnesses (e.g. collision testing)
-  let orderId;
-  if (typeof options._serverOrderId === "string" && options._serverOrderId.trim().length > 0) {
-    orderId = options._serverOrderId.trim();
-  } else {
-    const randomHex = crypto.randomBytes(6).toString("hex").toUpperCase();
-    orderId = `ORD_${now.getTime()}_${randomHex}`;
-  }
+    const finalOrderDoc = {
+      orderId,
+      shopId,
+      shopName: authoritativeShopName,
+      customerId: canonicalCustomerId,
+      customerName,
+      customerPhone,
+      items: processedItems,
+      subtotal: calculatedSubtotal,
+      deliveryCharges: authoritativeDeliveryCharges,
+      totalItems: totalItemCount,
+      grandTotal: grandTotal,
+      totalAmount: totalAmount,
+      specialInstructions,
+      deliveryNote,
+      status: "placed",
+      rejectionReason: "",
+      orderMethod,
+      createdAt: createdAtTimestamp,
+      updatedAt: updatedAtTimestamp,
+      acceptDeadline: Timestamp.fromDate(acceptDeadlineDate),
+    };
 
-  // ─── 8. Construct Final Authoritative Order Document ───────────────────────
-  const createdAtTimestamp = options.now ? Timestamp.fromDate(now) : FieldValue.serverTimestamp();
-  const updatedAtTimestamp = options.now ? Timestamp.fromDate(now) : FieldValue.serverTimestamp();
+    // ─── Phase C: Transactional Writes (Atomic persistence) ────────────────────
+    if (options.skipPersistence !== true) {
+      t.set(orderRef, finalOrderDoc);
 
-  const finalOrderDoc = {
-    orderId,
-    shopId,
-    shopName: authoritativeShopName,
-    customerId: canonicalCustomerId,
-    customerName,
-    customerPhone,
-    items: processedItems,
-    subtotal: calculatedSubtotal,
-    deliveryCharges: authoritativeDeliveryCharges,
-    totalItems: totalItemCount,
-    grandTotal: grandTotal,
-    totalAmount: totalAmount,
-    specialInstructions,
-    deliveryNote,
-    status: "placed",
-    rejectionReason: "",
-    orderMethod,
-    createdAt: createdAtTimestamp,
-    updatedAt: updatedAtTimestamp,
-    acceptDeadline: Timestamp.fromDate(acceptDeadlineDate),
+      const idempotencyDoc = {
+        uid: canonicalCustomerId,
+        idempotencyKey,
+        requestFingerprint,
+        status: "completed",
+        orderId,
+        createdAt: createdAtTimestamp,
+        expiresAt: Timestamp.fromDate(new Date(now.getTime() + IDEMPOTENCY_EXPIRY_MS)),
+        orderSummary: {
+          orderId,
+          shopId,
+          grandTotal: finalOrderDoc.grandTotal,
+          status: finalOrderDoc.status,
+        },
+      };
+      t.set(idempDocRef, idempotencyDoc);
+
+      // Atomic Rate-limit state updates
+      const updatedUserTimestamps = [...activeUserTimestamps, nowMs];
+      t.set(userRateLimitRef, {
+        uid: canonicalCustomerId,
+        recentOrders: updatedUserTimestamps,
+        updatedAt: updatedAtTimestamp,
+      });
+
+      const updatedShopTimestamps = [...activeShopTimestamps, nowMs];
+      t.set(shopRateLimitRef, {
+        shopId,
+        recentOrders: updatedShopTimestamps,
+        updatedAt: updatedAtTimestamp,
+      });
+    }
+
+    return {
+      isReplay: false,
+      orderId,
+      order: finalOrderDoc,
+    };
   };
 
-  // ─── 9. Atomic Persistence in Firestore ────────────────────────────────────
-  // Eliminates check-then-write race condition by using native atomic create() or isolated transaction.
-  if (options.skipPersistence !== true) {
-    const docRef = db.collection("orders").doc(orderId);
-    try {
-      if (typeof docRef.create === "function") {
-        // Native Firestore Admin SDK atomic create:
-        // Fails with ALREADY_EXISTS (code 6) if document already exists.
-        await docRef.create(finalOrderDoc);
-      } else {
-        // Atomic transaction fallback
-        await db.runTransaction(async (t) => {
-          const snap = await t.get(docRef);
-          if (snap.exists) {
-            const err = new Error(`Order collision: document with ID "${orderId}" already exists.`);
-            err.code = 6;
-            err.status = 409;
-            throw err;
-          }
-          t.set(docRef, finalOrderDoc);
-        });
-      }
-    } catch (createErr) {
-      if (
-        createErr.code === 6 ||
-        createErr.code === "already-exists" ||
-        (createErr.message && createErr.message.toLowerCase().includes("already exists"))
-      ) {
-        const err = new Error(`Order collision: document with ID "${orderId}" already exists. Overwrite prohibited.`);
-        err.code = "already-exists";
-        err.status = 409;
-        throw err;
-      }
-      throw createErr;
+  let txResult;
+  if (typeof db.runTransaction === "function") {
+    txResult = await db.runTransaction(executeOrderCreationTransaction);
+  } else {
+    // Non-transactional fallback for minimal stub mocks
+    const mockTx = {
+      get: async (ref) => ref.get(),
+      set: async (ref, data) => ref.set(data),
+      create: async (ref, data) => (typeof ref.create === "function" ? ref.create(data) : ref.set(data)),
+    };
+    txResult = await executeOrderCreationTransaction(mockTx);
+  }
+
+  if (txResult && txResult.isReplay) {
+    let existingOrder = null;
+    if (txResult.orderId) {
+      try {
+        const orderSnap = await db.collection("orders").doc(txResult.orderId).get();
+        if (orderSnap.exists) {
+          existingOrder = orderSnap.data();
+        }
+      } catch (_) {}
     }
+    return {
+      success: true,
+      orderId: txResult.orderId,
+      order: existingOrder || txResult.orderSummary || {},
+      isIdempotentReplay: true,
+    };
   }
 
   return {
     success: true,
-    orderId,
-    order: finalOrderDoc,
+    orderId: txResult.orderId,
+    order: txResult.order,
   };
 }
 
 module.exports = {
   processServerAuthoritativeOrder,
   buildDeterministicCartKey,
+  computeIdempotencyDocId,
+  computeRequestFingerprint,
   toPaise,
   fromPaise,
   MAX_ITEMS_PER_ORDER,
@@ -917,4 +1247,13 @@ module.exports = {
   CONTROL_CHAR_REGEX,
   PROHIBITED_SECURITY_KEYS,
   ALLOWED_ORDER_METHODS,
+  IDEMPOTENCY_KEY_REGEX,
+  RATE_LIMIT_USER_MAX,
+  RATE_LIMIT_USER_WINDOW_MS,
+  RATE_LIMIT_USER_BURST_MAX,
+  RATE_LIMIT_USER_BURST_WINDOW_MS,
+  RATE_LIMIT_SHOP_MAX,
+  RATE_LIMIT_SHOP_WINDOW_MS,
+  IDEMPOTENCY_EXPIRY_MS,
+  IDEMPOTENCY_PENDING_STALE_MS,
 };

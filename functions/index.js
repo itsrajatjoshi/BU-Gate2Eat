@@ -534,12 +534,15 @@ exports.dataCleanup = {
 const {
   processServerAuthoritativeOrder,
   buildDeterministicCartKey,
+  computeIdempotencyDocId,
+  computeRequestFingerprint,
 } = require("./order_creation");
 
 /**
- * HTTPS REST / HTTP Trigger for Server-Authoritative Order Creation (Phase 4.1).
+ * HTTPS REST / HTTP Trigger for Server-Authoritative Order Creation (Phase 4.1 & 4.4).
  * Requires Authorization: Bearer <FirebaseIdToken>.
- * Rejects unauthenticated callers, forged customerId, invalid shops/items, and client price tampering.
+ * Rejects unauthenticated callers, forged customerId, invalid shops/items, client price tampering,
+ * rate limit abuse, and idempotency conflicts.
  */
 exports.createOrder = functions.https.onRequest(async (req, res) => {
   if (req.method !== "POST") {
@@ -571,7 +574,14 @@ exports.createOrder = functions.https.onRequest(async (req, res) => {
     const result = await processServerAuthoritativeOrder(db, authContext, req.body);
     return res.status(200).json(result);
   } catch (err) {
-    const statusCode = err.status || (err.code === "not-found" ? 404 : (err.code === "permission-denied" ? 403 : 400));
+    const statusCode = err.status || (
+      err.code === "not-found" ? 404 :
+      err.code === "permission-denied" ? 403 :
+      err.code === "resource-exhausted" ? 429 :
+      err.code === "failed-precondition" ? 409 :
+      err.code === "already-exists" ? 409 :
+      400
+    );
     return res.status(statusCode).json({
       error: err.message || "Failed to create order.",
       code: err.code || "unknown",
@@ -580,7 +590,7 @@ exports.createOrder = functions.https.onRequest(async (req, res) => {
 });
 
 /**
- * HTTPS Callable Cloud Function for Server-Authoritative Order Creation (Phase 4.1).
+ * HTTPS Callable Cloud Function for Server-Authoritative Order Creation (Phase 4.1 & 4.4).
  * Authenticated directly via Firebase SDK context.
  */
 exports.createOrderCallable = functions.https.onCall(async (data, context) => {
@@ -604,11 +614,13 @@ exports.createOrderCallable = functions.https.onCall(async (data, context) => {
       ? "not-found"
       : (err.code === "permission-denied"
         ? "permission-denied"
-        : (err.code === "failed-precondition"
+        : (err.code === "failed-precondition" || err.code === "already-exists"
           ? "failed-precondition"
-          : (err.code === "unauthenticated"
-            ? "unauthenticated"
-            : "invalid-argument")));
+          : (err.code === "resource-exhausted"
+            ? "resource-exhausted"
+            : (err.code === "unauthenticated"
+              ? "unauthenticated"
+              : "invalid-argument"))));
     throw new functions.https.HttpsError(httpsErrorCode, err.message);
   }
 });
@@ -616,5 +628,7 @@ exports.createOrderCallable = functions.https.onCall(async (data, context) => {
 exports.orderService = {
   processServerAuthoritativeOrder,
   buildDeterministicCartKey,
+  computeIdempotencyDocId,
+  computeRequestFingerprint,
 };
 
