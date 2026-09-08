@@ -20,6 +20,7 @@ const functions = require("firebase-functions/v1");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getAuth } = require("firebase-admin/auth");
 
 initializeApp();
 
@@ -529,4 +530,91 @@ exports.dataCleanup = {
   auditAndCleanStorageOrphans,
 };
 
+// ─── PART 7: SERVER-AUTHORITATIVE ORDER CREATION (CHECKPOINT 4.1) ───────────
+const {
+  processServerAuthoritativeOrder,
+  buildDeterministicCartKey,
+} = require("./order_creation");
+
+/**
+ * HTTPS REST / HTTP Trigger for Server-Authoritative Order Creation (Phase 4.1).
+ * Requires Authorization: Bearer <FirebaseIdToken>.
+ * Rejects unauthenticated callers, forged customerId, invalid shops/items, and client price tampering.
+ */
+exports.createOrder = functions.https.onRequest(async (req, res) => {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed. Use POST." });
+  }
+
+  // Verify Firebase ID Token from Authorization header
+  let authContext = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const idToken = authHeader.split("Bearer ")[1].trim();
+    try {
+      const decodedToken = await getAuth().verifyIdToken(idToken);
+      authContext = {
+        uid: decodedToken.uid,
+        token: decodedToken,
+        phone: decodedToken.phone_number || "",
+      };
+    } catch (authErr) {
+      return res.status(401).json({ error: "Unauthorized: Invalid or expired authentication token." });
+    }
+  }
+
+  if (!authContext) {
+    return res.status(401).json({ error: "Unauthorized: Missing or invalid Authorization header." });
+  }
+
+  try {
+    const result = await processServerAuthoritativeOrder(db, authContext, req.body);
+    return res.status(200).json(result);
+  } catch (err) {
+    const statusCode = err.status || (err.code === "not-found" ? 404 : (err.code === "permission-denied" ? 403 : 400));
+    return res.status(statusCode).json({
+      error: err.message || "Failed to create order.",
+      code: err.code || "unknown",
+    });
+  }
+});
+
+/**
+ * HTTPS Callable Cloud Function for Server-Authoritative Order Creation (Phase 4.1).
+ * Authenticated directly via Firebase SDK context.
+ */
+exports.createOrderCallable = functions.https.onCall(async (data, context) => {
+  if (!context.auth || !context.auth.uid) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Customer authentication is required to create an order."
+    );
+  }
+
+  const authContext = {
+    uid: context.auth.uid,
+    token: context.auth.token,
+    phone: context.auth.token.phone_number || "",
+  };
+
+  try {
+    return await processServerAuthoritativeOrder(db, authContext, data);
+  } catch (err) {
+    const httpsErrorCode = err.code === "not-found"
+      ? "not-found"
+      : (err.code === "permission-denied"
+        ? "permission-denied"
+        : (err.code === "failed-precondition"
+          ? "failed-precondition"
+          : (err.code === "unauthenticated"
+            ? "unauthenticated"
+            : "invalid-argument")));
+    throw new functions.https.HttpsError(httpsErrorCode, err.message);
+  }
+});
+
+exports.orderService = {
+  processServerAuthoritativeOrder,
+  buildDeterministicCartKey,
+};
 

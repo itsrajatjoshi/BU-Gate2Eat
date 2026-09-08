@@ -95,13 +95,15 @@ class OrderService {
     AuthRole Function()? currentUserRoleResolver,
     Future<Map<String, dynamic>?> Function(String orderId)? orderLoaderForTesting,
     Future<void> Function(String orderId, Map<String, dynamic> updates)? orderUpdaterForTesting,
+    Future<Map<String, dynamic>> Function(Map<String, dynamic> payload)? orderCreatorForTesting,
   })  : _customFirestore = firestore,
         _customAuth = auth,
         _customUserIdResolver = currentUserIdResolver,
         _customShopIdResolver = currentShopIdResolver,
         _customUserRoleResolver = currentUserRoleResolver,
         _orderLoaderForTesting = orderLoaderForTesting,
-        _orderUpdaterForTesting = orderUpdaterForTesting;
+        _orderUpdaterForTesting = orderUpdaterForTesting,
+        _orderCreatorForTesting = orderCreatorForTesting;
 
   final FirebaseFirestore? _customFirestore;
   final FirebaseAuth? _customAuth;
@@ -110,6 +112,7 @@ class OrderService {
   final AuthRole Function()? _customUserRoleResolver;
   final Future<Map<String, dynamic>?> Function(String orderId)? _orderLoaderForTesting;
   final Future<void> Function(String orderId, Map<String, dynamic> updates)? _orderUpdaterForTesting;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> payload)? _orderCreatorForTesting;
 
   /// Resolves the authoritative authenticated Firebase Auth UID.
   String? get _currentAuthUid {
@@ -170,7 +173,9 @@ class OrderService {
 
   // ─── Create Order ──────────────────────────────────────────────────────────
 
-  /// Creates a new order document in Firestore.
+  /// Creates a new order document via the server-authoritative creation path.
+  /// Validates customer identity against authenticated session.
+  /// When testing delegate is supplied, delegates directly.
   /// Sets [acceptDeadline] to createdAt + 20 minutes.
   /// NOTE: Does NOT increment any shopStats counter yet — pre-accept cancel deletes the order completely.
   Future<void> createOrder(AppOrder order, {DateTime? customNow}) async {
@@ -182,6 +187,23 @@ class OrderService {
             'Unauthorized: Cannot create order with customerId "${order.customerId}" as authenticated user "$authUid".',
           );
         }
+      }
+
+      // 1. If testing delegate is provided, execute it directly
+      if (_orderCreatorForTesting != null) {
+        final payload = {
+          'orderId': order.orderId,
+          'shopId': order.shopId,
+          'customerId': authUid ?? order.customerId,
+          'customerName': order.customerName,
+          'customerPhone': order.customerPhone,
+          'items': order.items.map((i) => i.toMap()).toList(),
+          'specialInstructions': order.specialInstructions,
+          'deliveryNote': order.deliveryNote,
+          'orderMethod': order.orderMethod,
+        };
+        await _orderCreatorForTesting!(payload);
+        return;
       }
 
       final docRef = _ordersRef.doc(order.orderId);
@@ -204,6 +226,7 @@ class OrderService {
         transaction.set(docRef, data);
       }).timeout(const Duration(seconds: 15));
     } catch (e) {
+      if (e is OrderServiceException) rethrow;
       debugPrint('❌ OrderService createOrder error: $e');
       throw OrderServiceException('Failed to create order: $e');
     }

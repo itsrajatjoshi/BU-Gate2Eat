@@ -14,7 +14,8 @@
   "scripts": {
     "test:rules": "powershell -ExecutionPolicy Bypass -File ../run_rules_tests.ps1",
     "test:auth": "node test_auth_service.js",
-    "test:otp": "node otp/test_otp_service.js"
+    "test:otp": "node otp/test_otp_service.js",
+    "test:orders": "node test_order_creation.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2"

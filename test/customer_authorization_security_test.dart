@@ -669,5 +669,44 @@ void main() {
       final stream = service.watchCustomerOrderHistory(customerId: 'INJECTED_ARBITRARY_UID');
       expect(await stream.isEmpty, isTrue);
     });
+
+    test('31. OrderService delegates order creation to server-authoritative creator hook', () async {
+      Map<String, dynamic>? receivedPayload;
+      final service = OrderService(
+        currentUserIdResolver: () => 'UID_A',
+        orderCreatorForTesting: (payload) async {
+          receivedPayload = payload;
+          return {'success': true, 'orderId': payload['orderId']};
+        },
+      );
+
+      final order = AppOrder(
+        orderId: 'ORD_SERVER_AUTH_001',
+        shopId: 'shop_001',
+        shopName: 'Client Spoofed Shop Name',
+        customerId: 'UID_A',
+        customerName: 'Customer A',
+        customerPhone: '9876543210',
+        items: const [
+          OrderItem(
+            menuItemId: 'item_1',
+            name: 'Client Spoofed Name',
+            price: 1,
+            quantity: 2,
+          ),
+        ],
+        totalAmount: 2,
+        createdAt: DateTime.now(),
+      );
+
+      await service.createOrder(order);
+
+      expect(receivedPayload, isNotNull);
+      expect(receivedPayload!['orderId'], 'ORD_SERVER_AUTH_001');
+      expect(receivedPayload!['shopId'], 'shop_001');
+      expect(receivedPayload!['customerId'], 'UID_A');
+      expect(receivedPayload!['items'], isA<List<dynamic>>());
+      expect((receivedPayload!['items'] as List<dynamic>).length, 1);
+    });
   });
 }
