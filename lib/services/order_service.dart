@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/auth/auth_status.dart';
 import '../core/utils/order_timer_helper.dart';
+import '../models/cart_item_model.dart';
 import '../models/order_model.dart';
 
 /// Exceptions for Order Service operations.
@@ -187,6 +188,63 @@ class OrderService {
     final bytes = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
     final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     return 'idem_${nowMs}_$hex';
+  }
+
+  /// Computes a canonical, deterministic signature of the client's cart business intent.
+  /// Strictly excludes financial fields (price, subtotal, deliveryCharges, grandTotal, totalAmount).
+  /// Normalizes and sorts items and options deterministically.
+  static String computeCartSignature({
+    required String shopId,
+    required List<CartItem> items,
+    String specialInstructions = '',
+    String deliveryNote = '',
+    String orderMethod = 'app',
+  }) {
+    final canonicalItems = items.map((ci) {
+      final sortedOptions = List<SelectedMenuItemOption>.from(ci.selectedOptions)
+        ..sort((a, b) {
+          final gComp = a.groupId.trim().compareTo(b.groupId.trim());
+          if (gComp != 0) return gComp;
+          return a.optionId.trim().compareTo(b.optionId.trim());
+        });
+      final optionsToken = sortedOptions
+          .map((o) => '${o.groupId.trim()}:${o.optionId.trim()}')
+          .join(',');
+      return '${ci.menuItem.id.trim()}#${ci.quantity}#[$optionsToken]';
+    }).toList()
+      ..sort();
+
+    final cleanShopId = shopId.trim();
+    final cleanMethod = orderMethod.trim().toLowerCase();
+    final cleanInstructions = specialInstructions.trim();
+    final cleanNote = deliveryNote.trim();
+
+    return 'shop:$cleanShopId|method:$cleanMethod|items:${canonicalItems.join(';')}|note:$cleanNote|inst:$cleanInstructions';
+  }
+
+  /// Computes a canonical, deterministic signature of an AppOrder's business intent.
+  /// Strictly excludes financial fields (price, subtotal, deliveryCharges, grandTotal, totalAmount).
+  static String computeOrderSignature(AppOrder order) {
+    final canonicalItems = order.items.map((oi) {
+      final sortedOptions = List<SelectedMenuItemOption>.from(oi.selectedOptions)
+        ..sort((a, b) {
+          final gComp = a.groupId.trim().compareTo(b.groupId.trim());
+          if (gComp != 0) return gComp;
+          return a.optionId.trim().compareTo(b.optionId.trim());
+        });
+      final optionsToken = sortedOptions
+          .map((o) => '${o.groupId.trim()}:${o.optionId.trim()}')
+          .join(',');
+      return '${oi.menuItemId.trim()}#${oi.quantity}#[$optionsToken]';
+    }).toList()
+      ..sort();
+
+    final cleanShopId = order.shopId.trim();
+    final cleanMethod = order.orderMethod.trim().toLowerCase();
+    final cleanInstructions = order.specialInstructions.trim();
+    final cleanNote = order.deliveryNote.trim();
+
+    return 'shop:$cleanShopId|method:$cleanMethod|items:${canonicalItems.join(';')}|note:$cleanNote|inst:$cleanInstructions';
   }
 
   /// Creates a new order document via the server-authoritative creation path.

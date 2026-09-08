@@ -22,6 +22,8 @@
 
 import 'package:bugate2eat_app/core/providers.dart';
 import 'package:bugate2eat_app/core/router.dart';
+import 'package:bugate2eat_app/models/cart_item_model.dart';
+import 'package:bugate2eat_app/models/menu_item_model.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
 import 'package:bugate2eat_app/services/auth_service.dart';
 import 'package:bugate2eat_app/services/firestore_service.dart';
@@ -800,6 +802,225 @@ void main() {
       expect(keys[0], equals(attemptKey));
       expect(keys[1], equals(attemptKey));
       expect(keys[0], equals(keys[1]), reason: 'Retry must reuse identical idempotency key');
+    });
+
+    // ─── 35. Complete Cart Signature Avoids Hash Collisions & Idempotency Key Reuse ─
+    test('35. Carts with same shop, item count, and grand total but different items produce distinct signatures and keys', () {
+      MenuItem dummyItem(String id, String name, int price) => MenuItem(
+            id: id,
+            name: name,
+            details: '',
+            price: price,
+            imageUrl: '',
+            categoryId: 'cat_default',
+            isVeg: true,
+            isAvailable: true,
+            isRecommended: false,
+            sortOrder: 1,
+          );
+
+      CartItem dummyCartItem(MenuItem item, int qty, {List<SelectedMenuItemOption> options = const []}) => CartItem(
+            menuItem: item,
+            quantity: qty,
+            shopId: 'shop_001',
+            shopName: 'Shop One',
+            selectedOptions: options,
+          );
+
+      // Cart A: 2x Burger (₹80 ea = ₹160), 1x Coke (₹60) => cart items count = 2, total = ₹220
+      final burger = dummyItem('item_burger', 'Burger', 80);
+      final coke = dummyItem('item_coke', 'Coke', 60);
+      final cartA = [
+        dummyCartItem(burger, 2),
+        dummyCartItem(coke, 1),
+      ];
+
+      // Cart B: 1x Pizza (₹180), 1x Fries (₹40) => cart items count = 2, total = ₹220
+      final pizza = dummyItem('item_pizza', 'Pizza', 180);
+      final fries = dummyItem('item_fries', 'Fries', 40);
+      final cartB = [
+        dummyCartItem(pizza, 1),
+        dummyCartItem(fries, 1),
+      ];
+
+      // Verification: Old Object.hash(shopId, cartItems.length, grandTotal) collides:
+      final oldHashA = Object.hash('shop_001', cartA.length, 220.0);
+      final oldHashB = Object.hash('shop_001', cartB.length, 220.0);
+      expect(oldHashA, equals(oldHashB), reason: 'Demonstrates vulnerability of the old partial hash');
+
+      // New signature:
+      final sigA = OrderService.computeCartSignature(shopId: 'shop_001', items: cartA);
+      final sigB = OrderService.computeCartSignature(shopId: 'shop_001', items: cartB);
+
+      // Distinct signatures guaranteed:
+      expect(sigA, isNot(equals(sigB)), reason: 'Distinct business items must produce distinct signatures');
+
+      // State tracking lifecycle simulation:
+      final pendingSignature = sigA;
+      String? pendingKey = OrderService.generateSecureIdempotencyKey();
+      final keyForA = pendingKey;
+
+      // User changes cart to Cart B:
+      if (pendingSignature != sigB) {
+        pendingKey = null; // Reset!
+      }
+      final keyForB = pendingKey ?? OrderService.generateSecureIdempotencyKey();
+
+      expect(keyForB, isNot(equals(keyForA)), reason: 'Changed cart must receive a fresh idempotency key');
+    });
+
+    // ─── 36. Cart Signature Canonical Normalization & Reordering Invariance ───
+    test('36. Reordered items and reordered options produce identical canonical cart signature', () {
+      MenuItem dummyItem(String id, String name, int price) => MenuItem(
+            id: id,
+            name: name,
+            details: '',
+            price: price,
+            imageUrl: '',
+            categoryId: 'cat_default',
+            isVeg: true,
+            isAvailable: true,
+            isRecommended: false,
+            sortOrder: 1,
+          );
+
+      CartItem dummyCartItem(MenuItem item, int qty, {List<SelectedMenuItemOption> options = const []}) => CartItem(
+            menuItem: item,
+            quantity: qty,
+            shopId: 'shop_001',
+            shopName: 'Shop One',
+            selectedOptions: options,
+          );
+
+      const optSugar = SelectedMenuItemOption(
+        groupId: 'grp_sugar',
+        groupName: 'Sugar',
+        optionId: 'opt_less',
+        optionName: 'Less Sugar',
+        pricingType: OptionPricingType.selectionOnly,
+        price: 0,
+      );
+      const optIce = SelectedMenuItemOption(
+        groupId: 'grp_ice',
+        groupName: 'Ice',
+        optionId: 'opt_no_ice',
+        optionName: 'No Ice',
+        pricingType: OptionPricingType.selectionOnly,
+        price: 0,
+      );
+
+      final coffee = dummyItem('item_coffee', 'Cold Coffee', 100);
+      final donut = dummyItem('item_donut', 'Donut', 50);
+
+      // Cart 1: Coffee with [Sugar, Ice], then Donut
+      final cart1 = [
+        dummyCartItem(coffee, 1, options: [optSugar, optIce]),
+        dummyCartItem(donut, 2),
+      ];
+
+      // Cart 2: Donut, then Coffee with [Ice, Sugar] (reordered items and reordered options)
+      final cart2 = [
+        dummyCartItem(donut, 2),
+        dummyCartItem(coffee, 1, options: [optIce, optSugar]),
+      ];
+
+      final sig1 = OrderService.computeCartSignature(
+        shopId: 'shop_001 ',
+        items: cart1,
+        specialInstructions: ' Leave at door ',
+      );
+      final sig2 = OrderService.computeCartSignature(
+        shopId: ' shop_001',
+        items: cart2,
+        specialInstructions: 'Leave at door',
+      );
+
+      expect(sig1, equals(sig2), reason: 'Equivalent business intent under reordering must produce identical signature');
+    });
+
+    // ─── 37. Retry of Same Intent Reuses Idempotency Key ──────────────────────
+    test('37. Unchanged cart retry preserves signature and reuses identical idempotency key', () {
+      MenuItem dummyItem(String id, String name, int price) => MenuItem(
+            id: id,
+            name: name,
+            details: '',
+            price: price,
+            imageUrl: '',
+            categoryId: 'cat_default',
+            isVeg: true,
+            isAvailable: true,
+            isRecommended: false,
+            sortOrder: 1,
+          );
+
+      CartItem dummyCartItem(MenuItem item, int qty) => CartItem(
+            menuItem: item,
+            quantity: qty,
+            shopId: 'shop_001',
+            shopName: 'Shop One',
+          );
+
+      final burger = dummyItem('item_burger', 'Burger', 80);
+      final cart = [dummyCartItem(burger, 1)];
+
+      final sigAttempt1 = OrderService.computeCartSignature(shopId: 'shop_001', items: cart);
+      final pendingSignature = sigAttempt1;
+      String? pendingKey = OrderService.generateSecureIdempotencyKey();
+      final originalKey = pendingKey;
+
+      // Simulated network failure occurs; user hits "Retry" with same cart:
+      final sigAttempt2 = OrderService.computeCartSignature(shopId: 'shop_001', items: cart);
+      if (pendingSignature != sigAttempt2) {
+        pendingKey = null;
+      }
+      final retryKey = pendingKey ?? OrderService.generateSecureIdempotencyKey();
+
+      expect(sigAttempt1, equals(sigAttempt2));
+      expect(retryKey, equals(originalKey), reason: 'Retry of identical cart must reuse the pending key');
+    });
+
+    // ─── 38. Confirmed Order Resets State So Subsequent Identical Order Gets New Key ─
+    test('38. Confirmed order resets pending state; subsequent intentional identical order gets fresh key', () {
+      MenuItem dummyItem(String id, String name, int price) => MenuItem(
+            id: id,
+            name: name,
+            details: '',
+            price: price,
+            imageUrl: '',
+            categoryId: 'cat_default',
+            isVeg: true,
+            isAvailable: true,
+            isRecommended: false,
+            sortOrder: 1,
+          );
+
+      CartItem dummyCartItem(MenuItem item, int qty) => CartItem(
+            menuItem: item,
+            quantity: qty,
+            shopId: 'shop_001',
+            shopName: 'Shop One',
+          );
+
+      final burger = dummyItem('item_burger', 'Burger', 80);
+      final cart = [dummyCartItem(burger, 1)];
+
+      final sigOrder1 = OrderService.computeCartSignature(shopId: 'shop_001', items: cart);
+      String? pendingSignature = sigOrder1;
+      String? pendingKey = OrderService.generateSecureIdempotencyKey();
+      final keyOrder1 = pendingKey;
+
+      // Order 1 succeeds: state is reset
+      pendingSignature = null;
+      pendingKey = null;
+
+      // User subsequently places a new identical order:
+      final sigOrder2 = OrderService.computeCartSignature(shopId: 'shop_001', items: cart);
+      if (pendingSignature != sigOrder2) {
+        pendingKey = null;
+      }
+      final keyOrder2 = pendingKey ?? OrderService.generateSecureIdempotencyKey();
+
+      expect(keyOrder2, isNot(equals(keyOrder1)), reason: 'Second order after completion must have a fresh key');
     });
   });
 }

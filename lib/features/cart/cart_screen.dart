@@ -36,7 +36,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   bool _isPlacingOrder = false;
   bool _isDialogOpen = false;
   String? _pendingOrderId;
-  int? _pendingCartHash;
+  String? _pendingCartSignature;
   String? _pendingIdempotencyKey;
 
   @override
@@ -537,15 +537,19 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           : 'Bennett University • Gate No. 3';
 
       final now = DateTime.now();
-      final currentCartHash =
-          Object.hash(shopId, cartItems.length, grandTotal);
-      if (_pendingCartHash != currentCartHash) {
+      final currentCartSignature = OrderService.computeCartSignature(
+        shopId: shopId,
+        items: cartItems,
+        specialInstructions: _specialInstructionsController.text.trim(),
+        deliveryNote: deliveryNote,
+      );
+      if (_pendingCartSignature != currentCartSignature) {
         _pendingOrderId = null;
         _pendingIdempotencyKey = null;
       }
       final orderId = _pendingOrderId ?? _generateOrderId();
       _pendingOrderId = orderId;
-      _pendingCartHash = currentCartHash;
+      _pendingCartSignature = currentCartSignature;
       final idempotencyKey = _pendingIdempotencyKey ?? OrderService.generateSecureIdempotencyKey();
       _pendingIdempotencyKey = idempotencyKey;
 
@@ -621,7 +625,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
       // Reset idempotency state on confirmed creation
       _pendingOrderId = null;
-      _pendingCartHash = null;
+      _pendingCartSignature = null;
       _pendingIdempotencyKey = null;
 
       // 4. Temporary UI bridge: update local dummy state so existing screens reflect it
