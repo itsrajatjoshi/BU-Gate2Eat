@@ -2,156 +2,48 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ─── HELPER FUNCTIONS ──────────────────────────────────────────────
+    // ─── AUTHENTICATION & ROLE HELPERS ─────────────────────────────────
 
-    // 1. New Order Creation Validation: Ensures valid initial payload & 'placed' status
-    function isValidInitialOrder() {
-      let data = request.resource.data;
-      return data.status == 'placed'
-        && data.orderId is string && data.orderId.size() > 0
-        && data.shopId is string && data.shopId.size() > 0
-        && data.customerId is string && data.customerId.size() > 0
-        && data.customerPhone is string && data.customerPhone.size() >= 10
-        && data.totalAmount is number && data.totalAmount > 0
-        && data.items is list && data.items.size() > 0;
+    /// Returns true if request is from an authenticated Firebase Auth session.
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // 2. Immutability Protection: Prevents tampering with price, items, shop, or customer ID on update
-    function areImmutableFieldsPreserved() {
-      let next = request.resource.data;
-      let prev = resource.data;
-      return next.orderId == prev.orderId
-        && next.shopId == prev.shopId
-        && next.customerId == prev.customerId
-        && next.totalAmount == prev.totalAmount
-        && next.items == prev.items
-        && (prev.get('createdAt', null) == null || next.get('createdAt', null) == prev.get('createdAt', null));
+    /// Returns true if caller is an authenticated customer with role == 'customer'.
+    function isCustomer() {
+      return isSignedIn() && request.auth.token.get('role', '') == 'customer';
     }
 
-    // 3. Strict State Machine: Valid status transitions only
-    function isValidStatusTransition() {
-      let current = resource.data.status;
-      let next = request.resource.data.status;
-      
-      return (current == 'placed' && (next == 'accepted' || next == 'rejected' || next == 'cancelled'))
-          || (current == 'accepted' && (next == 'delivered' || next == 'rejected' || next == 'delivery_expired'))
-          || (current == next); // Allows updating timestamps/delivery person without changing status
+    /// Returns true if caller is an authenticated shopkeeper with trusted shopId claim.
+    function isShopkeeper() {
+      return isSignedIn()
+        && request.auth.token.get('role', '') == 'shopkeeper'
+        && request.auth.token.get('shopId', '') is string
+        && request.auth.token.get('shopId', '').size() > 0;
     }
 
-    // 4. Safe Deletion Rules:
-    // - Customer can cancel a 'placed' order before acceptance (Rule 1: Physical Deletion)
-    // - Admin can delete terminal historical orders on reset (Rule 2: Reset Safety)
-    // - Live 'accepted' orders can NEVER be deleted!
-    function isAllowedOrderDeletion() {
-      let status = resource.data.status;
-      return status == 'placed'
-          || status == 'delivered'
-          || status == 'rejected'
-          || status == 'delivery_expired'
-          || status == 'cancelled';
+    /// Returns true if caller is an authenticated platform administrator.
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.get('role', '') == 'admin';
     }
 
-    // 5. Shop & Menu Item Validations
-    function isValidShopWrite() {
-      let data = request.resource.data;
-      return data.get('name', '') is string && data.get('name', '').size() > 0;
+    /// Backwards-compatible admin authorization helper for supportQueries
+    /// (Compatible with existing tests asserting AppAuthRoles.adminPhone '8078643910'
+    /// while closing the unauthenticated bypass)
+    function isAuthorizedAdmin() {
+      return isAdmin() || (
+        isSignedIn() && (
+          request.auth.token.get('phone_number', '') == '+918078643910' ||
+          request.auth.token.get('phone_number', '') == '8078643910' ||
+          request.auth.token.get('phone', '') == '8078643910' ||
+          request.auth.token.get('admin', false) == true
+        )
+      );
     }
 
-    function isValidCategoryWrite() {
-      let data = request.resource.data;
-      return data.get('name', '') is string && data.get('name', '').size() > 0;
-    }
+    // ─── VALIDATION HELPERS (Preserved for Subsequent Checkpoints) ─────
 
-    function isValidMenuItemWrite() {
-      let data = request.resource.data;
-      return data.get('name', '') is string && data.get('name', '').size() > 0
-          && data.get('price', 0) is number && data.get('price', 0) >= 0
-          && data.get('price', 0) <= 100000;
-    }
-
-    function isValidShopStatsWrite(shopId) {
-      let data = request.resource.data;
-      return data.get('shopId', shopId) == shopId;
-    }
-
-    // ─── 1. ORDERS COLLECTION ──────────────────────────────────────────
-    match /orders/{orderId} {
-      // Live streaming & reading allowed for customer, shopkeeper, and admin
-      allow read: if true;
-
-      // Customer can create orders ONLY with valid fields and 'placed' status
-      allow create: if isValidInitialOrder();
-
-      // Only valid status transitions allowed, core financial & item fields cannot be modified
-      allow update: if areImmutableFieldsPreserved() && isValidStatusTransition();
-
-      // Allowed for pre-accept cancellation ('placed') and terminal history cleanup on reset
-      allow delete: if isAllowedOrderDeletion();
-    }
-
-    // ─── 2. SHOP STATISTICS COLLECTION ─────────────────────────────────
-    match /shopStats/{shopId} {
-      // Admin and client stream listeners can read shop statistics
-      allow read: if true;
-
-      // Atomic counter increments (OrderService transactions, WhatsApp clicks, Admin reset)
-      allow create, update: if isValidShopStatsWrite(shopId);
-
-      // Stats documents should not be deleted (only reset to 0)
-      allow delete: if false;
-
-      // Monthly stats subcollection for month-specific WhatsApp counters
-      match /monthlyStats/{monthKey} {
-        allow read: if true;
-        allow create, update: if isValidShopStatsWrite(shopId);
-        allow delete: if false;
-      }
-    }
-
-    // ─── 3. SHOPS & MENU ITEMS ─────────────────────────────────────────
-    match /shops/{shopId} {
-      allow read: if true;
-      allow create, update: if isValidShopWrite();
-      allow delete: if true;
-
-      match /categories/{categoryId} {
-        allow read: if true;
-        allow create, update: if isValidCategoryWrite();
-        allow delete: if true;
-      }
-
-      match /menuItems/{menuItemId} {
-        allow read: if true;
-        allow create, update: if isValidMenuItemWrite();
-        allow delete: if true;
-      }
-    }
-
-    // ─── 4. APP CONFIGURATION ──────────────────────────────────────────
-    match /config/{document=**} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // ─── 5. DEVICE TOKENS COLLECTION ───────────────────────────────────
-    function isValidDeviceTokenWrite(tokenId) {
-      let data = request.resource.data;
-      return data.token is string && data.token.size() > 0 && data.token == tokenId
-        && data.role in ['customer', 'shopkeeper', 'admin']
-        && (data.platform in ['android', 'ios', 'web', 'unknown'])
-        && (data.get('phone', '') is string);
-    }
-
-    match /deviceTokens/{tokenId} {
-      // Cloud Functions read via Admin SDK (bypasses rules).
-      // Client apps may read their single known token doc, but cannot query or list all tokens.
-      allow get: if true;
-      allow list: if false;
-      allow create, update: if isValidDeviceTokenWrite(tokenId);
-      allow delete: if true;
-    }
-
-    // ─── 6. SUPPORT QUERIES COLLECTION ─────────────────────────────────
+    // 1. Support Query payload validation
     function isValidSupportQuery() {
       let data = request.resource.data;
       return data.get('name', '') is string && data.get('name', '').size() > 0
@@ -163,27 +55,103 @@ service cloud.firestore {
         && data.get('status', '') == 'unread';
     }
 
-    // Authorizes only the trusted Administrator (AppAuthRoles.adminPhone: '8078643910')
-    // Compatible with both unauthenticated client session and authenticated admin token
-    function isAuthorizedAdmin() {
-      return request.auth == null || (
-        request.auth.token.get('phone_number', '') == '+918078643910' ||
-        request.auth.token.get('phone_number', '') == '8078643910' ||
-        request.auth.token.get('phone', '') == '8078643910' ||
-        request.auth.token.get('admin', false) == true
-      );
+    // 2. Order Creation Validation (Phase 4 / Order Security)
+    function isValidInitialOrder() {
+      let data = request.resource.data;
+      return data.status == 'placed'
+        && data.orderId is string && data.orderId.size() > 0
+        && data.shopId is string && data.shopId.size() > 0
+        && data.customerId is string && data.customerId.size() > 0
+        && data.customerPhone is string && data.customerPhone.size() >= 10
+        && data.totalAmount is number && data.totalAmount > 0
+        && data.items is list && data.items.size() > 0;
     }
 
+    // 3. Immutability Protection
+    function areImmutableFieldsPreserved() {
+      let next = request.resource.data;
+      let prev = resource.data;
+      return next.orderId == prev.orderId
+        && next.shopId == prev.shopId
+        && next.customerId == prev.customerId
+        && next.totalAmount == prev.totalAmount
+        && next.items == prev.items
+        && (prev.get('createdAt', null) == null || next.get('createdAt', null) == prev.get('createdAt', null));
+    }
+
+    // 4. State Machine Validation
+    function isValidStatusTransition() {
+      let current = resource.data.status;
+      let next = request.resource.data.status;
+      return (current == 'placed' && (next == 'accepted' || next == 'rejected' || next == 'cancelled'))
+          || (current == 'accepted' && (next == 'delivered' || next == 'rejected' || next == 'delivery_expired'))
+          || (current == next);
+    }
+
+    // 5. Safe Deletion Validation
+    function isAllowedOrderDeletion() {
+      let status = resource.data.status;
+      return status == 'placed'
+          || status == 'delivered'
+          || status == 'rejected'
+          || status == 'delivery_expired'
+          || status == 'cancelled';
+    }
+
+    // ─── 1. PUBLIC CATALOG (READ-ONLY FOR BROWSING) ────────────────────
+    match /shops/{shopId} {
+      allow read: if true;
+      allow write: if false;
+
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      match /menuItems/{menuItemId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // ─── 2. APP CONFIGURATION ──────────────────────────────────────────
+    match /config/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ─── 3. SUPPORT QUERIES COLLECTION ─────────────────────────────────
     match /supportQueries/{queryId} {
-      // Customer submission only with strict validation
+      // Submission allowed with strict validation
       allow create: if isValidSupportQuery();
-      // Only authorized Administrator can read customer support queries
+      // Read allowed ONLY for verified Administrators
       allow read: if isAuthorizedAdmin();
-      // Queries are immutable records
+      // Updates and deletes are permanently denied
       allow update, delete: if false;
     }
 
-    // ─── 7. DEFAULT DENY ───────────────────────────────────────────────
+    // ─── 4. ORDERS COLLECTION (DEFAULT DENY IN 3.1) ────────────────────
+    match /orders/{orderId} {
+      // Explicitly denied in 3.1 baseline until Phase 4 / Phase 3.x order rules
+      allow read, write: if false;
+    }
+
+    // ─── 5. SHOP STATISTICS (DEFAULT DENY IN 3.1) ──────────────────────
+    match /shopStats/{shopId} {
+      allow read, write: if false;
+
+      match /monthlyStats/{monthKey} {
+        allow read, write: if false;
+      }
+    }
+
+    // ─── 6. DEVICE TOKENS (DEFAULT DENY IN 3.1) ────────────────────────
+    match /deviceTokens/{tokenId} {
+      // Cloud Functions reads/writes via Firebase Admin SDK
+      allow read, write: if false;
+    }
+
+    // ─── 7. UNIVERSAL DEFAULT-DENY FALLTHROUGH ─────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

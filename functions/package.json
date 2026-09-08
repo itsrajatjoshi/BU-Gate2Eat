@@ -10,5 +10,13 @@
     "firebase-admin": "^14.3.0",
     "firebase-functions": "^7.3.2"
   },
-  "private": true
+  "private": true,
+  "scripts": {
+    "test:rules": "powershell -ExecutionPolicy Bypass -File ../run_rules_tests.ps1",
+    "test:auth": "node test_auth_service.js",
+    "test:otp": "node otp/test_otp_service.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2"
+  }
 }
