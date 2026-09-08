@@ -286,6 +286,29 @@ async function setup() {
       ...orderDataA,
       orderId: 'order_delete_target',
     });
+
+    // Dedicated seed docs for Phase 3.3 Lifecycle Remediation Tests
+    await adminFs.collection('orders').doc('order_cust_a_for_sk_status_rem').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_sk_status_rem',
+    });
+
+    await adminFs.collection('orders').doc('order_cust_a_for_sk_reject_rem').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_sk_reject_rem',
+    });
+
+    await adminFs.collection('orders').doc('order_cust_a_for_sk_delivery_rem').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_sk_delivery_rem',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+
+    await adminFs.collection('orders').doc('order_cust_a_for_cancel_rem').set({
+      ...orderDataA,
+      orderId: 'order_cust_a_for_cancel_rem',
+    });
   });
 }
 
@@ -1369,7 +1392,6 @@ async function runRulesSecuritySuite() {
   try {
     await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_for_sk_update').update({
       status: 'accepted',
-      acceptedAt: new Date(),
       updatedAt: new Date(),
     }));
     reportTest('O.15 Shopkeeper updates own-shop order -> ALLOW', true);
@@ -1381,7 +1403,7 @@ async function runRulesSecuritySuite() {
   try {
     await assertFails(shopkeeperADb.collection('orders').doc('order_cust_b_shop_b').update({
       status: 'accepted',
-      acceptedAt: new Date(),
+      updatedAt: new Date(),
     }));
     reportTest('O.16 Shopkeeper updates another-shop order -> DENY', true);
   } catch (e) {
@@ -1599,7 +1621,6 @@ async function runRulesSecuritySuite() {
   try {
     await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_for_sk_deliver').update({
       status: 'delivered',
-      deliveredAt: new Date(),
       deliveryPersonId: 'delivery_boy_1',
       deliveryPersonName: 'Ramesh',
       updatedAt: new Date(),
@@ -1607,6 +1628,150 @@ async function runRulesSecuritySuite() {
     reportTest('O.35 Shopkeeper marks order delivered with delivery person details -> ALLOW', true);
   } catch (e) {
     reportTest('O.35 Shopkeeper marks order delivered with delivery person details -> ALLOW', false);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // PHASE 3.3 REMEDIATION: LIFECYCLE FIELDS PROTECTION SUITE (Rem33.1 - 12)
+  // ═════════════════════════════════════════════════════════════════════
+  console.log('\n--- Phase 3.3 Remediation: Lifecycle Fields Protection Suite (Rem33.1 - Rem33.12) ---');
+
+  // Rem33.1 Shopkeeper cannot arbitrarily change acceptedAt -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptedAt: new Date(),
+    }));
+    reportTest('Rem33.1 Shopkeeper cannot arbitrarily change acceptedAt -> DENY', true);
+  } catch (e) {
+    reportTest('Rem33.1 Shopkeeper cannot arbitrarily change acceptedAt -> DENY', false);
+  }
+
+  // Rem33.2 Shopkeeper cannot arbitrarily change rejectedAt -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      rejectedAt: new Date(),
+    }));
+    reportTest('Rem33.2 Shopkeeper cannot arbitrarily change rejectedAt -> DENY', true);
+  } catch (e) {
+    reportTest('Rem33.2 Shopkeeper cannot arbitrarily change rejectedAt -> DENY', false);
+  }
+
+  // Rem33.3 Shopkeeper cannot arbitrarily change deliveredAt -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      deliveredAt: new Date(),
+    }));
+    reportTest('Rem33.3 Shopkeeper cannot arbitrarily change deliveredAt -> DENY', true);
+  } catch (e) {
+    reportTest('Rem33.3 Shopkeeper cannot arbitrarily change deliveredAt -> DENY', false);
+  }
+
+  // Rem33.4 Shopkeeper cannot arbitrarily extend rejectDeadline -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      rejectDeadline: new Date(Date.now() + 86400000),
+    }));
+    reportTest('Rem33.4 Shopkeeper cannot arbitrarily extend rejectDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('Rem33.4 Shopkeeper cannot arbitrarily extend rejectDeadline -> DENY', false);
+  }
+
+  // Rem33.5 Shopkeeper cannot arbitrarily extend deliveryDeadline -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      deliveryDeadline: new Date(Date.now() + 86400000),
+    }));
+    reportTest('Rem33.5 Shopkeeper cannot arbitrarily extend deliveryDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('Rem33.5 Shopkeeper cannot arbitrarily extend deliveryDeadline -> DENY', false);
+  }
+
+  // Rem33.6 Shopkeeper cannot modify acceptDeadline -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptDeadline: new Date(Date.now() + 86400000),
+    }));
+    reportTest('Rem33.6 Shopkeeper cannot modify acceptDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('Rem33.6 Shopkeeper cannot modify acceptDeadline -> DENY', false);
+  }
+
+  // Rem33.7 Legitimate shopkeeper status update still works -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_for_sk_status_rem').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('Rem33.7 Legitimate shopkeeper status update still works -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem33.7 Legitimate shopkeeper status update still works -> ALLOW', false);
+  }
+
+  // Rem33.8 Legitimate rejection reason update still works -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_for_sk_reject_rem').update({
+      status: 'rejected',
+      rejectionReason: 'Kitchen out of stock',
+      updatedAt: new Date(),
+    }));
+    reportTest('Rem33.8 Legitimate rejection reason update still works -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem33.8 Legitimate rejection reason update still works -> ALLOW', false);
+  }
+
+  // Rem33.9 Legitimate delivery-person update still works -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_cust_a_for_sk_delivery_rem').update({
+      status: 'delivered',
+      deliveryPersonId: 'dp_99',
+      deliveryPersonName: 'Suresh Kumar',
+      updatedAt: new Date(),
+    }));
+    reportTest('Rem33.9 Legitimate delivery-person update still works -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem33.9 Legitimate delivery-person update still works -> ALLOW', false);
+  }
+
+  // Rem33.10 Customer cancellation remains functional -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('orders').doc('order_cust_a_for_cancel_rem').update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('Rem33.10 Customer cancellation remains functional -> ALLOW', true);
+  } catch (e) {
+    reportTest('Rem33.10 Customer cancellation remains functional -> ALLOW', false);
+  }
+
+  // Rem33.11 Customer still cannot modify lifecycle timestamps directly -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptedAt: new Date(),
+    }));
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      deliveredAt: new Date(),
+    }));
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      deliveryDeadline: new Date(),
+    }));
+    await assertFails(customerDb.collection('orders').doc('order_cust_a_shop_a').update({
+      acceptDeadline: new Date(),
+    }));
+    reportTest('Rem33.11 Customer still cannot modify lifecycle timestamps directly -> DENY', true);
+  } catch (e) {
+    reportTest('Rem33.11 Customer still cannot modify lifecycle timestamps directly -> DENY', false);
+  }
+
+  // Rem33.12 Cross-shop lifecycle manipulation remains denied -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_cust_b_shop_b').update({
+      status: 'accepted',
+      rejectionReason: 'Cross-shop tampering',
+      updatedAt: new Date(),
+    }));
+    reportTest('Rem33.12 Cross-shop lifecycle manipulation remains denied -> DENY', true);
+  } catch (e) {
+    reportTest('Rem33.12 Cross-shop lifecycle manipulation remains denied -> DENY', false);
   }
 
   console.log('\n=================================================================');

@@ -241,13 +241,16 @@ service cloud.firestore {
           ||
           // 2. Shopkeeper fulfillment / status updates:
           //    - Shopkeeper owns the tenant (isShopOwner)
-          //    - Restricted strictly to fulfillment fields (cannot alter financial, item, or identity fields)
+          //    - Restricted strictly to genuine shopkeeper fulfillment fields:
+          //      status, rejectionReason, deliveryPersonId, deliveryPersonName, updatedAt
+          //    - Server/lifecycle timestamps and deadlines are strictly excluded:
+          //      acceptDeadline, rejectDeadline, deliveryDeadline,
+          //      acceptedAt, rejectedAt, deliveredAt, cancelledAt
+          //    - Financial, item, and customer identity fields are strictly immutable
           (
             isShopOwner(resource.data.shopId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'status', 'acceptedAt', 'rejectDeadline', 'deliveryDeadline',
-              'rejectedAt', 'rejectionReason', 'deliveredAt',
-              'deliveryPersonId', 'deliveryPersonName', 'updatedAt'
+              'status', 'rejectionReason', 'deliveryPersonId', 'deliveryPersonName', 'updatedAt'
             ])
           )
           ||
