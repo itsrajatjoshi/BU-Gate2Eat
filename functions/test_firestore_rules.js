@@ -28,6 +28,11 @@ let shopkeeperADb;
 let shopkeeperBDb;
 let adminDb;
 let attackerDb;
+let customerWithAdminPhoneDb;
+let shopkeeperWithAdminPhoneDb;
+let userWithAdminFlagDb;
+let userWithAdminPhoneOnlyDb;
+let userWithMissingRoleDb;
 
 let passCount = 0;
 let totalTests = 0;
@@ -78,7 +83,7 @@ async function setup() {
     shopId: 'shop_b',
   }).firestore();
 
-  // 6. Platform Administrator
+  // 6. Platform Administrator (canonical role: admin)
   adminDb = testEnv.authenticatedContext('admin_uid', {
     role: 'admin',
   }).firestore();
@@ -87,6 +92,36 @@ async function setup() {
   attackerDb = testEnv.authenticatedContext('attacker_uid', {
     role: 'customer',
   }).firestore();
+
+  // 8. Customer with admin-looking phone data
+  customerWithAdminPhoneDb = testEnv.authenticatedContext('cust_with_admin_phone', {
+    role: 'customer',
+    phone_number: '+918078643910',
+    phone: '8078643910',
+  }).firestore();
+
+  // 9. Shopkeeper with admin-looking phone data
+  shopkeeperWithAdminPhoneDb = testEnv.authenticatedContext('shop_with_admin_phone', {
+    role: 'shopkeeper',
+    shopId: 'shop_a',
+    phone_number: '+918078643910',
+    phone: '8078643910',
+  }).firestore();
+
+  // 10. Authenticated user with admin: true flag but role != admin
+  userWithAdminFlagDb = testEnv.authenticatedContext('user_admin_flag', {
+    admin: true,
+    role: 'customer',
+  }).firestore();
+
+  // 11. Authenticated user with former admin phone but missing role claim
+  userWithAdminPhoneOnlyDb = testEnv.authenticatedContext('user_admin_phone_only', {
+    phone_number: '+918078643910',
+    phone: '8078643910',
+  }).firestore();
+
+  // 12. Authenticated user with completely missing role claim
+  userWithMissingRoleDb = testEnv.authenticatedContext('user_missing_role', {}).firestore();
 }
 
 async function runRulesSecuritySuite() {
@@ -350,31 +385,87 @@ async function runRulesSecuritySuite() {
     reportTest('5.3 Shopkeeper -> arbitrary collection access = DENY', false);
   }
 
-  // ─── 6. ADMIN BOUNDARY TESTS (NO BLANKET ACCESS) ────────────────────
-  console.log('\n--- 6. Admin Boundary Tests ---');
+  // ─── 6. ADMIN BOUNDARY & STRICT CLAIM TESTS ─────────────────────────
+  console.log('\n--- 6. Admin Boundary & Strict Claim Tests ---');
 
-  // 6.1 Admin can read support queries
+  // 6.1 Valid admin claim -> allowed where admin policy is intentionally allowed
   try {
     await assertSucceeds(adminDb.collection('supportQueries').doc('query_1').get());
-    reportTest('6.1 Admin can read support queries = ALLOW', true);
+    reportTest('6.1 Valid admin claim {role: "admin"} -> allowed = ALLOW', true);
   } catch (e) {
-    reportTest('6.1 Admin can read support queries = ALLOW', false);
+    reportTest('6.1 Valid admin claim {role: "admin"} -> allowed = ALLOW', false);
   }
 
-  // 6.2 Admin does NOT receive blanket access to arbitrary collections (deny-by-default preserved)
+  // 6.2 Customer with admin-looking phone data -> denied
+  try {
+    await assertFails(customerWithAdminPhoneDb.collection('supportQueries').doc('query_1').get());
+    reportTest('6.2 Customer with admin-looking phone data -> DENY', true);
+  } catch (e) {
+    reportTest('6.2 Customer with admin-looking phone data -> DENY', false);
+  }
+
+  // 6.3 Shopkeeper with admin-looking phone data -> denied
+  try {
+    await assertFails(shopkeeperWithAdminPhoneDb.collection('supportQueries').doc('query_1').get());
+    reportTest('6.3 Shopkeeper with admin-looking phone data -> DENY', true);
+  } catch (e) {
+    reportTest('6.3 Shopkeeper with admin-looking phone data -> DENY', false);
+  }
+
+  // 6.4 Authenticated user with admin: true but role != admin -> denied
+  try {
+    await assertFails(userWithAdminFlagDb.collection('supportQueries').doc('query_1').get());
+    reportTest('6.4 Authenticated user with admin: true but role != admin -> DENY', true);
+  } catch (e) {
+    reportTest('6.4 Authenticated user with admin: true but role != admin -> DENY', false);
+  }
+
+  // 6.5 Authenticated user with former admin phone but role != admin -> denied
+  try {
+    await assertFails(userWithAdminPhoneOnlyDb.collection('supportQueries').doc('query_1').get());
+    reportTest('6.5 User with former admin phone but missing role claim -> DENY', true);
+  } catch (e) {
+    reportTest('6.5 User with former admin phone but missing role claim -> DENY', false);
+  }
+
+  // 6.6 Missing role -> denied
+  try {
+    await assertFails(userWithMissingRoleDb.collection('supportQueries').doc('query_1').get());
+    reportTest('6.6 Authenticated user with missing role claim -> DENY', true);
+  } catch (e) {
+    reportTest('6.6 Authenticated user with missing role claim -> DENY', false);
+  }
+
+  // 6.7 role: customer -> denied for admin-only resource
+  try {
+    await assertFails(customerDb.collection('supportQueries').doc('query_1').get());
+    reportTest('6.7 role: customer -> denied for admin-only resource = DENY', true);
+  } catch (e) {
+    reportTest('6.7 role: customer -> denied for admin-only resource = DENY', false);
+  }
+
+  // 6.8 role: shopkeeper -> denied for admin-only resource
+  try {
+    await assertFails(shopkeeperADb.collection('supportQueries').doc('query_1').get());
+    reportTest('6.8 role: shopkeeper -> denied for admin-only resource = DENY', true);
+  } catch (e) {
+    reportTest('6.8 role: shopkeeper -> denied for admin-only resource = DENY', false);
+  }
+
+  // 6.9 Admin does NOT receive blanket access to arbitrary collections (deny-by-default preserved)
   try {
     await assertFails(adminDb.collection('unconfigured_collection').doc('doc_1').get());
-    reportTest('6.2 Admin does NOT receive blanket access (deny-by-default preserved) = DENY', true);
+    reportTest('6.9 Admin does NOT receive blanket access (deny-by-default preserved) = DENY', true);
   } catch (e) {
-    reportTest('6.2 Admin does NOT receive blanket access (deny-by-default preserved) = DENY', false);
+    reportTest('6.9 Admin does NOT receive blanket access (deny-by-default preserved) = DENY', false);
   }
 
-  // 6.3 Admin write to unconfigured collection is denied
+  // 6.10 Admin write to unconfigured collection is denied
   try {
     await assertFails(adminDb.collection('unconfigured_collection').doc('doc_1').set({ val: 1 }));
-    reportTest('6.3 Admin write to unconfigured collection = DENY', true);
+    reportTest('6.10 Admin write to unconfigured collection = DENY', true);
   } catch (e) {
-    reportTest('6.3 Admin write to unconfigured collection = DENY', false);
+    reportTest('6.10 Admin write to unconfigured collection = DENY', false);
   }
 
   // ─── 7. CRITICAL NEGATIVE TEST: DIRECT FIRESTORE API BYPASS ─────────

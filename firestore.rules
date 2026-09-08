@@ -23,22 +23,16 @@ service cloud.firestore {
     }
 
     /// Returns true if caller is an authenticated platform administrator.
+    /// Derives authority strictly from trusted Firebase Custom Claim `role == "admin"`.
     function isAdmin() {
       return isSignedIn() && request.auth.token.get('role', '') == 'admin';
     }
 
-    /// Backwards-compatible admin authorization helper for supportQueries
-    /// (Compatible with existing tests asserting AppAuthRoles.adminPhone '8078643910'
-    /// while closing the unauthenticated bypass)
+    /// Administrator authorization helper.
+    /// (Legacy phone 8078643910 or admin=true metadata cannot grant authorization;
+    /// authority derives exclusively from trusted custom claim role == 'admin').
     function isAuthorizedAdmin() {
-      return isAdmin() || (
-        isSignedIn() && (
-          request.auth.token.get('phone_number', '') == '+918078643910' ||
-          request.auth.token.get('phone_number', '') == '8078643910' ||
-          request.auth.token.get('phone', '') == '8078643910' ||
-          request.auth.token.get('admin', false) == true
-        )
-      );
+      return isAdmin();
     }
 
     // ─── VALIDATION HELPERS (Preserved for Subsequent Checkpoints) ─────
