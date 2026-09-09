@@ -13,6 +13,7 @@
   "private": true,
   "scripts": {
     "test:rules": "powershell -ExecutionPolicy Bypass -File ../run_rules_tests.ps1",
+    "test:storage": "powershell -ExecutionPolicy Bypass -File ../run_storage_rules_tests.ps1",
     "test:auth": "node test_auth_service.js",
     "test:otp": "node otp/test_otp_service.js",
     "test:orders": "node test_order_creation.js"

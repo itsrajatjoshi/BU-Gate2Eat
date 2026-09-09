@@ -2,18 +2,92 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Menu & Shop Images Storage Access
-    match /{allPaths=**} {
-      // Anyone can view menu and shop images
-      allow read: if true;
+    // ─── AUTHENTICATION & TENANT HELPERS ─────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Allow image uploads (< 1MB) and deletes to any shop image folders
-    // Note: Temporary development permission. Will be hardened with Firebase Auth in a future phase.
-    match /shops/{shopId}/{allPaths=**} {
-      allow create, update: if request.resource.size < 1 * 1024 * 1024
-                            && request.resource.contentType.matches('image/.*');
-      allow delete: if true;
+    function isAdmin() {
+      return isSignedIn()
+        && ('role' in request.auth.token)
+        && request.auth.token.role == 'admin';
+    }
+
+    function isShopkeeper() {
+      return isSignedIn()
+        && ('role' in request.auth.token)
+        && request.auth.token.role == 'shopkeeper'
+        && ('shopId' in request.auth.token)
+        && request.auth.token.shopId is string
+        && request.auth.token.shopId.size() > 0;
+    }
+
+    function isShopOwner(shopId) {
+      return isShopkeeper() && request.auth.token.shopId == shopId;
+    }
+
+    // ─── CATALOG ASSET FOLDERS & SANITIZATION ─────────────────────
+    // Only genuine public catalog asset folders are exposed for read/mutation.
+    // Internal, private, temp, export, and arbitrary folders are strictly excluded.
+    function isCatalogFolder(folder) {
+      return folder == 'banners' || folder == 'banner'
+          || folder == 'logos' || folder == 'logo'
+          || folder == 'menu' || folder == 'categories' || folder == 'items';
+    }
+
+    // Strict filename policy:
+    // - Non-empty and at most 128 characters
+    // - Alphanumeric, underscores, and hyphens only (no spaces, slashes, or shell characters)
+    // - Whitelisted image extension only (.jpg, .jpeg, .png, .webp)
+    function isSafeFileName(fileName) {
+      return fileName.size() > 0
+        && fileName.size() <= 128
+        && fileName.matches('^[a-zA-Z0-9_\\-]+\\.(jpg|jpeg|png|webp|JPG|JPEG|PNG|WEBP)$');
+    }
+
+    // ─── FILE VALIDATION (SIZE & CONTENT TYPE) ───────────────────
+    // Enforces maximum file size limit of 1 MB (1,048,576 bytes) and strictly whitelisted image MIME types.
+    function isValidImagePayload() {
+      return request.resource.size > 0
+          && request.resource.size <= 1 * 1024 * 1024
+          && (request.resource.contentType == 'image/jpeg'
+              || request.resource.contentType == 'image/png'
+              || request.resource.contentType == 'image/webp');
+    }
+
+    // ─── STRICT CATALOG ASSET MATCHING ────────────────────────────
+    // 1. Public READ is strictly restricted to valid catalog asset paths.
+    // 2. Mutations (create, update) require:
+    //    - Valid catalog folder
+    //    - Sanitized filename with allowed extension
+    //    - Valid size (> 0 and <= 1 MB) and MIME type (jpeg, png, webp)
+    //    - Authoritative Admin OR assigned Shopkeeper
+    // 3. Deletion (delete) requires:
+    //    - Valid catalog folder
+    //    - Sanitized filename
+    //    - Authoritative Admin OR assigned Shopkeeper (request.resource omitted)
+    match /shops/{shopId}/{folder}/{fileName} {
+      allow read: if isCatalogFolder(folder) && isSafeFileName(fileName);
+
+      allow create, update: if isCatalogFolder(folder)
+                           && isSafeFileName(fileName)
+                           && isValidImagePayload()
+                           && (isAdmin() || isShopOwner(shopId));
+
+      // 3. Deletion (delete):
+      // Direct client deletion is completely disabled for shopkeepers, customers, and anonymous actors.
+      // All shopkeeper image deletions MUST be routed through the trusted backend lifecycle engine,
+      // which authoritatively checks live Firestore references before authorizing physical deletion.
+      // Admin retains direct platform-wide deletion authority for sanitized catalog assets.
+      allow delete: if isCatalogFolder(folder)
+                    && isSafeFileName(fileName)
+                    && isAdmin();
+    }
+
+    // ─── DEFAULT-DENY FALLBACK ────────────────────────────────────
+    // Fail closed: Any non-catalog folder, nested arbitrary path, or root path is completely blocked.
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

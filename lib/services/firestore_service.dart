@@ -2,6 +2,7 @@
 // Firestore service for reading and writing shop & menu data + Firebase Storage
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -39,6 +40,8 @@ class FirestoreService {
     Future<void> Function(String shopId, String itemId, Map<String, dynamic> data)? menuItemUpdaterForTesting,
     Future<void> Function(String shopId, String itemId)? menuItemDeleterForTesting,
     Future<String?> Function(String path, Uint8List bytes)? storageUploaderForTesting,
+    Future<void> Function(String pathOrUrl)? storageDeleterForTesting,
+    Future<void> Function({required String shopId, required String targetType, required String targetId, required String field, required String imageUrl})? imagePointerUpdaterForTesting,
     Stream<List<Category>> Function(String shopId)? categoriesStreamForTesting,
     Future<String> Function(Shop shop)? shopCreatorForTesting,
     Future<void> Function(String shopId)? shopDeleterForTesting,
@@ -56,6 +59,8 @@ class FirestoreService {
         _menuItemUpdaterForTesting = menuItemUpdaterForTesting,
         _menuItemDeleterForTesting = menuItemDeleterForTesting,
         _storageUploaderForTesting = storageUploaderForTesting,
+        _storageDeleterForTesting = storageDeleterForTesting,
+        _imagePointerUpdaterForTesting = imagePointerUpdaterForTesting,
         _categoriesStreamForTesting = categoriesStreamForTesting,
         _shopCreatorForTesting = shopCreatorForTesting,
         _shopDeleterForTesting = shopDeleterForTesting,
@@ -74,6 +79,8 @@ class FirestoreService {
   final Future<void> Function(String shopId, String itemId, Map<String, dynamic> data)? _menuItemUpdaterForTesting;
   final Future<void> Function(String shopId, String itemId)? _menuItemDeleterForTesting;
   final Future<String?> Function(String path, Uint8List bytes)? _storageUploaderForTesting;
+  final Future<void> Function(String pathOrUrl)? _storageDeleterForTesting;
+  final Future<void> Function({required String shopId, required String targetType, required String targetId, required String field, required String imageUrl})? _imagePointerUpdaterForTesting;
   final Stream<List<Category>> Function(String shopId)? _categoriesStreamForTesting;
   final Future<String> Function(Shop shop)? _shopCreatorForTesting;
   final Future<void> Function(String shopId)? _shopDeleterForTesting;
@@ -253,15 +260,49 @@ class FirestoreService {
       await _shopUpdaterForTesting!(shopId, updateData);
       return;
     }
-    try {
-      await _firestore
-          .collection('shops')
-          .doc(shopId)
-          .set(updateData, SetOptions(merge: true));
-      debugPrint('✅ FirestoreService.updateShop -> SUCCESS for shops/$shopId');
-    } catch (e, stack) {
-      debugPrint('❌ FirestoreService.updateShop -> ERROR: $e\n$stack');
-      rethrow;
+
+    // Extract sensitive image pointers and route through authoritative lifecycle engine
+    String? bannerUrl;
+    if (updateData.containsKey('bannerUrl')) {
+      bannerUrl = updateData.remove('bannerUrl') as String?;
+    }
+    String? logoUrl;
+    if (updateData.containsKey('shopLogoImageUrl')) {
+      logoUrl = updateData.remove('shopLogoImageUrl') as String?;
+    } else if (updateData.containsKey('logoUrl')) {
+      logoUrl = updateData.remove('logoUrl') as String?;
+    }
+
+    if (bannerUrl != null) {
+      await updateCatalogImagePointer(
+        shopId: shopId,
+        targetType: 'shop',
+        targetId: shopId,
+        field: 'bannerUrl',
+        imageUrl: bannerUrl,
+      );
+    }
+    if (logoUrl != null) {
+      await updateCatalogImagePointer(
+        shopId: shopId,
+        targetType: 'shop',
+        targetId: shopId,
+        field: 'shopLogoImageUrl',
+        imageUrl: logoUrl,
+      );
+    }
+
+    if (updateData.isNotEmpty) {
+      try {
+        await _firestore
+            .collection('shops')
+            .doc(shopId)
+            .set(updateData, SetOptions(merge: true));
+        debugPrint('✅ FirestoreService.updateShop -> SUCCESS for shops/$shopId');
+      } catch (e, stack) {
+        debugPrint('❌ FirestoreService.updateShop -> ERROR: $e\n$stack');
+        rethrow;
+      }
     }
   }
 
@@ -703,12 +744,27 @@ class FirestoreService {
       return;
     }
     try {
+      final initialData = item.toFirestore();
+      final targetImageUrl = item.imageUrl;
+      // Image pointer written via backend lifecycle engine to enforce retirement guard
+      initialData['imageUrl'] = '';
+
       await _firestore
           .collection('shops')
           .doc(shopId)
           .collection('menuItems')
           .doc(item.id)
-          .set(item.toFirestore(), SetOptions(merge: true));
+          .set(initialData, SetOptions(merge: true));
+
+      if (targetImageUrl.isNotEmpty) {
+        await updateCatalogImagePointer(
+          shopId: shopId,
+          targetType: 'menuItem',
+          targetId: item.id,
+          field: 'imageUrl',
+          imageUrl: targetImageUrl,
+        );
+      }
       debugPrint('✅ FirestoreService.addMenuItem -> SUCCESS for ${item.id}');
     } catch (e, stack) {
       debugPrint('❌ FirestoreService.addMenuItem -> ERROR: $e\n$stack');
@@ -750,17 +806,36 @@ class FirestoreService {
       await _menuItemUpdaterForTesting!(shopId, menuItemId, data);
       return;
     }
-    try {
-      await _firestore
-          .collection('shops')
-          .doc(shopId)
-          .collection('menuItems')
-          .doc(menuItemId)
-          .set(data, SetOptions(merge: true));
-      debugPrint('✅ FirestoreService.updateMenuItem -> SUCCESS');
-    } catch (e, stack) {
-      debugPrint('❌ FirestoreService.updateMenuItem -> ERROR: $e\n$stack');
-      rethrow;
+
+    final updateData = Map<String, dynamic>.from(data);
+    String? imageUrl;
+    if (updateData.containsKey('imageUrl')) {
+      imageUrl = updateData.remove('imageUrl') as String?;
+    }
+
+    if (imageUrl != null) {
+      await updateCatalogImagePointer(
+        shopId: shopId,
+        targetType: 'menuItem',
+        targetId: menuItemId,
+        field: 'imageUrl',
+        imageUrl: imageUrl,
+      );
+    }
+
+    if (updateData.isNotEmpty) {
+      try {
+        await _firestore
+            .collection('shops')
+            .doc(shopId)
+            .collection('menuItems')
+            .doc(menuItemId)
+            .set(updateData, SetOptions(merge: true));
+        debugPrint('✅ FirestoreService.updateMenuItem -> SUCCESS');
+      } catch (e, stack) {
+        debugPrint('❌ FirestoreService.updateMenuItem -> ERROR: $e\n$stack');
+        rethrow;
+      }
     }
   }
 
@@ -988,11 +1063,49 @@ class FirestoreService {
           trimmedUrl.contains('appspot.com')) {
         try {
           final ref = _storage.refFromURL(trimmedUrl);
-          debugPrint('OLD STORAGE PATH: ${ref.fullPath}');
-          await ref.delete();
-          debugPrint(
-            '✅ STEP 5: OLD IMAGE DELETE COMPLETE (Deleted: ${ref.fullPath})',
-          );
+          final fullPath = ref.fullPath;
+          debugPrint('OLD STORAGE PATH: $fullPath');
+
+          // Defense-in-depth: Validate tenant boundaries before issuing delete request
+          final role = _currentAuthRole;
+          final trustedShopId = _currentAuthShopId;
+          if (role == AuthRole.shopkeeper) {
+            final segments = fullPath.split('/');
+            // Expected catalog structure: shops/{shopId}/{folder}/{fileName}
+            if (segments.length < 4 || segments[0] != 'shops' || segments[1] != trustedShopId) {
+              debugPrint(
+                '🚫 [SECURITY] Blocked unauthorized client delete for storage path: $fullPath by shopkeeper of: $trustedShopId',
+              );
+              return;
+            }
+
+            // CRITICAL (Phase 6.4 Final): Shopkeepers cannot delete directly via Storage SDK ref.delete().
+            // Direct client Storage delete is revoked in storage.rules to guarantee active references
+            // cannot be deleted by a rogue client bypassing Flutter.
+            // All shopkeeper deletions MUST be routed through the trusted backend lifecycle engine.
+            if (_storageDeleterForTesting != null) {
+              await _storageDeleterForTesting!(fullPath);
+              debugPrint(
+                '✅ STEP 5: TRUSTED BACKEND IMAGE DELETE COMPLETE (Delegated: $fullPath)',
+              );
+            } else {
+              debugPrint(
+                'ℹ️ [STORAGE LIFECYCLE] Delegated shopkeeper image deletion to trusted backend: $fullPath',
+              );
+            }
+            return;
+          } else if (role == AuthRole.admin) {
+            // Admin retains direct platform-wide deletion authority for catalog assets
+            await ref.delete();
+            debugPrint(
+              '✅ STEP 5: ADMIN STORAGE DELETE COMPLETE (Deleted: $fullPath)',
+            );
+          } else {
+            debugPrint(
+              '🚫 [SECURITY] Blocked non-privileged delete for storage path: $fullPath by role: $role',
+            );
+            return;
+          }
         } on FirebaseException catch (fe) {
           if (fe.code == 'object-not-found') {
             debugPrint(
@@ -1015,6 +1128,56 @@ class FirestoreService {
       }
     } catch (e) {
       debugPrint('⚠️ STEP 5: Safe top-level fallback: $e');
+    }
+  }
+
+  /// Updates a catalog image pointer authoritatively via the backend lifecycle engine.
+  /// Guarantees that retired / pending deletion assets cannot be reactivated.
+  Future<void> updateCatalogImagePointer({
+    required String shopId,
+    required String targetType,
+    required String targetId,
+    required String field,
+    required String imageUrl,
+  }) async {
+    // Security check: tenant authorization
+    final role = _currentAuthRole;
+    final trustedShopId = _currentAuthShopId;
+    if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
+      throw const FirestoreServiceException(
+        'Unauthorized: Caller cannot update catalog image pointers',
+      );
+    }
+    if (role == AuthRole.shopkeeper && (trustedShopId == null || trustedShopId != shopId)) {
+      throw FirestoreServiceException(
+        'Unauthorized: Shopkeeper of "$trustedShopId" cannot modify image pointers for shop "$shopId"',
+      );
+    }
+
+    if (_imagePointerUpdaterForTesting != null) {
+      await _imagePointerUpdaterForTesting!(
+        shopId: shopId,
+        targetType: targetType,
+        targetId: targetId,
+        field: field,
+        imageUrl: imageUrl,
+      );
+      return;
+    }
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('updateCatalogImagePointerCallable');
+      await callable.call<Map<String, dynamic>>({
+        'shopId': shopId,
+        'targetType': targetType,
+        'targetId': targetId,
+        'field': field,
+        'imageUrl': imageUrl,
+      });
+      debugPrint('✅ updateCatalogImagePointer -> SUCCESS for $targetType/$targetId ($field)');
+    } catch (e, stack) {
+      debugPrint('❌ updateCatalogImagePointer -> ERROR: $e\n$stack');
+      rethrow;
     }
   }
 

@@ -194,7 +194,7 @@ service cloud.firestore {
           (
             isAdmin()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'name', 'description', 'address', 'bannerUrl', 'imageUrl', 'shopLogoImageUrl',
+              'name', 'description', 'address',
               'contactNumber', 'phoneNumber', 'orderNumber', 'whatsappNumber',
               'openTime', 'closeTime', 'isClosedOverride', 'isActive', 'sortOrder',
               'deliveryNote', 'orderMethod', 'minimumOrderAmount', 'deliveryCharges',
@@ -205,7 +205,7 @@ service cloud.firestore {
           (
             isShopOwner(shopId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'name', 'description', 'address', 'bannerUrl', 'imageUrl', 'shopLogoImageUrl',
+              'name', 'description', 'address',
               'contactNumber', 'phoneNumber', 'orderNumber', 'whatsappNumber',
               'openTime', 'closeTime', 'isClosedOverride', 'isActive', 'sortOrder',
               'deliveryNote', 'orderMethod', 'minimumOrderAmount', 'deliveryCharges',
@@ -227,10 +227,12 @@ service cloud.firestore {
         // Creation allowed for assigned shopkeeper or platform administrator.
         // shopId is strictly mandatory and must match the path tenant shopId.
         // Schema keys restricted to supported category schema preventing arbitrary/security fields.
+        // Image pointer must be empty or fixed default neutral image; custom storage assets mediated by backend.
         allow create: if (isAdmin() || isShopOwner(shopId))
           && ('shopId' in request.resource.data)
           && request.resource.data.shopId == shopId
           && (!('id' in request.resource.data) || request.resource.data.id == categoryId)
+          && (!('imageUrl' in request.resource.data) || request.resource.data.imageUrl == '' || request.resource.data.imageUrl == null || request.resource.data.imageUrl == 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=500')
           && request.resource.data.keys().hasOnly([
             'id', 'name', 'categoryName', 'sortOrder', 'displayOrder', 'imageUrl', 'isActive',
             'shopId', 'createdAt', 'updatedAt'
@@ -239,6 +241,7 @@ service cloud.firestore {
         // Updates allowed for assigned shopkeeper or platform administrator.
         // Both existing resource and update payload must have matching valid shopId.
         // shopId and categoryId are strictly immutable.
+        // imageUrl is excluded from client update: mutations mediated authoritatively by backend lifecycle engine.
         allow update: if (isAdmin() || isShopOwner(shopId))
           && ('shopId' in resource.data)
           && resource.data.shopId == shopId
@@ -247,7 +250,7 @@ service cloud.firestore {
           && request.resource.data.shopId == resource.data.shopId
           && (!('id' in request.resource.data) || request.resource.data.id == categoryId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'name', 'categoryName', 'sortOrder', 'displayOrder', 'imageUrl', 'isActive', 'updatedAt'
+            'name', 'categoryName', 'sortOrder', 'displayOrder', 'isActive', 'updatedAt'
           ]);
 
         // Deletion allowed for assigned shopkeeper or platform administrator.
@@ -262,10 +265,12 @@ service cloud.firestore {
         // Creation allowed for assigned shopkeeper or platform administrator.
         // shopId is strictly mandatory and must match the path tenant shopId.
         // Catalog price and details are client-provided; arbitrary/security fields are prohibited.
+        // Direct creation with non-empty imageUrl is prohibited; storage pointers set via backend lifecycle engine.
         allow create: if (isAdmin() || isShopOwner(shopId))
           && ('shopId' in request.resource.data)
           && request.resource.data.shopId == shopId
           && (!('id' in request.resource.data) || request.resource.data.id == menuItemId)
+          && (!('imageUrl' in request.resource.data) || request.resource.data.imageUrl == '' || request.resource.data.imageUrl == null)
           && request.resource.data.keys().hasOnly([
             'id', 'shopId', 'name', 'details', 'description', 'price', 'imageUrl', 'categoryId',
             'isVeg', 'isAvailable', 'isRecommended', 'sortOrder', 'optionGroups', 'createdAt', 'updatedAt'
@@ -273,7 +278,7 @@ service cloud.firestore {
 
         // Updates allowed for assigned shopkeeper or platform administrator.
         // shopId is strictly immutable and cannot be transferred to another shop.
-        // Catalog price and availability are client-editable; tenant/security fields are protected.
+        // Catalog price and availability are client-editable; imageUrl is protected against direct client reactivation.
         allow update: if (isAdmin() || isShopOwner(shopId))
           && ('shopId' in resource.data)
           && resource.data.shopId == shopId
@@ -282,12 +287,19 @@ service cloud.firestore {
           && request.resource.data.shopId == resource.data.shopId
           && (!('id' in request.resource.data) || request.resource.data.id == menuItemId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'name', 'details', 'description', 'price', 'imageUrl', 'categoryId',
+            'name', 'details', 'description', 'price', 'categoryId',
             'isVeg', 'isAvailable', 'isRecommended', 'sortOrder', 'optionGroups', 'updatedAt'
           ]);
 
         // Deletion allowed for assigned shopkeeper or platform administrator.
         allow delete: if isAdmin() || isShopOwner(shopId);
+      }
+
+      // ─── Deletion Intents & Asset Lifecycle Subcollection ───────────
+      // Managed strictly by trusted server-side Cloud Functions Admin SDK.
+      // Direct client reads and mutations are completely blocked across all client roles.
+      match /deletionIntents/{intentId} {
+        allow read, write: if false;
       }
     }
 

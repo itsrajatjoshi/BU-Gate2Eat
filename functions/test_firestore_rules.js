@@ -5059,6 +5059,237 @@ async function runRulesSecuritySuite() {
     reportTest('IMF.41 Compound attack: status = cancelled + acceptedAt = fakeTimestamp -> DENY atomically', false);
   }
 
+  // ═════════════════════════════════════════════════════════════════════
+  // SECTION 10: CHECKPOINT 6.4 DIRECT FIRESTORE BYPASS & POINTER RE-ACTIVATION TESTS
+  // ═════════════════════════════════════════════════════════════════════
+  console.log('\n--- Phase 6.4: Direct Firestore Client SDK Image Pointer Bypass Tests (DIP.1 - DIP.16) ---');
+
+  // DIP.1 Authorized shopkeeper direct update shops/{shopId}.bannerUrl -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      bannerUrl: 'shops/shop_a/banner/retired_asset.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.1 Authorized shopkeeper direct update shops/{shopId}.bannerUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.1 Authorized shopkeeper direct update shops/{shopId}.bannerUrl -> DENY', false);
+  }
+
+  // DIP.2 Authorized shopkeeper direct update shops/{shopId}.logoUrl -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      logoUrl: 'shops/shop_a/logo/retired_asset.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.2 Authorized shopkeeper direct update shops/{shopId}.logoUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.2 Authorized shopkeeper direct update shops/{shopId}.logoUrl -> DENY', false);
+  }
+
+  // DIP.3 Authorized shopkeeper direct update shops/{shopId}.shopLogoImageUrl -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      shopLogoImageUrl: 'shops/shop_a/logo/retired_asset.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.3 Authorized shopkeeper direct update shops/{shopId}.shopLogoImageUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.3 Authorized shopkeeper direct update shops/{shopId}.shopLogoImageUrl -> DENY', false);
+  }
+
+  // DIP.4 Authorized shopkeeper direct update shops/{shopId}.imageUrl -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      imageUrl: 'shops/shop_a/banner/retired_asset.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.4 Authorized shopkeeper direct update shops/{shopId}.imageUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.4 Authorized shopkeeper direct update shops/{shopId}.imageUrl -> DENY', false);
+  }
+
+  // DIP.5 Authorized shopkeeper direct update shops/{shopId}/menuItems/{itemId}.imageUrl -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_a1').update({
+      imageUrl: 'shops/shop_a/menu/retired_item.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.5 Authorized shopkeeper direct update shops/{shopId}/menuItems/{itemId}.imageUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.5 Authorized shopkeeper direct update shops/{shopId}/menuItems/{itemId}.imageUrl -> DENY', false);
+  }
+
+  // DIP.6 Authorized shopkeeper direct create menuItem with non-empty imageUrl -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_new_direct').set({
+      id: 'item_new_direct',
+      shopId: 'shop_a',
+      name: 'Direct Item',
+      price: 100,
+      imageUrl: 'shops/shop_a/menu/direct_img.jpg',
+      categoryId: 'cat_a1',
+      isVeg: true,
+      isAvailable: true,
+      isRecommended: false,
+      sortOrder: 1,
+      optionGroups: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.6 Authorized shopkeeper direct create menuItem with non-empty imageUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.6 Authorized shopkeeper direct create menuItem with non-empty imageUrl -> DENY', false);
+  }
+
+  // DIP.7 Authorized shopkeeper direct create menuItem with empty imageUrl -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('menuItems').doc('item_new_empty').set({
+      id: 'item_new_empty',
+      shopId: 'shop_a',
+      name: 'Direct Item Empty',
+      price: 100,
+      imageUrl: '',
+      categoryId: 'cat_a1',
+      isVeg: true,
+      isAvailable: true,
+      isRecommended: false,
+      sortOrder: 1,
+      optionGroups: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.7 Authorized shopkeeper direct create menuItem with empty imageUrl -> ALLOW', true);
+  } catch (e) {
+    reportTest('DIP.7 Authorized shopkeeper direct create menuItem with empty imageUrl -> ALLOW', false);
+  }
+
+  // DIP.8 Authorized shopkeeper direct update shops/{shopId}/categories/{categoryId}.imageUrl -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_a1').update({
+      imageUrl: 'shops/shop_a/categories/retired_cat.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.8 Authorized shopkeeper direct update shops/{shopId}/categories/{categoryId}.imageUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.8 Authorized shopkeeper direct update shops/{shopId}/categories/{categoryId}.imageUrl -> DENY', false);
+  }
+
+  // DIP.9 Authorized shopkeeper direct create category with arbitrary storage imageUrl -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_new_direct').set({
+      id: 'cat_new_direct',
+      shopId: 'shop_a',
+      name: 'Direct Cat',
+      sortOrder: 1,
+      displayOrder: 1,
+      imageUrl: 'shops/shop_a/categories/direct_img.jpg',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.9 Authorized shopkeeper direct create category with arbitrary storage imageUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.9 Authorized shopkeeper direct create category with arbitrary storage imageUrl -> DENY', false);
+  }
+
+  // DIP.10 Authorized shopkeeper direct create category with fixed default neutral imageUrl -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('shops').doc('shop_a').collection('categories').doc('cat_new_neutral').set({
+      id: 'cat_new_neutral',
+      shopId: 'shop_a',
+      name: 'Neutral Cat',
+      sortOrder: 1,
+      displayOrder: 1,
+      imageUrl: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=500',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.10 Authorized shopkeeper direct create category with fixed default neutral imageUrl -> ALLOW', true);
+  } catch (e) {
+    reportTest('DIP.10 Authorized shopkeeper direct create category with fixed default neutral imageUrl -> ALLOW', false);
+  }
+
+  // DIP.11 Authorized shopkeeper direct write to deletionIntents -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('deletionIntents').doc('intent_attack').set({
+      canonicalPath: 'shops/shop_a/banner/x.jpg',
+      status: 'ACTIVE',
+    }));
+    reportTest('DIP.11 Authorized shopkeeper direct write to deletionIntents -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.11 Authorized shopkeeper direct write to deletionIntents -> DENY', false);
+  }
+
+  // DIP.12 Authorized shopkeeper direct read of deletionIntents -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').collection('deletionIntents').doc('intent_attack').get());
+    reportTest('DIP.12 Authorized shopkeeper direct read of deletionIntents -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.12 Authorized shopkeeper direct read of deletionIntents -> DENY', false);
+  }
+
+  // DIP.13 Admin client SDK direct update to shops/{shopId}.bannerUrl -> DENY
+  try {
+    await assertFails(adminDb.collection('shops').doc('shop_a').update({
+      bannerUrl: 'shops/shop_a/banner/admin_direct.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.13 Admin client SDK direct update to shops/{shopId}.bannerUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.13 Admin client SDK direct update to shops/{shopId}.bannerUrl -> DENY', false);
+  }
+
+  // DIP.14 Customer direct update to shops/{shopId}.bannerUrl -> DENY
+  try {
+    await assertFails(customerDb.collection('shops').doc('shop_a').update({
+      bannerUrl: 'shops/shop_a/banner/cust_direct.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.14 Customer direct update to shops/{shopId}.bannerUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.14 Customer direct update to shops/{shopId}.bannerUrl -> DENY', false);
+  }
+
+  // DIP.15 Unauthenticated direct update to shops/{shopId}.bannerUrl -> DENY
+  try {
+    await assertFails(unauthDb.collection('shops').doc('shop_a').update({
+      bannerUrl: 'shops/shop_a/banner/anon_direct.jpg',
+      updatedAt: new Date(),
+    }));
+    reportTest('DIP.15 Unauthenticated direct update to shops/{shopId}.bannerUrl -> DENY', true);
+  } catch (e) {
+    reportTest('DIP.15 Unauthenticated direct update to shops/{shopId}.bannerUrl -> DENY', false);
+  }
+
+  // DIP.16 TEST A: End-to-End Direct SDK Adversarial Attack:
+  // Asset X PENDING_DELETION in deletionIntents -> Valid authenticated shopkeeper directly uses Firestore client SDK to write X into bannerUrl -> REJECTED BEFORE X CAN BECOME ACTIVE
+  try {
+    // Seed PENDING_DELETION into deletionIntents via Admin SDK (bypassing rules for seed)
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('shops').doc('shop_a').collection('deletionIntents').doc('banner_adv_x_jpg').set({
+        canonicalPath: 'shops/shop_a/banner/adv_x.jpg',
+        status: 'PENDING_DELETION',
+        retiredAt: new Date(),
+      });
+    });
+
+    // Valid shopkeeper session attempts direct Firestore SDK write to set bannerUrl = adv_x.jpg
+    await assertFails(shopkeeperADb.collection('shops').doc('shop_a').update({
+      bannerUrl: 'shops/shop_a/banner/adv_x.jpg',
+      updatedAt: new Date(),
+    }));
+
+    // Verify pointer was not changed
+    const shopDoc = await adminDb.collection('shops').doc('shop_a').get();
+    const currentBanner = shopDoc.data().bannerUrl || '';
+    assert.notStrictEqual(currentBanner, 'shops/shop_a/banner/adv_x.jpg');
+
+    reportTest('DIP.16 TEST A: Asset X PENDING_DELETION -> Shopkeeper direct SDK write to bannerUrl -> DENIED by Firestore Rules', true);
+  } catch (e) {
+    reportTest('DIP.16 TEST A: Asset X PENDING_DELETION -> Shopkeeper direct SDK write to bannerUrl -> DENIED by Firestore Rules', false);
+  }
+
   console.log('\n=================================================================');
   console.log(`  RESULTS: ${passCount} / ${totalTests} TESTS PASSED  `);
   console.log('=================================================================\n');

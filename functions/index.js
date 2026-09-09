@@ -458,7 +458,7 @@ exports.auth = {
 // ─── PART 6: DATA CLEANUP & STORAGE MANAGEMENT (CHECKPOINT 5) ───────────────
 const { getStorage } = require("firebase-admin/storage");
 const { cleanupOldOrders } = require("./order_cleanup");
-const { auditAndCleanStorageOrphans } = require("./storage_cleanup");
+const { auditAndCleanStorageOrphans, sweepStorageOrphans } = require("./storage_cleanup");
 
 /**
  * Scheduled Cloud Function (Runs daily at 03:00 UTC).
@@ -476,6 +476,28 @@ exports.scheduledOrderCleanup = functions.pubsub
       return summary;
     } catch (err) {
       console.error("❌ [Scheduled Cleanup] Error during daily order cleanup:", err);
+      throw err;
+    }
+  });
+
+/**
+ * Scheduled Cloud Function (Runs daily at 04:00 UTC).
+ * Automated reference-aware Storage orphan sweeper.
+ * Safely purges unreferenced storage assets older than 24h.
+ * Concurrency-safe against overlapping runs via heartbeat locks and candidate leases.
+ */
+exports.scheduledStorageCleanup = functions.pubsub
+  .schedule("0 4 * * *")
+  .timeZone("UTC")
+  .onRun(async (context) => {
+    console.log("🧹 [Scheduled Storage Cleanup] Starting daily storage orphan sweeper...");
+    try {
+      const bucket = getStorage().bucket();
+      const summary = await sweepStorageOrphans(bucket, db, { dryRun: false });
+      console.log("✅ [Scheduled Storage Cleanup] Completed successfully:", JSON.stringify(summary));
+      return summary;
+    } catch (err) {
+      console.error("❌ [Scheduled Storage Cleanup] Error during storage orphan sweeper:", err);
       throw err;
     }
   });
@@ -507,9 +529,8 @@ exports.manualOrderCleanup = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Callable Cloud Function for Reference-Aware Storage Orphan Audit.
+ * Callable Cloud Function for Reference-Aware Storage Orphan Audit (Dry-Run by default).
  * Restricted strictly to authenticated callers with verified Custom Claim role === 'admin'.
- * Default is dryRun: true (reports orphans without deleting).
  */
 exports.storageOrphanAudit = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -534,9 +555,41 @@ exports.storageOrphanAudit = functions.https.onCall(async (data, context) => {
   return await auditAndCleanStorageOrphans(bucket, db, { dryRun, minAgeHours });
 });
 
+/**
+ * Callable Cloud Function for Admin manual Storage orphan sweep or dry-run execution.
+ * Restricted strictly to authenticated callers with verified Custom Claim role === 'admin'.
+ * Non-admin callers (shopkeeper, customer, anonymous) are rejected with 'permission-denied'.
+ */
+exports.storageOrphanCleanupCallable = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Authentication is required to run storage orphan cleanup."
+    );
+  }
+
+  const token = context.auth.token || {};
+  if (token.role !== "admin") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only authorized administrators with role 'admin' can run storage orphan cleanup."
+    );
+  }
+
+  const bucket = getStorage().bucket();
+  const dryRun = data ? data.dryRun !== false : true;
+  const rawMinAge = data && typeof data.minAgeHours === "number" && Number.isInteger(data.minAgeHours) ? data.minAgeHours : 24;
+  const minAgeHours = Math.max(1, Math.min(rawMinAge, 720));
+  const rawBatchSize = data && typeof data.batchSize === "number" && Number.isInteger(data.batchSize) ? data.batchSize : 50;
+  const batchSize = Math.max(1, Math.min(rawBatchSize, 100));
+
+  return await sweepStorageOrphans(bucket, db, { dryRun, minAgeHours, batchSize });
+});
+
 exports.dataCleanup = {
   cleanupOldOrders,
   auditAndCleanStorageOrphans,
+  sweepStorageOrphans,
 };
 
 // ─── PART 7: SERVER-AUTHORITATIVE ORDER CREATION (CHECKPOINT 4.1) ───────────
@@ -713,4 +766,95 @@ exports.orderExpiration = {
   ACCEPT_WINDOW_MS,
   DELIVERY_WINDOW_MINUTES,
   DELIVERY_WINDOW_MS,
+};
+
+// ─── PART 9: REFERENCE-AWARE STORAGE DELETION CALLABLE (PHASE 6.4) ─────────
+const {
+  evaluateStorageAssetDeletion,
+  executeStorageAssetDeletion,
+  parseStorageCatalogPath,
+  checkActiveFirestoreReference,
+  extractStoragePath,
+  updateCatalogImagePointer,
+} = require("./storage_reference_lifecycle");
+
+/**
+ * Authoritative Callable Cloud Function for safe, reference-aware Storage deletion.
+ * - Authenticated callers only (shopkeeper with matching shopId or platform admin).
+ * - Verifies live Firestore references across shops, menuItems, categories.
+ * - Rejects with 'failed-precondition' (ACTIVE_REFERENCE_PROTECTION) if actively referenced.
+ * - Executes deletion server-side using privileged Admin SDK credentials.
+ * - Safe idempotent response when asset was already deleted / absent.
+ */
+exports.deleteStorageAssetCallable = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Authentication is required to delete storage assets."
+    );
+  }
+
+  const token = context.auth.token || {};
+  const target = data && (data.storagePath || data.imageUrl || data.url);
+  if (!target || typeof target !== "string") {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing or invalid storagePath or imageUrl parameter."
+    );
+  }
+
+  const bucket = getStorage().bucket();
+  const result = await executeStorageAssetDeletion(db, bucket, token, target);
+
+  if (!result.success) {
+    const code = result.code === "ACTIVE_REFERENCE_PROTECTION"
+      ? "failed-precondition"
+      : (result.code === "PERMISSION_DENIED"
+        ? "permission-denied"
+        : "invalid-argument");
+    throw new functions.https.HttpsError(code, result.message, result.referenceDetails);
+  }
+
+  return result;
+});
+
+/**
+ * Authoritative Callable Cloud Function for safe, lifecycle-mediated catalog image updates.
+ * - Authenticated callers only (shopkeeper with matching shopId or platform admin).
+ * - Verifies asset is activatable (assertAssetActivatable rejects RETIRED/PENDING_DELETION assets).
+ * - Prevents cross-shop storage references.
+ * - Updates authoritative Firestore document using Admin SDK credentials.
+ */
+exports.updateCatalogImagePointerCallable = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Authentication is required to update catalog image pointers."
+    );
+  }
+
+  const token = context.auth.token || {};
+  try {
+    const result = await updateCatalogImagePointer(db, token, data);
+    if (!result.success) {
+      const code = result.statusCode === 403 ? "permission-denied" : "invalid-argument";
+      throw new functions.https.HttpsError(code, result.message);
+    }
+    return result;
+  } catch (err) {
+    if (err.message && err.message.includes("ERR_ASSET_RETIRED")) {
+      throw new functions.https.HttpsError("failed-precondition", err.message);
+    }
+    if (err instanceof functions.https.HttpsError) throw err;
+    throw new functions.https.HttpsError("internal", err.message || "Failed to update image pointer.");
+  }
+});
+
+exports.storageReferenceLifecycle = {
+  evaluateStorageAssetDeletion,
+  executeStorageAssetDeletion,
+  parseStorageCatalogPath,
+  checkActiveFirestoreReference,
+  extractStoragePath,
+  updateCatalogImagePointer,
 };
