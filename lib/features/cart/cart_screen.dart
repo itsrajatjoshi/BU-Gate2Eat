@@ -35,9 +35,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   final _specialInstructionsController = TextEditingController();
   bool _isPlacingOrder = false;
   bool _isDialogOpen = false;
-  String? _pendingOrderId;
-  String? _pendingCartSignature;
-  String? _pendingIdempotencyKey;
 
   @override
   void dispose() {
@@ -543,15 +540,28 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         specialInstructions: _specialInstructionsController.text.trim(),
         deliveryNote: deliveryNote,
       );
-      if (_pendingCartSignature != currentCartSignature) {
-        _pendingOrderId = null;
-        _pendingIdempotencyKey = null;
+
+      final existingKey =
+          localStorage.getActivePendingIdempotencyKey(currentCartSignature);
+      final existingOrderId =
+          localStorage.getActivePendingOrderId(currentCartSignature);
+
+      final String orderId;
+      final String idempotencyKey;
+
+      if (existingKey != null && existingOrderId != null) {
+        orderId = existingOrderId;
+        idempotencyKey = existingKey;
+      } else {
+        orderId = _generateOrderId();
+        idempotencyKey = OrderService.generateSecureIdempotencyKey();
+        await localStorage.savePendingOrderAttempt(
+          orderId: orderId,
+          cartSignature: currentCartSignature,
+          idempotencyKey: idempotencyKey,
+          timestamp: now,
+        );
       }
-      final orderId = _pendingOrderId ?? _generateOrderId();
-      _pendingOrderId = orderId;
-      _pendingCartSignature = currentCartSignature;
-      final idempotencyKey = _pendingIdempotencyKey ?? OrderService.generateSecureIdempotencyKey();
-      _pendingIdempotencyKey = idempotencyKey;
 
       final currentStoragePhone =
           AppAuthRoles.normalizeCleanPhone(localStorage.userPhone);
@@ -623,10 +633,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         ref.read(notificationServiceProvider).syncCurrentSessionToken(localStorage: localStorage);
       } catch (_) {}
 
-      // Reset idempotency state on confirmed creation
-      _pendingOrderId = null;
-      _pendingCartSignature = null;
-      _pendingIdempotencyKey = null;
+      // Reset persisted purchase attempt on confirmed creation
+      await localStorage.clearPendingOrderAttempt();
 
       // 4. Temporary UI bridge: update local dummy state so existing screens reflect it
       ref.read(dummyOrdersProvider.notifier).addOrder(newOrder);
@@ -1052,6 +1060,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         // 1. Immediately clear Cart and draft controllers so user returns to a clean empty cart
         ref.read(cartProvider.notifier).clearCart();
         _specialInstructionsController.clear();
+        await localStorage.clearPendingOrderAttempt();
 
         // 2. Atomically increment shop WhatsApp counter (Rule 9: No order doc, only counter)
         // Wrapped safely so a slow network/stats failure never compromises or reverts cart cleanup
@@ -1193,7 +1202,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         actions: [
           if (cartItems.isNotEmpty)
             TextButton(
-              onPressed: () => cartNotifier.clearCart(),
+              onPressed: () {
+                cartNotifier.clearCart();
+                ref.read(localStorageServiceProvider).clearPendingOrderAttempt();
+              },
               child: const Text(
                 'Clear',
                 style: TextStyle(

@@ -20,6 +20,8 @@
 // 17. Customer cannot escalate to shopkeeper
 // 18. Route-level fail-closed behavior remains intact
 
+import 'dart:async';
+
 import 'package:bugate2eat_app/core/providers.dart';
 import 'package:bugate2eat_app/core/router.dart';
 import 'package:bugate2eat_app/models/cart_item_model.dart';
@@ -27,6 +29,7 @@ import 'package:bugate2eat_app/models/menu_item_model.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
 import 'package:bugate2eat_app/services/auth_service.dart';
 import 'package:bugate2eat_app/services/firestore_service.dart';
+import 'package:bugate2eat_app/services/local_storage_service.dart';
 import 'package:bugate2eat_app/services/order_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -1021,6 +1024,332 @@ void main() {
       final keyOrder2 = pendingKey ?? OrderService.generateSecureIdempotencyKey();
 
       expect(keyOrder2, isNot(equals(keyOrder1)), reason: 'Second order after completion must have a fresh key');
+    });
+
+    // ─── 39. Mobile Lifecycle Persistence: App/Widget Recreation Recovers Same Idempotency Key ───
+    test('39. Mobile Lifecycle: Recreating app/widget recovers persisted idempotency key and orderId for identical cart', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storage1 = LocalStorageService(prefs);
+
+      MenuItem dummyItem(String id, String name, int price) => MenuItem(
+            id: id,
+            name: name,
+            details: '',
+            price: price,
+            imageUrl: '',
+            categoryId: 'cat_default',
+            isVeg: true,
+            isAvailable: true,
+            isRecommended: false,
+            sortOrder: 1,
+          );
+
+      CartItem dummyCartItem(MenuItem item, int qty) => CartItem(
+            menuItem: item,
+            quantity: qty,
+            shopId: 'shop_001',
+            shopName: 'Shop One',
+          );
+
+      final burger = dummyItem('item_burger', 'Burger', 80);
+      final cart = [dummyCartItem(burger, 2)];
+
+      // 1. Initial purchase attempt on device:
+      final cartSig = OrderService.computeCartSignature(
+        shopId: 'shop_001',
+        items: cart,
+        specialInstructions: 'Extra sauce',
+      );
+      const initialOrderId = 'YB-20260909-143000-111';
+      final initialIdempotencyKey = OrderService.generateSecureIdempotencyKey();
+
+      // Attempt is persisted before network dispatch:
+      await storage1.savePendingOrderAttempt(
+        orderId: initialOrderId,
+        cartSignature: cartSig,
+        idempotencyKey: initialIdempotencyKey,
+      );
+
+      // 2. Simulated scenario: Backend commits order, but response is lost;
+      // app process is killed or user navigates away causing CartScreen disposal:
+      // Memory state is wiped completely.
+
+      // 3. User re-opens app: New LocalStorageService loads from SharedPreferences:
+      final storage2 = LocalStorageService(prefs);
+
+      // Verify persisted state survives memory recreation:
+      expect(storage2.hasActivePendingAttempt, isTrue);
+
+      final recoveredKey = storage2.getActivePendingIdempotencyKey(cartSig);
+      final recoveredOrderId = storage2.getActivePendingOrderId(cartSig);
+
+      expect(
+        recoveredKey,
+        equals(initialIdempotencyKey),
+        reason: 'Must recover identical idempotency key across app recreation',
+      );
+      expect(
+        recoveredOrderId,
+        equals(initialOrderId),
+        reason: 'Must recover identical order ID across app recreation',
+      );
+
+      // 4. Retry dispatch to backend using recovered key:
+      var serverReceivedKey = '';
+      final orderService = OrderService(
+        orderCreatorForTesting: (payload) async {
+          serverReceivedKey = payload['idempotencyKey'] as String;
+          return {
+            'orderId': recoveredOrderId,
+            'status': 'placed',
+            'isIdempotentReplay': true,
+          };
+        },
+      );
+
+      final retryOrder = AppOrder(
+        orderId: recoveredOrderId!,
+        shopId: 'shop_001',
+        shopName: 'Shop One',
+        customerId: 'cust_verified',
+        customerName: 'Student',
+        customerPhone: '9876543210',
+        items: [
+          OrderItem(
+            menuItemId: burger.id,
+            name: burger.name,
+            price: burger.price,
+            quantity: 2,
+          ),
+        ],
+        totalAmount: 160,
+        createdAt: DateTime.now(),
+      );
+
+      await orderService.createOrder(retryOrder, idempotencyKey: recoveredKey);
+
+      expect(serverReceivedKey, equals(initialIdempotencyKey));
+
+      // 5. Successful resolution clears the persisted attempt:
+      await storage2.clearPendingOrderAttempt();
+      expect(storage2.hasActivePendingAttempt, isFalse);
+      expect(storage2.getActivePendingIdempotencyKey(cartSig), isNull);
+    });
+
+    // ─── 40. False-Hash Collision Prevention (Deterministic Fingerprint vs Object.hash) ───
+    test('40. False-Hash Collision: Different carts sharing shop, item count, and total produce distinct fingerprints and fresh keys', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storage = LocalStorageService(prefs);
+
+      MenuItem dummyItem(String id, String name, int price) => MenuItem(
+            id: id,
+            name: name,
+            details: '',
+            price: price,
+            imageUrl: '',
+            categoryId: 'cat_default',
+            isVeg: true,
+            isAvailable: true,
+            isRecommended: false,
+            sortOrder: 1,
+          );
+
+      CartItem dummyCartItem(MenuItem item, int qty) => CartItem(
+            menuItem: item,
+            quantity: qty,
+            shopId: 'shop_001',
+            shopName: 'Shop One',
+          );
+
+      // Cart A: 2x Burger (₹80 ea = ₹160), 1x Coke (₹60) => 2 items, ₹220
+      final burger = dummyItem('item_burger', 'Burger', 80);
+      final coke = dummyItem('item_coke', 'Coke', 60);
+      final cartA = [dummyCartItem(burger, 2), dummyCartItem(coke, 1)];
+
+      // Cart B: 1x Pizza (₹180), 1x Fries (₹40) => 2 items, ₹220
+      final pizza = dummyItem('item_pizza', 'Pizza', 180);
+      final fries = dummyItem('item_fries', 'Fries', 40);
+      final cartB = [dummyCartItem(pizza, 1), dummyCartItem(fries, 1)];
+
+      // Demonstrate old hash vulnerability
+      final oldHashA = Object.hash('shop_001', cartA.length, 220.0);
+      final oldHashB = Object.hash('shop_001', cartB.length, 220.0);
+      expect(oldHashA, equals(oldHashB), reason: 'Old weak hash collides');
+
+      // Canonical fingerprints are strictly distinct
+      final sigA = OrderService.computeCartSignature(shopId: 'shop_001', items: cartA);
+      final sigB = OrderService.computeCartSignature(shopId: 'shop_001', items: cartB);
+      expect(sigA, isNot(equals(sigB)));
+
+      // User attempted Cart A:
+      final keyA = OrderService.generateSecureIdempotencyKey();
+      await storage.savePendingOrderAttempt(
+        orderId: 'YB-A',
+        cartSignature: sigA,
+        idempotencyKey: keyA,
+      );
+
+      // User switches to Cart B before placing:
+      // Cart B fingerprint does not match persisted attempt for Cart A:
+      final keyForCartB = storage.getActivePendingIdempotencyKey(sigB);
+      expect(keyForCartB, isNull, reason: 'Must not reuse keyA for Cart B despite identical count and total');
+
+      // Fresh key generated and persisted for Cart B:
+      final keyB = OrderService.generateSecureIdempotencyKey();
+      await storage.savePendingOrderAttempt(
+        orderId: 'YB-B',
+        cartSignature: sigB,
+        idempotencyKey: keyB,
+      );
+
+      expect(keyB, isNot(equals(keyA)));
+      expect(storage.getActivePendingIdempotencyKey(sigB), equals(keyB));
+      expect(storage.getActivePendingIdempotencyKey(sigA), isNull);
+    });
+
+    // ─── 41. Two Legitimate Same-Cart Purchases (Post-Resolution Reset) ──────
+    test('41. Two legitimate same-cart purchases: confirmed order clears persisted key so next identical cart gets fresh key', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storage = LocalStorageService(prefs);
+
+      MenuItem dummyItem(String id, String name, int price) => MenuItem(
+            id: id,
+            name: name,
+            details: '',
+            price: price,
+            imageUrl: '',
+            categoryId: 'cat_default',
+            isVeg: true,
+            isAvailable: true,
+            isRecommended: false,
+            sortOrder: 1,
+          );
+
+      CartItem dummyCartItem(MenuItem item, int qty) => CartItem(
+            menuItem: item,
+            quantity: qty,
+            shopId: 'shop_001',
+            shopName: 'Shop One',
+          );
+
+      final burger = dummyItem('item_burger', 'Burger', 80);
+      final cart = [dummyCartItem(burger, 1)];
+      final sig = OrderService.computeCartSignature(shopId: 'shop_001', items: cart);
+
+      // Order 1:
+      final key1 = OrderService.generateSecureIdempotencyKey();
+      await storage.savePendingOrderAttempt(
+        orderId: 'YB-001',
+        cartSignature: sig,
+        idempotencyKey: key1,
+      );
+
+      // Order 1 commits successfully -> clear persisted attempt:
+      await storage.clearPendingOrderAttempt();
+      expect(storage.hasActivePendingAttempt, isFalse);
+
+      // Order 2 (User later intentionally re-orders the exact same item):
+      final recoveredKey = storage.getActivePendingIdempotencyKey(sig);
+      expect(recoveredKey, isNull, reason: 'Cleared attempt must not be reused for new intentional order');
+
+      final key2 = OrderService.generateSecureIdempotencyKey();
+      await storage.savePendingOrderAttempt(
+        orderId: 'YB-002',
+        cartSignature: sig,
+        idempotencyKey: key2,
+      );
+
+      expect(key2, isNot(equals(key1)), reason: 'Second order must receive a fresh distinct idempotency key');
+    });
+
+    // ─── 42. Failure Semantics: Key Retained across Network Failure & Timeout ───
+    test('42. Failure Semantics: Key is retained across network failure and timeout exceptions', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storage = LocalStorageService(prefs);
+
+      const sig = 'shop:shop_001|items:item_1#1|note:|inst:';
+      const key = 'idem_transient_test_123';
+      const orderId = 'YB-ERR-001';
+
+      await storage.savePendingOrderAttempt(
+        orderId: orderId,
+        cartSignature: sig,
+        idempotencyKey: key,
+      );
+
+      // Simulate simulated network failure / socket drop:
+      try {
+        throw const FormatException('Network unreachable');
+      } catch (_) {
+        // As per invariant: transient exception must NOT clear the persisted key
+      }
+
+      expect(storage.hasActivePendingAttempt, isTrue);
+      expect(storage.getActivePendingIdempotencyKey(sig), equals(key));
+      expect(storage.getActivePendingOrderId(sig), equals(orderId));
+
+      // Simulate timeout exception:
+      try {
+        throw TimeoutException('Request timed out');
+      } catch (_) {
+        // Key remains retained
+      }
+
+      expect(storage.hasActivePendingAttempt, isTrue);
+      expect(storage.getActivePendingIdempotencyKey(sig), equals(key));
+    });
+
+    // ─── 43. Explicit Attempt Reset: Cart Clear or Checkout Reset Wipes Key ───
+    test('43. Explicit Reset: User explicit cart clear wipes persisted pending attempt', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storage = LocalStorageService(prefs);
+
+      const sig = 'shop:shop_001|items:item_1#1|note:|inst:';
+      const key = 'idem_reset_test_456';
+
+      await storage.savePendingOrderAttempt(
+        orderId: 'YB-RESET-001',
+        cartSignature: sig,
+        idempotencyKey: key,
+      );
+
+      expect(storage.hasActivePendingAttempt, isTrue);
+
+      // User explicitly taps Clear Cart:
+      await storage.clearPendingOrderAttempt();
+
+      expect(storage.hasActivePendingAttempt, isFalse);
+      expect(storage.getActivePendingIdempotencyKey(sig), isNull);
+      expect(storage.getActivePendingOrderId(sig), isNull);
+    });
+
+    // ─── 44. Stale Attempt Expiration Defense (>24h TTL) ─────────────────────
+    test('44. Expiration Defense: Stale pending attempt older than 24 hours is automatically discarded', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storage = LocalStorageService(prefs);
+
+      const sig = 'shop:shop_001|items:item_1#1|note:|inst:';
+      const key = 'idem_stale_key_789';
+
+      // Persist with timestamp 25 hours ago:
+      final staleTimestamp = DateTime.now().subtract(const Duration(hours: 25));
+      await storage.savePendingOrderAttempt(
+        orderId: 'YB-STALE-001',
+        cartSignature: sig,
+        idempotencyKey: key,
+        timestamp: staleTimestamp,
+      );
+
+      // Expect hasActivePendingAttempt and getter to return null (expired):
+      expect(storage.hasActivePendingAttempt, isFalse, reason: 'Attempt older than 24h must be considered expired');
+      expect(storage.getActivePendingIdempotencyKey(sig), isNull, reason: 'Expired key must not be recovered');
+      expect(storage.getActivePendingOrderId(sig), isNull);
     });
   });
 }

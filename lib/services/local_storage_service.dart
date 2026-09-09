@@ -25,6 +25,13 @@ class LocalStorageService {
   static const String _keyVerifiedPhone = 'verified_phone';
   static const String _keyThemeMode = 'theme_mode';
 
+  // ─── Purchase Attempt Idempotency Persistence (Phase 4.4) ──────
+  static const String _keyPendingOrderId = 'pending_order_id';
+  static const String _keyPendingCartSignature = 'pending_cart_signature';
+  static const String _keyPendingIdempotencyKey = 'pending_idempotency_key';
+  static const String _keyPendingOrderTimestamp = 'pending_order_timestamp';
+  static const int _pendingAttemptTtlHours = 24;
+
   final SharedPreferences _prefs;
 
   /// Factory method to create an instance with initialized SharedPreferences.
@@ -163,11 +170,84 @@ class LocalStorageService {
     await _prefs.setStringList(_keyFavorites, ids);
   }
 
+  // ─── Purchase Attempt Idempotency Persistence (Phase 4.4) ──────
+
+  /// Whether an active, unexpired purchase attempt is stored in persistent local storage.
+  bool get hasActivePendingAttempt {
+    final key = pendingIdempotencyKey;
+    final sig = pendingCartSignature;
+    final time = pendingOrderTimestamp;
+    if (key == null || key.isEmpty || sig == null || sig.isEmpty || time == null) {
+      return false;
+    }
+    final age = DateTime.now().difference(time);
+    if (age.isNegative || age.inHours >= _pendingAttemptTtlHours) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Gets the persisted pending order ID if present.
+  String? get pendingOrderId => _prefs.getString(_keyPendingOrderId);
+
+  /// Gets the persisted pending cart fingerprint signature if present.
+  String? get pendingCartSignature => _prefs.getString(_keyPendingCartSignature);
+
+  /// Gets the persisted pending idempotency key if present.
+  String? get pendingIdempotencyKey => _prefs.getString(_keyPendingIdempotencyKey);
+
+  /// Gets the persisted timestamp when the pending purchase attempt was initiated.
+  DateTime? get pendingOrderTimestamp {
+    final ms = _prefs.getInt(_keyPendingOrderTimestamp);
+    return ms != null ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+  }
+
+  /// Retrieves the active unexpired pending idempotency key matching [cartSignature].
+  /// Returns null if missing, expired (>24h), or if the cart signature has changed.
+  String? getActivePendingIdempotencyKey(String cartSignature) {
+    if (!hasActivePendingAttempt) return null;
+    if (pendingCartSignature != cartSignature) return null;
+    return pendingIdempotencyKey;
+  }
+
+  /// Retrieves the active unexpired pending orderId matching [cartSignature].
+  /// Returns null if missing, expired (>24h), or if the cart signature has changed.
+  String? getActivePendingOrderId(String cartSignature) {
+    if (!hasActivePendingAttempt) return null;
+    if (pendingCartSignature != cartSignature) return null;
+    return pendingOrderId;
+  }
+
+  /// Persists an active purchase attempt to ensure network retries reuse the identical
+  /// idempotency key and orderId across app backgrounding, widget unmounting, and app restarts.
+  Future<void> savePendingOrderAttempt({
+    required String orderId,
+    required String cartSignature,
+    required String idempotencyKey,
+    DateTime? timestamp,
+  }) async {
+    final time = timestamp ?? DateTime.now();
+    await _prefs.setString(_keyPendingOrderId, orderId);
+    await _prefs.setString(_keyPendingCartSignature, cartSignature);
+    await _prefs.setString(_keyPendingIdempotencyKey, idempotencyKey);
+    await _prefs.setInt(_keyPendingOrderTimestamp, time.millisecondsSinceEpoch);
+  }
+
+  /// Clears the persisted purchase attempt upon confirmed order creation,
+  /// explicit cart reset, or user logout.
+  Future<void> clearPendingOrderAttempt() async {
+    await _prefs.remove(_keyPendingOrderId);
+    await _prefs.remove(_keyPendingCartSignature);
+    await _prefs.remove(_keyPendingIdempotencyKey);
+    await _prefs.remove(_keyPendingOrderTimestamp);
+  }
+
   // ─── Session Management ────────────────────────────────────
 
   /// Clears the user profile, customer identity, and onboarding state, effectively logging out.
   Future<void> logout() async {
     await clearOtpVerificationState();
+    await clearPendingOrderAttempt();
     await _prefs.remove(_keyIsOnboarded);
     await _prefs.remove(_keyName);
     await _prefs.remove(_keyPhone);
@@ -179,6 +259,7 @@ class LocalStorageService {
   /// Permanently deletes customer account profile, identity, favorites, and session state.
   Future<void> deleteCustomerAccount() async {
     await clearOtpVerificationState();
+    await clearPendingOrderAttempt();
     await _prefs.remove(_keyIsOnboarded);
     await _prefs.remove(_keyName);
     await _prefs.remove(_keyPhone);
