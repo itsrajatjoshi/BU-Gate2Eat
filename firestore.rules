@@ -86,25 +86,69 @@ service cloud.firestore {
         && data.items is list && data.items.size() > 0;
     }
 
-    // 3. Immutability Protection
+    // 3. Immutability Protection (Phase 5.3 / 5.5 — Authoritative Immutable Order Field Invariants)
     function areImmutableFieldsPreserved() {
       let next = request.resource.data;
       let prev = resource.data;
-      return next.orderId == prev.orderId
-        && next.shopId == prev.shopId
-        && next.customerId == prev.customerId
-        && next.totalAmount == prev.totalAmount
-        && next.items == prev.items
-        && (prev.get('createdAt', null) == null || next.get('createdAt', null) == prev.get('createdAt', null));
+      return (prev.get('customerId', null) == null || next.get('customerId', null) == prev.get('customerId', null))
+        && (prev.get('shopId', null) == null || next.get('shopId', null) == prev.get('shopId', null))
+        && (prev.get('orderId', null) == null || next.get('orderId', null) == prev.get('orderId', null))
+        && (prev.get('createdAt', null) == null || next.get('createdAt', null) == prev.get('createdAt', null))
+        && (prev.get('totalAmount', null) == null || next.get('totalAmount', null) == prev.get('totalAmount', null))
+        && (prev.get('subtotal', null) == null || next.get('subtotal', null) == prev.get('subtotal', null))
+        && (prev.get('grandTotal', null) == null || next.get('grandTotal', null) == prev.get('grandTotal', null))
+        && (prev.get('deliveryCharges', null) == null || next.get('deliveryCharges', null) == prev.get('deliveryCharges', null))
+        && (prev.get('totalItems', null) == null || next.get('totalItems', null) == prev.get('totalItems', null))
+        && (prev.get('items', null) == null || next.get('items', null) == prev.get('items', null))
+        && (prev.get('shopName', null) == null || next.get('shopName', null) == prev.get('shopName', null))
+        && (prev.get('customerName', null) == null || next.get('customerName', null) == prev.get('customerName', null))
+        && (prev.get('customerPhone', null) == null || next.get('customerPhone', null) == prev.get('customerPhone', null))
+        && (prev.get('orderMethod', null) == null || next.get('orderMethod', null) == prev.get('orderMethod', null))
+        && (prev.get('specialInstructions', null) == null || next.get('specialInstructions', null) == prev.get('specialInstructions', null))
+        && (prev.get('deliveryNote', null) == null || next.get('deliveryNote', null) == prev.get('deliveryNote', null))
+        && (prev.get('acceptDeadline', null) == null || next.get('acceptDeadline', null) == prev.get('acceptDeadline', null))
+        && (prev.get('rejectDeadline', null) == null || next.get('rejectDeadline', null) == prev.get('rejectDeadline', null))
+        && (prev.get('deliveryDeadline', null) == null || next.get('deliveryDeadline', null) == prev.get('deliveryDeadline', null))
+        && (prev.get('acceptedAt', null) == null || next.get('acceptedAt', null) == prev.get('acceptedAt', null))
+        && (prev.get('deliveryExpiredAt', null) == null || next.get('deliveryExpiredAt', null) == prev.get('deliveryExpiredAt', null))
+        && (prev.get('idempotencyKey', null) == null || next.get('idempotencyKey', null) == prev.get('idempotencyKey', null));
     }
 
-    // 4. State Machine Validation
+    // 4. State Machine Validation (Phase 5.1 — Authoritative Transition Invariants)
     function isValidStatusTransition() {
       let current = resource.data.status;
       let next = request.resource.data.status;
-      return (current == 'placed' && (next == 'accepted' || next == 'rejected' || next == 'cancelled'))
-          || (current == 'accepted' && (next == 'delivered' || next == 'rejected' || next == 'delivery_expired'))
-          || (current == next);
+      return next is string && (
+        (current == next)
+        || (current == 'placed' && (next == 'accepted' || next == 'rejected' || next == 'cancelled'))
+        || (current == 'accepted' && (next == 'delivered' || next == 'rejected' || next == 'delivery_expired'))
+      );
+    }
+
+    /// Authoritative State Machine Validation for Shopkeepers:
+    /// Shopkeepers cannot cancel orders (cancellation is customer-only or admin).
+    /// Terminal statuses ('delivered', 'rejected', 'cancelled', 'delivery_expired') are strictly immutable.
+    function isValidShopkeeperTransition() {
+      let current = resource.data.status;
+      let next = request.resource.data.status;
+      return next is string && (
+        (current == next)
+        || (current == 'placed' && (next == 'accepted' || next == 'rejected'))
+        || (current == 'accepted' && (next == 'delivered' || next == 'rejected' || next == 'delivery_expired'))
+      );
+    }
+
+    /// Authoritative State Machine Validation for Platform Administrators:
+    /// Validates allowed status transitions under administrative control.
+    /// Terminal statuses ('delivered', 'rejected', 'cancelled', 'delivery_expired') are strictly immutable.
+    function isValidAdminTransition() {
+      let current = resource.data.status;
+      let next = request.resource.data.status;
+      return next is string && (
+        (current == next)
+        || (current == 'placed' && (next == 'accepted' || next == 'rejected' || next == 'cancelled'))
+        || (current == 'accepted' && (next == 'delivered' || next == 'rejected' || next == 'delivery_expired'))
+      );
     }
 
     // 5. Safe Deletion Validation
@@ -296,17 +340,19 @@ service cloud.firestore {
 
       // ── UPDATE POLICY ──
       // Invariant across ALL roles (Customer, Shopkeeper, Admin):
-      // Ownership and creation fields are strictly immutable:
+      // Ownership, creation metadata, and historical financial fields are strictly immutable:
       //   - customerId cannot be reassigned
       //   - shopId cannot be reassigned
       //   - orderId cannot be reassigned
       //   - createdAt cannot be altered
-      // Financial values and lifecycle deadlines are strictly protected from client mutation.
+      //   - totalAmount, grandTotal, subtotal, deliveryCharges cannot be modified
+      //   - items array and nested item pricing/subtotals cannot be modified
+      //   - historical snapshots (shopName, customerName, customerPhone, deliveryNote, etc.) cannot be modified
+      // Direct client updates are restricted strictly to whitelisted operational fields per role.
       allow update: if (
-        request.resource.data.customerId == resource.data.customerId
-        && request.resource.data.shopId == resource.data.shopId
-        && (!('orderId' in resource.data) || !('orderId' in request.resource.data) || request.resource.data.orderId == resource.data.orderId)
-        && (!('createdAt' in resource.data) || !('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt)
+        areImmutableFieldsPreserved()
+        && request.resource.data.get('customerId', null) == resource.data.get('customerId', null)
+        && request.resource.data.get('shopId', null) == resource.data.get('shopId', null)
         && (
           // 1. Customer cancellation path:
           //    - Customer owns the order
@@ -323,6 +369,7 @@ service cloud.firestore {
           ||
           // 2. Shopkeeper fulfillment / status updates:
           //    - Shopkeeper owns the tenant (isShopOwner)
+          //    - Authoritative state machine validation enforced (isValidShopkeeperTransition)
           //    - Restricted strictly to genuine shopkeeper fulfillment fields:
           //      status, rejectionReason, deliveryPersonId, deliveryPersonName, updatedAt
           //    - Server/lifecycle timestamps and deadlines are strictly excluded:
@@ -331,6 +378,7 @@ service cloud.firestore {
           //    - Financial, item, and customer identity fields are strictly immutable
           (
             isShopOwner(resource.data.shopId)
+            && isValidShopkeeperTransition()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'status', 'rejectionReason', 'deliveryPersonId', 'deliveryPersonName', 'updatedAt'
             ])
@@ -339,12 +387,14 @@ service cloud.firestore {
           // 3. Platform Admin updates:
           //    - Admin client access is NOT unrestricted:
           //      cannot mutate ownership, items, financials, or server lifecycle timestamps
+          //    - Authoritative state machine validation enforced (isValidAdminTransition)
           //    - Restricted strictly to administrative fulfillment/operational fields:
           (
             isAdmin()
+            && isValidAdminTransition()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'status', 'rejectionReason', 'deliveryPersonId', 'deliveryPersonName',
-              'adminNote', 'adminNotes', 'updatedAt'
+              'adminNote', 'adminNotes', 'cancelledAt', 'updatedAt'
             ])
           )
         )

@@ -310,6 +310,145 @@ async function setup() {
       orderId: 'order_cust_a_for_cancel_rem',
     });
 
+    // ── Phase 5.1 Order State Machine Seeds ──
+    await adminFs.collection('orders').doc('order_osm_placed_for_accept').set({
+      ...orderDataA,
+      orderId: 'order_osm_placed_for_accept',
+      status: 'placed',
+    });
+    await adminFs.collection('orders').doc('order_osm_placed_for_reject').set({
+      ...orderDataA,
+      orderId: 'order_osm_placed_for_reject',
+      status: 'placed',
+    });
+    await adminFs.collection('orders').doc('order_osm_placed_for_cancel').set({
+      ...orderDataA,
+      orderId: 'order_osm_placed_for_cancel',
+      status: 'placed',
+    });
+    await adminFs.collection('orders').doc('order_osm_accepted_for_deliver').set({
+      ...orderDataA,
+      orderId: 'order_osm_accepted_for_deliver',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_osm_placed_for_invalid').set({
+      ...orderDataA,
+      orderId: 'order_osm_placed_for_invalid',
+      status: 'placed',
+    });
+    await adminFs.collection('orders').doc('order_osm_accepted_for_invalid').set({
+      ...orderDataA,
+      orderId: 'order_osm_accepted_for_invalid',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_osm_terminal_delivered').set({
+      ...orderDataA,
+      orderId: 'order_osm_terminal_delivered',
+      status: 'delivered',
+      deliveredAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_osm_terminal_rejected').set({
+      ...orderDataA,
+      orderId: 'order_osm_terminal_rejected',
+      status: 'rejected',
+      rejectedAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_osm_terminal_cancelled').set({
+      ...orderDataA,
+      orderId: 'order_osm_terminal_cancelled',
+      status: 'cancelled',
+      cancelledAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_osm_terminal_expired').set({
+      ...orderDataA,
+      orderId: 'order_osm_terminal_expired',
+      status: 'delivery_expired',
+    });
+
+    // ── Phase 5.2 Role-Based State Transition Seeds ──
+    await adminFs.collection('orders').doc('order_rbt_placed_cust').set({
+      ...orderDataA,
+      orderId: 'order_rbt_placed_cust',
+      status: 'placed',
+    });
+    await adminFs.collection('orders').doc('order_rbt_accepted_cust').set({
+      ...orderDataA,
+      orderId: 'order_rbt_accepted_cust',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_rbt_placed_admin').set({
+      ...orderDataA,
+      orderId: 'order_rbt_placed_admin',
+      status: 'placed',
+    });
+    await adminFs.collection('orders').doc('order_rbt_accepted_admin').set({
+      ...orderDataA,
+      orderId: 'order_rbt_accepted_admin',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_rbt_placed_sk').set({
+      ...orderDataA,
+      orderId: 'order_rbt_placed_sk',
+      status: 'placed',
+    });
+
+    // ── Phase 5.3 Dedicated Seed Orders for Immutability Testing ──
+    const orderDataIMF = {
+      orderId: 'order_imf_placed_cust',
+      customerId: 'customer_a',
+      customerName: 'Customer A',
+      customerPhone: '+919876543210',
+      shopId: 'shop_a',
+      shopName: 'Shop A',
+      status: 'placed',
+      totalAmount: 250,
+      grandTotal: 250,
+      subtotal: 220,
+      deliveryCharges: 30,
+      totalItems: 1,
+      orderMethod: 'app',
+      specialInstructions: 'Extra cheese',
+      deliveryNote: 'Gate 2 delivery',
+      items: [
+        {
+          itemId: 'item_1',
+          menuItemId: 'item_1',
+          name: 'Burger',
+          price: 250,
+          quantity: 1,
+          subtotal: 250,
+          selectedOptions: [],
+        }
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await adminFs.collection('orders').doc('order_imf_placed_cust').set(orderDataIMF);
+    await adminFs.collection('orders').doc('order_imf_accepted_cust').set({
+      ...orderDataIMF,
+      orderId: 'order_imf_accepted_cust',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_imf_placed_sk').set({
+      ...orderDataIMF,
+      orderId: 'order_imf_placed_sk',
+    });
+    await adminFs.collection('orders').doc('order_imf_accepted_sk').set({
+      ...orderDataIMF,
+      orderId: 'order_imf_accepted_sk',
+      status: 'accepted',
+      acceptedAt: new Date(),
+    });
+    await adminFs.collection('orders').doc('order_imf_placed_admin').set({
+      ...orderDataIMF,
+      orderId: 'order_imf_placed_admin',
+    });
+
     // ── Phase 3.4 Sensitive Collections Seeds ──
     // 1. shopStats
     await adminFs.collection('shopStats').doc('shop_a').set({
@@ -3813,6 +3952,1111 @@ async function runRulesSecuritySuite() {
     reportTest('Gate.50 Customer attempts to delete category -> DENY', true);
   } catch (e) {
     reportTest('Gate.50 Customer attempts to delete category -> DENY', false);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // CHECKPOINT 5.1 ORDER STATE MACHINE & TRANSITION INVARIANTS (OSM.1 - OSM.26)
+  // ═════════════════════════════════════════════════════════════════════
+  console.log('\n--- Phase 5.1: Order State Machine & Transition Invariants (OSM.1 - OSM.26) ---');
+
+  // OSM.1 Valid transition: placed -> accepted by assigned shopkeeper -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_osm_placed_for_accept').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.1 Valid transition placed -> accepted by assigned shopkeeper -> ALLOW', true);
+  } catch (e) {
+    reportTest('OSM.1 Valid transition placed -> accepted by assigned shopkeeper -> ALLOW', false);
+  }
+
+  // OSM.2 Valid transition: placed -> rejected by assigned shopkeeper -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_osm_placed_for_reject').update({
+      status: 'rejected',
+      rejectionReason: 'Items out of stock',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.2 Valid transition placed -> rejected by assigned shopkeeper -> ALLOW', true);
+  } catch (e) {
+    reportTest('OSM.2 Valid transition placed -> rejected by assigned shopkeeper -> ALLOW', false);
+  }
+
+  // OSM.3 Valid transition: placed -> cancelled by customer owner -> ALLOW
+  try {
+    await assertSucceeds(customerDb.collection('orders').doc('order_osm_placed_for_cancel').update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.3 Valid transition placed -> cancelled by customer owner -> ALLOW', true);
+  } catch (e) {
+    reportTest('OSM.3 Valid transition placed -> cancelled by customer owner -> ALLOW', false);
+  }
+
+  // OSM.4 Valid transition: accepted -> delivered by assigned shopkeeper -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_osm_accepted_for_deliver').update({
+      status: 'delivered',
+      deliveryPersonId: 'dp_101',
+      deliveryPersonName: 'Delivery Person',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.4 Valid transition accepted -> delivered by assigned shopkeeper -> ALLOW', true);
+  } catch (e) {
+    reportTest('OSM.4 Valid transition accepted -> delivered by assigned shopkeeper -> ALLOW', false);
+  }
+
+  // OSM.5 Invalid lifecycle jump: placed -> delivered by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'delivered',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.5 Invalid lifecycle jump placed -> delivered by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.5 Invalid lifecycle jump placed -> delivered by shopkeeper -> DENY', false);
+  }
+
+  // OSM.6 Invalid lifecycle jump: placed -> delivered by admin -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'delivered',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.6 Invalid lifecycle jump placed -> delivered by admin -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.6 Invalid lifecycle jump placed -> delivered by admin -> DENY', false);
+  }
+
+  // OSM.7 Invalid lifecycle jump: placed -> delivered by customer -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'delivered',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.7 Invalid lifecycle jump placed -> delivered by customer -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.7 Invalid lifecycle jump placed -> delivered by customer -> DENY', false);
+  }
+
+  // OSM.8 Arbitrary status injection: placed -> "cooking" by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'cooking',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.8 Arbitrary status injection placed -> cooking by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.8 Arbitrary status injection placed -> cooking by shopkeeper -> DENY', false);
+  }
+
+  // OSM.9 Arbitrary status injection: placed -> "arbitrary_garbage" by admin -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'arbitrary_garbage',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.9 Arbitrary status injection placed -> arbitrary_garbage by admin -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.9 Arbitrary status injection placed -> arbitrary_garbage by admin -> DENY', false);
+  }
+
+  // OSM.10 Invalid transition: accepted -> cancelled by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_accepted_for_invalid').update({
+      status: 'cancelled',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.10 Invalid transition accepted -> cancelled by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.10 Invalid transition accepted -> cancelled by shopkeeper -> DENY', false);
+  }
+
+  // OSM.11 Invalid transition: accepted -> cancelled by customer -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_osm_accepted_for_invalid').update({
+      status: 'cancelled',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.11 Invalid transition accepted -> cancelled by customer -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.11 Invalid transition accepted -> cancelled by customer -> DENY', false);
+  }
+
+  // OSM.12 Terminal immutability: delivered -> accepted by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_terminal_delivered').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.12 Terminal immutability delivered -> accepted by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.12 Terminal immutability delivered -> accepted by shopkeeper -> DENY', false);
+  }
+
+  // OSM.13 Terminal immutability: delivered -> placed by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_terminal_delivered').update({
+      status: 'placed',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.13 Terminal immutability delivered -> placed by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.13 Terminal immutability delivered -> placed by shopkeeper -> DENY', false);
+  }
+
+  // OSM.14 Terminal immutability: delivered -> cancelled by customer -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_osm_terminal_delivered').update({
+      status: 'cancelled',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.14 Terminal immutability delivered -> cancelled by customer -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.14 Terminal immutability delivered -> cancelled by customer -> DENY', false);
+  }
+
+  // OSM.15 Terminal immutability: rejected -> accepted by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_terminal_rejected').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.15 Terminal immutability rejected -> accepted by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.15 Terminal immutability rejected -> accepted by shopkeeper -> DENY', false);
+  }
+
+  // OSM.16 Terminal immutability: rejected -> placed by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_terminal_rejected').update({
+      status: 'placed',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.16 Terminal immutability rejected -> placed by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.16 Terminal immutability rejected -> placed by shopkeeper -> DENY', false);
+  }
+
+  // OSM.17 Terminal immutability: cancelled -> accepted by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_terminal_cancelled').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.17 Terminal immutability cancelled -> accepted by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.17 Terminal immutability cancelled -> accepted by shopkeeper -> DENY', false);
+  }
+
+  // OSM.18 Terminal immutability: cancelled -> placed by customer -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_osm_terminal_cancelled').update({
+      status: 'placed',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.18 Terminal immutability cancelled -> placed by customer -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.18 Terminal immutability cancelled -> placed by customer -> DENY', false);
+  }
+
+  // OSM.19 Terminal immutability: delivery_expired -> delivered by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_terminal_expired').update({
+      status: 'delivered',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.19 Terminal immutability delivery_expired -> delivered by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.19 Terminal immutability delivery_expired -> delivered by shopkeeper -> DENY', false);
+  }
+
+  // OSM.20 Terminal immutability: delivery_expired -> accepted by shopkeeper -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_terminal_expired').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.20 Terminal immutability delivery_expired -> accepted by shopkeeper -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.20 Terminal immutability delivery_expired -> accepted by shopkeeper -> DENY', false);
+  }
+
+  // OSM.21 Role violation: Customer attempts placed -> accepted -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.21 Role violation Customer attempts placed -> accepted -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.21 Role violation Customer attempts placed -> accepted -> DENY', false);
+  }
+
+  // OSM.22 Role violation: Shopkeeper attempts placed -> cancelled -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'cancelled',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.22 Role violation Shopkeeper attempts placed -> cancelled -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.22 Role violation Shopkeeper attempts placed -> cancelled -> DENY', false);
+  }
+
+  // OSM.23 Tenant isolation: Shopkeeper B attempts transition on Shop A order -> DENY
+  try {
+    await assertFails(shopkeeperBDb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.23 Tenant isolation Shopkeeper B attempts transition on Shop A order -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.23 Tenant isolation Shopkeeper B attempts transition on Shop A order -> DENY', false);
+  }
+
+  // OSM.24 Customer isolation: Customer B attempts cancellation on Customer A order -> DENY
+  try {
+    await assertFails(customer2Db.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.24 Customer isolation Customer B attempts cancellation on Customer A order -> DENY', true);
+  } catch (e) {
+    reportTest('OSM.24 Customer isolation Customer B attempts cancellation on Customer A order -> DENY', false);
+  }
+
+  // OSM.25 Repeated transition / Idempotency: Shopkeeper preserves status: placed -> ALLOW
+  try {
+    await assertSucceeds(shopkeeperADb.collection('orders').doc('order_osm_placed_for_invalid').update({
+      status: 'placed',
+      updatedAt: new Date(),
+    }));
+    reportTest('OSM.25 Repeated transition / Idempotency Shopkeeper preserves status: placed -> ALLOW', true);
+  } catch (e) {
+    reportTest('OSM.25 Repeated transition / Idempotency Shopkeeper preserves status: placed -> ALLOW', false);
+  }
+
+  // OSM.26 Direct client deletion on terminal order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_osm_terminal_delivered').delete());
+    await assertFails(customerDb.collection('orders').doc('order_osm_terminal_delivered').delete());
+    await assertFails(adminDb.collection('orders').doc('order_osm_terminal_delivered').delete());
+    reportTest('OSM.26 Direct client deletion on terminal order -> DENY across all roles', true);
+  } catch (e) {
+    reportTest('OSM.26 Direct client deletion on terminal order -> DENY across all roles', false);
+  }
+
+  // ─── PHASE 5.2: ROLE-BASED STATE TRANSITIONS (RBT.1 - RBT.18) ────────────
+  console.log('\n--- Phase 5.2: Role-Based State Transitions ---');
+
+  // RBT.1 Customer attempts placed -> rejected on own order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_rbt_placed_cust').update({
+      status: 'rejected',
+      rejectionReason: 'Customer self reject attempt',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.1 Customer attempts placed -> rejected on own order -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.1 Customer attempts placed -> rejected on own order -> DENY', false);
+  }
+
+  // RBT.2 Customer attempts accepted -> delivered on own order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_rbt_accepted_cust').update({
+      status: 'delivered',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.2 Customer attempts accepted -> delivered on own order -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.2 Customer attempts accepted -> delivered on own order -> DENY', false);
+  }
+
+  // RBT.3 Customer attempts accepted -> rejected on own order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_rbt_accepted_cust').update({
+      status: 'rejected',
+      rejectionReason: 'Customer post-accept reject',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.3 Customer attempts accepted -> rejected on own order -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.3 Customer attempts accepted -> rejected on own order -> DENY', false);
+  }
+
+  // RBT.4 Customer attempts accepted -> delivery_expired on own order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_rbt_accepted_cust').update({
+      status: 'delivery_expired',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.4 Customer attempts accepted -> delivery_expired on own order -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.4 Customer attempts accepted -> delivery_expired on own order -> DENY', false);
+  }
+
+  // RBT.5 Customer attempts arbitrary status injection placed -> cooking -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_rbt_placed_cust').update({
+      status: 'cooking',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.5 Customer attempts arbitrary status injection placed -> cooking -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.5 Customer attempts arbitrary status injection placed -> cooking -> DENY', false);
+  }
+
+  // RBT.6 Shopkeeper attempts placed -> cancelled on assigned shop order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_rbt_placed_sk').update({
+      status: 'cancelled',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.6 Shopkeeper attempts placed -> cancelled on assigned shop order -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.6 Shopkeeper attempts placed -> cancelled on assigned shop order -> DENY', false);
+  }
+
+  // RBT.7 Shopkeeper attempts accepted -> cancelled on assigned shop order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_rbt_accepted_cust').update({
+      status: 'cancelled',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.7 Shopkeeper attempts accepted -> cancelled on assigned shop order -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.7 Shopkeeper attempts accepted -> cancelled on assigned shop order -> DENY', false);
+  }
+
+  // RBT.8 Shopkeeper attempts arbitrary status injection accepted -> ready -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_rbt_accepted_cust').update({
+      status: 'ready',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.8 Shopkeeper attempts arbitrary status injection accepted -> ready -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.8 Shopkeeper attempts arbitrary status injection accepted -> ready -> DENY', false);
+  }
+
+  // RBT.9 Cross-shop attack: Shopkeeper B attempts transition on Shop A order -> DENY
+  try {
+    await assertFails(shopkeeperBDb.collection('orders').doc('order_rbt_placed_sk').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.9 Cross-shop attack: Shopkeeper B attempts transition on Shop A order -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.9 Cross-shop attack: Shopkeeper B attempts transition on Shop A order -> DENY', false);
+  }
+
+  // RBT.10 Cross-customer attack: Customer B attempts cancellation on Customer A order -> DENY
+  try {
+    await assertFails(customer2Db.collection('orders').doc('order_rbt_placed_cust').update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.10 Cross-customer attack: Customer B attempts cancellation on Customer A order -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.10 Cross-customer attack: Customer B attempts cancellation on Customer A order -> DENY', false);
+  }
+
+  // RBT.11 Admin operational transition: placed -> accepted -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('orders').doc('order_rbt_placed_admin').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.11 Admin operational transition: placed -> accepted -> ALLOW', true);
+  } catch (e) {
+    reportTest('RBT.11 Admin operational transition: placed -> accepted -> ALLOW', false);
+  }
+
+  // RBT.12 Admin operational transition: placed -> cancelled -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('orders').doc('order_rbt_placed_sk').update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.12 Admin operational transition: placed -> cancelled -> ALLOW', true);
+  } catch (e) {
+    reportTest('RBT.12 Admin operational transition: placed -> cancelled -> ALLOW', false);
+  }
+
+  // RBT.13 Admin operational transition: accepted -> delivered -> ALLOW
+  try {
+    await assertSucceeds(adminDb.collection('orders').doc('order_rbt_accepted_admin').update({
+      status: 'delivered',
+      deliveryPersonId: 'dp_admin_dispatch',
+      deliveryPersonName: 'Admin Dispatcher',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.13 Admin operational transition: accepted -> delivered -> ALLOW', true);
+  } catch (e) {
+    reportTest('RBT.13 Admin operational transition: accepted -> delivered -> ALLOW', false);
+  }
+
+  // RBT.14 Admin invalid lifecycle jump: placed -> delivered -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_rbt_placed_cust').update({
+      status: 'delivered',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.14 Admin invalid lifecycle jump: placed -> delivered -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.14 Admin invalid lifecycle jump: placed -> delivered -> DENY', false);
+  }
+
+  // RBT.15 Admin arbitrary status injection: placed -> cooking -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_rbt_placed_cust').update({
+      status: 'cooking',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.15 Admin arbitrary status injection: placed -> cooking -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.15 Admin arbitrary status injection: placed -> cooking -> DENY', false);
+  }
+
+  // RBT.16 Admin terminal resurrection: delivered -> accepted -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_osm_terminal_delivered').update({
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.16 Admin terminal resurrection: delivered -> accepted -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.16 Admin terminal resurrection: delivered -> accepted -> DENY', false);
+  }
+
+  // RBT.17 Admin terminal resurrection: cancelled -> placed -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_osm_terminal_cancelled').update({
+      status: 'placed',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.17 Admin terminal resurrection: cancelled -> placed -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.17 Admin terminal resurrection: cancelled -> placed -> DENY', false);
+  }
+
+  // RBT.18 Admin mutating immutable order ownership (shopId, customerId) -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_rbt_placed_cust').update({
+      shopId: 'shop_hacked',
+      updatedAt: new Date(),
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_rbt_placed_cust').update({
+      customerId: 'customer_hacked',
+      updatedAt: new Date(),
+    }));
+    reportTest('RBT.18 Admin mutating immutable order ownership (shopId, customerId) -> DENY', true);
+  } catch (e) {
+    reportTest('RBT.18 Admin mutating immutable order ownership (shopId, customerId) -> DENY', false);
+  }
+
+  console.log('\n--- Phase 5.3: Immutable Order Fields & Field-Mutation Invariants (IMF.1 - IMF.27) ---');
+
+  // IMF.1 Customer mutating customerId on placed order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      customerId: 'attacker_uid',
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.1 Customer mutating customerId on placed order -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.1 Customer mutating customerId on placed order -> DENY', false);
+  }
+
+  // IMF.2 Customer mutating shopId on placed order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      shopId: 'shop_b',
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.2 Customer mutating shopId on placed order -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.2 Customer mutating shopId on placed order -> DENY', false);
+  }
+
+  // IMF.3 Customer mutating orderId on placed order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      orderId: 'hacked_order_id',
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.3 Customer mutating orderId on placed order -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.3 Customer mutating orderId on placed order -> DENY', false);
+  }
+
+  // IMF.4 Customer mutating createdAt on placed order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      createdAt: new Date(Date.now() - 3600000),
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.4 Customer mutating createdAt on placed order -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.4 Customer mutating createdAt on placed order -> DENY', false);
+  }
+
+  // IMF.5 Customer mutating totalAmount / grandTotal / subtotal / deliveryCharges -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      totalAmount: 1,
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      grandTotal: 1,
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      subtotal: 0,
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      deliveryCharges: 999,
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.5 Customer mutating financial totals -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.5 Customer mutating financial totals -> DENY', false);
+  }
+
+  // IMF.6 Customer replacing items array on placed order -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      items: [],
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.6 Customer replacing items array -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.6 Customer replacing items array -> DENY', false);
+  }
+
+  // IMF.7 Customer mutating nested item price / menuItemId -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      items: [
+        {
+          itemId: 'item_1',
+          menuItemId: 'item_1',
+          name: 'Burger',
+          price: 1,
+          quantity: 1,
+          subtotal: 1,
+          selectedOptions: [],
+        }
+      ],
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.7 Customer mutating nested item price -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.7 Customer mutating nested item price -> DENY', false);
+  }
+
+  // IMF.8 Customer injecting arbitrary financial fields (price, discount) -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      price: 1,
+      discount: 100,
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.8 Customer injecting arbitrary financial fields -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.8 Customer injecting arbitrary financial fields -> DENY', false);
+  }
+
+  // IMF.9 Customer mutating historical snapshots (customerName, shopName) -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      customerName: 'Hacked Name',
+      shopName: 'Hacked Shop',
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.9 Customer mutating historical snapshots -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.9 Customer mutating historical snapshots -> DENY', false);
+  }
+
+  // IMF.10 Customer mutating orderMethod, specialInstructions, deliveryNote -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      orderMethod: 'whatsapp',
+      specialInstructions: 'Tampered note',
+      deliveryNote: 'Tampered delivery location',
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.10 Customer mutating orderMethod, specialInstructions, deliveryNote -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.10 Customer mutating orderMethod, specialInstructions, deliveryNote -> DENY', false);
+  }
+
+  // IMF.11 Shopkeeper mutating customerId on placed or accepted order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      customerId: 'attacker_uid',
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_accepted_sk').update({
+      customerId: 'attacker_uid',
+      status: 'delivered',
+      deliveryPersonId: 'dp_1',
+      deliveryPersonName: 'Driver',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.11 Shopkeeper mutating customerId -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.11 Shopkeeper mutating customerId -> DENY', false);
+  }
+
+  // IMF.12 Shopkeeper mutating shopId on placed or accepted order -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      shopId: 'shop_b',
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.12 Shopkeeper mutating shopId -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.12 Shopkeeper mutating shopId -> DENY', false);
+  }
+
+  // IMF.13 Shopkeeper mutating orderId -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      orderId: 'hacked_sk_order_id',
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.13 Shopkeeper mutating orderId -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.13 Shopkeeper mutating orderId -> DENY', false);
+  }
+
+  // IMF.14 Shopkeeper mutating createdAt -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      createdAt: new Date(Date.now() - 7200000),
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.14 Shopkeeper mutating createdAt -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.14 Shopkeeper mutating createdAt -> DENY', false);
+  }
+
+  // IMF.15 Shopkeeper mutating financial fields (totalAmount, grandTotal, subtotal, deliveryCharges) -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      totalAmount: 9999,
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      grandTotal: 9999,
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      subtotal: 9999,
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      deliveryCharges: 500,
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.15 Shopkeeper mutating financial fields -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.15 Shopkeeper mutating financial fields -> DENY', false);
+  }
+
+  // IMF.16 Shopkeeper replacing items or mutating item prices -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      items: [
+        {
+          itemId: 'item_1',
+          menuItemId: 'item_1',
+          name: 'Burger',
+          price: 999,
+          quantity: 1,
+          subtotal: 999,
+          selectedOptions: [],
+        }
+      ],
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.16 Shopkeeper replacing items or mutating item prices -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.16 Shopkeeper replacing items or mutating item prices -> DENY', false);
+  }
+
+  // IMF.17 Shopkeeper mutating historical snapshots (customerName, customerPhone, shopName) -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      customerName: 'Tampered Customer',
+      customerPhone: '+910000000000',
+      shopName: 'Tampered Shop',
+      status: 'accepted',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.17 Shopkeeper mutating historical snapshots -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.17 Shopkeeper mutating historical snapshots -> DENY', false);
+  }
+
+  // IMF.18 Admin client mutating customerId or shopId -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      customerId: 'reassigned_customer',
+      adminNote: 'Admin intervention',
+      updatedAt: new Date(),
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      shopId: 'reassigned_shop',
+      adminNote: 'Admin intervention',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.18 Admin client mutating customerId or shopId -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.18 Admin client mutating customerId or shopId -> DENY', false);
+  }
+
+  // IMF.19 Admin client mutating orderId -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      orderId: 'hacked_admin_order_id',
+      adminNote: 'Admin intervention',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.19 Admin client mutating orderId -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.19 Admin client mutating orderId -> DENY', false);
+  }
+
+  // IMF.20 Admin client mutating createdAt -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      createdAt: new Date(Date.now() - 86400000),
+      adminNote: 'Admin intervention',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.20 Admin client mutating createdAt -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.20 Admin client mutating createdAt -> DENY', false);
+  }
+
+  // IMF.21 Admin client mutating financial totals -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      totalAmount: 0,
+      adminNote: 'Free order override',
+      updatedAt: new Date(),
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      grandTotal: 0,
+      adminNote: 'Free order override',
+      updatedAt: new Date(),
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      subtotal: 0,
+      adminNote: 'Free order override',
+      updatedAt: new Date(),
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      deliveryCharges: 0,
+      adminNote: 'Free delivery override',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.21 Admin client mutating financial totals -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.21 Admin client mutating financial totals -> DENY', false);
+  }
+
+  // IMF.22 Admin client replacing items array or mutating item prices -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      items: [],
+      adminNote: 'Items cleared by admin',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.22 Admin client replacing items array -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.22 Admin client replacing items array -> DENY', false);
+  }
+
+  // IMF.23 Combined attack: Shopkeeper attempts valid status: accepted + malicious grandTotal: 1 -> DENY atomically
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      status: 'accepted',
+      grandTotal: 1,
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.23 Combined attack: status = accepted + grandTotal = 1 -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.23 Combined attack: status = accepted + grandTotal = 1 -> DENY atomically', false);
+  }
+
+  // IMF.24 Combined attack: Shopkeeper attempts valid status: delivered + malicious customerId -> DENY atomically
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_accepted_sk').update({
+      status: 'delivered',
+      customerId: 'attacker_uid',
+      deliveryPersonId: 'dp_1',
+      deliveryPersonName: 'Driver',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.24 Combined attack: status = delivered + customerId = attacker -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.24 Combined attack: status = delivered + customerId = attacker -> DENY atomically', false);
+  }
+
+  // IMF.25 Combined attack: Shopkeeper attempts valid status: rejected + malicious shopId -> DENY atomically
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      status: 'rejected',
+      shopId: 'shop_b',
+      rejectionReason: 'Out of stock',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.25 Combined attack: status = rejected + shopId = attackerShop -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.25 Combined attack: status = rejected + shopId = attackerShop -> DENY atomically', false);
+  }
+
+  // IMF.26 Combined attack: Customer attempts valid status: cancelled + malicious createdAt -> DENY atomically
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      status: 'cancelled',
+      createdAt: new Date(Date.now() - 86400000),
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.26 Combined attack: status = cancelled + createdAt = fakeOldTimestamp -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.26 Combined attack: status = cancelled + createdAt = fakeOldTimestamp -> DENY atomically', false);
+  }
+
+  // IMF.27 Combined attack: Customer attempts valid status: cancelled + malicious subtotal: 0 -> DENY atomically
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      status: 'cancelled',
+      subtotal: 0,
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.27 Combined attack: status = cancelled + subtotal = 0 -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.27 Combined attack: status = cancelled + subtotal = 0 -> DENY atomically', false);
+  }
+
+  // ─── DEADLINE & SERVER LIFECYCLE FIELD DIRECT ATTACKS (PHASE 5.5) ───
+
+  // IMF.28 Customer attempting to modify acceptDeadline -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      acceptDeadline: new Date(Date.now() + 3600000),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.28 Customer mutating acceptDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.28 Customer mutating acceptDeadline -> DENY', false);
+  }
+
+  // IMF.29 Customer attempting to modify deliveryDeadline -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      deliveryDeadline: new Date(Date.now() + 7200000),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.29 Customer mutating deliveryDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.29 Customer mutating deliveryDeadline -> DENY', false);
+  }
+
+  // IMF.30 Customer attempting to modify acceptedAt -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      acceptedAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.30 Customer mutating acceptedAt -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.30 Customer mutating acceptedAt -> DENY', false);
+  }
+
+  // IMF.31 Customer attempting to modify deliveryExpiredAt -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      deliveryExpiredAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.31 Customer mutating deliveryExpiredAt -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.31 Customer mutating deliveryExpiredAt -> DENY', false);
+  }
+
+  // IMF.32 Customer attempting to modify idempotencyKey -> DENY
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      idempotencyKey: 'forged_key_123',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.32 Customer mutating idempotencyKey -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.32 Customer mutating idempotencyKey -> DENY', false);
+  }
+
+  // IMF.33 Shopkeeper attempting to modify acceptDeadline -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      acceptDeadline: new Date(Date.now() + 3600000),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.33 Shopkeeper mutating acceptDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.33 Shopkeeper mutating acceptDeadline -> DENY', false);
+  }
+
+  // IMF.34 Shopkeeper attempting to modify rejectDeadline -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      rejectDeadline: new Date(Date.now() + 3600000),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.34 Shopkeeper mutating rejectDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.34 Shopkeeper mutating rejectDeadline -> DENY', false);
+  }
+
+  // IMF.35 Shopkeeper attempting to modify deliveryDeadline -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_accepted_sk').update({
+      deliveryDeadline: new Date(Date.now() + 7200000),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.35 Shopkeeper mutating deliveryDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.35 Shopkeeper mutating deliveryDeadline -> DENY', false);
+  }
+
+  // IMF.36 Shopkeeper attempting to modify acceptedAt or deliveredAt -> DENY
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      acceptedAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_accepted_sk').update({
+      deliveredAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.36 Shopkeeper mutating acceptedAt or deliveredAt -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.36 Shopkeeper mutating acceptedAt or deliveredAt -> DENY', false);
+  }
+
+  // IMF.37 Admin client attempting to modify acceptDeadline or deliveryDeadline -> DENY
+  try {
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      acceptDeadline: new Date(Date.now() + 3600000),
+      adminNote: 'Admin deadline change',
+      updatedAt: new Date(),
+    }));
+    await assertFails(adminDb.collection('orders').doc('order_imf_placed_admin').update({
+      deliveryDeadline: new Date(Date.now() + 7200000),
+      adminNote: 'Admin delivery deadline change',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.37 Admin client mutating acceptDeadline or deliveryDeadline -> DENY', true);
+  } catch (e) {
+    reportTest('IMF.37 Admin client mutating acceptDeadline or deliveryDeadline -> DENY', false);
+  }
+
+  // IMF.38 Compound attack: status = accepted + deliveryDeadline = futureTime -> DENY atomically
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      status: 'accepted',
+      deliveryDeadline: new Date(Date.now() + 86400000),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.38 Compound attack: status = accepted + deliveryDeadline = futureTime -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.38 Compound attack: status = accepted + deliveryDeadline = futureTime -> DENY atomically', false);
+  }
+
+  // IMF.39 Compound attack: status = rejected + acceptDeadline = futureTime -> DENY atomically
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_placed_sk').update({
+      status: 'rejected',
+      acceptDeadline: new Date(Date.now() + 86400000),
+      rejectionReason: 'Forged deadline extension',
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.39 Compound attack: status = rejected + acceptDeadline = futureTime -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.39 Compound attack: status = rejected + acceptDeadline = futureTime -> DENY atomically', false);
+  }
+
+  // IMF.40 Compound attack: status = delivery_expired + deliveryDeadline = futureTime -> DENY atomically
+  try {
+    await assertFails(shopkeeperADb.collection('orders').doc('order_imf_accepted_sk').update({
+      status: 'delivery_expired',
+      deliveryDeadline: new Date(Date.now() + 86400000),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.40 Compound attack: status = delivery_expired + deliveryDeadline = futureTime -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.40 Compound attack: status = delivery_expired + deliveryDeadline = futureTime -> DENY atomically', false);
+  }
+
+  // IMF.41 Compound attack: status = cancelled + acceptedAt = fakeTimestamp -> DENY atomically
+  try {
+    await assertFails(customerDb.collection('orders').doc('order_imf_placed_cust').update({
+      status: 'cancelled',
+      acceptedAt: new Date(),
+      cancelledAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    reportTest('IMF.41 Compound attack: status = cancelled + acceptedAt = fakeTimestamp -> DENY atomically', true);
+  } catch (e) {
+    reportTest('IMF.41 Compound attack: status = cancelled + acceptedAt = fakeTimestamp -> DENY atomically', false);
   }
 
   console.log('\n=================================================================');

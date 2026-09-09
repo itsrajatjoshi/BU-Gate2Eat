@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers.dart';
 import '../../models/order_model.dart';
+import '../../services/order_service.dart';
 import 'widgets/universal_order_card.dart';
 
 class OrderHistoryScreen extends ConsumerWidget {
@@ -33,11 +34,8 @@ class OrderHistoryScreen extends ConsumerWidget {
           final filtered = historyOrders
               .where(
                 (o) =>
-                    o.status == 'delivered' ||
-                    o.status == 'rejected' ||
-                    o.status == 'cancelled' ||
-                    o.status == 'delivery_expired' ||
-                    o.status == 'expired',
+                    OrderStatusRules.isTerminal(o.status) ||
+                    o.status == 'expired', // Legacy read-only fallback for historic records
               )
               .toList()
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));

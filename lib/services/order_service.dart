@@ -73,12 +73,66 @@ class OrderStatusRules {
     statusDeliveryExpired: {}, // Terminal: No further transitions allowed
   };
 
+  /// Allowed transitions for shopkeepers.
+  /// Shopkeepers can accept or reject placed orders, and mark accepted orders as delivered or expired.
+  /// Shopkeepers CANNOT cancel orders (cancellation is customer or admin only).
+  /// Terminal orders are strictly immutable.
+  static const Map<String, Set<String>> _allowedShopkeeperTransitions = {
+    statusPlaced: {statusAccepted, statusRejected},
+    statusAccepted: {statusDelivered, statusRejected, statusDeliveryExpired},
+    statusDelivered: {},
+    statusRejected: {},
+    statusCancelled: {},
+    statusDeliveryExpired: {},
+  };
+
   /// Checks if transition from [fromStatus] to [toStatus] is permitted.
   static bool isValidTransition(String fromStatus, String toStatus) {
     if (fromStatus == toStatus) return true;
     final allowed = _allowedTransitions[fromStatus];
     if (allowed == null) return false;
     return allowed.contains(toStatus);
+  }
+
+  /// Checks if transition from [fromStatus] to [toStatus] is permitted for a customer.
+  /// Customers can ONLY cancel their own 'placed' order, or identity no-op.
+  static bool isValidCustomerTransition(String fromStatus, String toStatus) {
+    if (fromStatus == toStatus) return true;
+    return fromStatus == statusPlaced && toStatus == statusCancelled;
+  }
+
+  /// Checks if transition from [fromStatus] to [toStatus] is permitted for a shopkeeper.
+  /// Shopkeepers CANNOT cancel orders. Terminal orders cannot be transitioned.
+  static bool isValidShopkeeperTransition(String fromStatus, String toStatus) {
+    if (fromStatus == toStatus) return true;
+    final allowed = _allowedShopkeeperTransitions[fromStatus];
+    if (allowed == null) return false;
+    return allowed.contains(toStatus);
+  }
+
+  /// Checks if transition from [fromStatus] to [toStatus] is permitted for an administrator.
+  /// Admins can perform authorized operational transitions, but cannot resurrect terminal orders.
+  static bool isValidAdminTransition(String fromStatus, String toStatus) {
+    if (fromStatus == toStatus) return true;
+    return isValidTransition(fromStatus, toStatus);
+  }
+
+  /// Evaluates whether a transition is permitted for a given [AuthRole].
+  static bool isValidTransitionForRole(
+    AuthRole role,
+    String fromStatus,
+    String toStatus,
+  ) {
+    switch (role) {
+      case AuthRole.customer:
+        return isValidCustomerTransition(fromStatus, toStatus);
+      case AuthRole.shopkeeper:
+        return isValidShopkeeperTransition(fromStatus, toStatus);
+      case AuthRole.admin:
+        return isValidAdminTransition(fromStatus, toStatus);
+      case AuthRole.none:
+        return false;
+    }
   }
 
   /// Verifies if a status is terminal.
@@ -105,8 +159,47 @@ class OrderService {
         _customShopIdResolver = currentShopIdResolver,
         _customUserRoleResolver = currentUserRoleResolver,
         _orderLoaderForTesting = orderLoaderForTesting,
-        _orderUpdaterForTesting = orderUpdaterForTesting,
+        _orderUpdaterForTesting = orderUpdaterForTesting != null
+            ? ((orderId, updates) {
+                validateNoImmutableFields(updates);
+                return orderUpdaterForTesting(orderId, updates);
+              })
+            : null,
         _orderCreatorForTesting = orderCreatorForTesting;
+
+  /// Authoritative list of order fields that are strictly immutable after creation.
+  /// Any attempt to mutate these fields via client or service operations is rejected.
+  static const Set<String> immutableOrderFields = {
+    'orderId',
+    'customerId',
+    'shopId',
+    'createdAt',
+    'items',
+    'price',
+    'subtotal',
+    'grandTotal',
+    'totalAmount',
+    'deliveryCharges',
+    'totalItems',
+    'shopName',
+    'customerName',
+    'customerPhone',
+    'orderMethod',
+    'specialInstructions',
+    'deliveryNote',
+  };
+
+  /// Validates that an update payload does not contain any immutable order fields.
+  /// Throws [OrderServiceException] if an immutable field mutation is attempted.
+  static void validateNoImmutableFields(Map<String, dynamic> updates) {
+    for (final key in updates.keys) {
+      if (immutableOrderFields.contains(key)) {
+        throw OrderServiceException(
+          'Security violation: Cannot update immutable order field "$key".',
+        );
+      }
+    }
+  }
 
   final FirebaseFirestore? _customFirestore;
   final FirebaseAuth? _customAuth;
@@ -618,10 +711,32 @@ class OrderService {
           'Unauthorized: Caller cannot update shop order status',
         );
       }
+      final currentStatus = (data['status'] as String?) ?? OrderStatusRules.statusPlaced;
+      if (currentStatus == newStatus) {
+        return; // Idempotent duplicate no-op
+      }
       if (role == AuthRole.shopkeeper) {
         if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != orderShopId) {
           throw OrderServiceException(
             'Unauthorized: Shopkeeper of "$trustedShopId" cannot update order for shop "$orderShopId"',
+          );
+        }
+        if (!OrderStatusRules.isValidShopkeeperTransition(currentStatus, newStatus)) {
+          if (newStatus == OrderStatusRules.statusCancelled) {
+            throw const OrderServiceException(
+              'Unauthorized: Shopkeepers cannot cancel customer orders.',
+            );
+          }
+          throw InvalidOrderTransitionException(
+            currentStatus: currentStatus,
+            targetStatus: newStatus,
+          );
+        }
+      } else if (role == AuthRole.admin) {
+        if (!OrderStatusRules.isValidAdminTransition(currentStatus, newStatus)) {
+          throw InvalidOrderTransitionException(
+            currentStatus: currentStatus,
+            targetStatus: newStatus,
           );
         }
       }
@@ -650,7 +765,7 @@ class OrderService {
         final statsDocRef = _statsRef.doc(shopId);
         final now = customNow ?? DateTime.now();
 
-        // ── Security Check: Tenant Authorization ──
+        // ── Security Check: Tenant & Role Authorization ──
         final role = _currentAuthRole;
         final trustedShopId = _currentAuthShopId;
         if (role != AuthRole.admin && role != AuthRole.shopkeeper) {
@@ -658,24 +773,36 @@ class OrderService {
             'Unauthorized: Caller cannot update shop order status',
           );
         }
-        if (role == AuthRole.shopkeeper) {
-          if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
-            throw OrderServiceException(
-              'Unauthorized: Shopkeeper of "$trustedShopId" cannot update order for shop "$shopId"',
-            );
-          }
-        }
 
         // ── Idempotency Check ──
         if (currentStatus == newStatus) {
           return; // No-op on duplicate request
         }
 
-        if (!OrderStatusRules.isValidTransition(currentStatus, newStatus)) {
-          throw InvalidOrderTransitionException(
-            currentStatus: currentStatus,
-            targetStatus: newStatus,
-          );
+        if (role == AuthRole.shopkeeper) {
+          if (trustedShopId == null || trustedShopId.isEmpty || trustedShopId != shopId) {
+            throw OrderServiceException(
+              'Unauthorized: Shopkeeper of "$trustedShopId" cannot update order for shop "$shopId"',
+            );
+          }
+          if (!OrderStatusRules.isValidShopkeeperTransition(currentStatus, newStatus)) {
+            if (newStatus == OrderStatusRules.statusCancelled) {
+              throw const OrderServiceException(
+                'Unauthorized: Shopkeepers cannot cancel customer orders.',
+              );
+            }
+            throw InvalidOrderTransitionException(
+              currentStatus: currentStatus,
+              targetStatus: newStatus,
+            );
+          }
+        } else if (role == AuthRole.admin) {
+          if (!OrderStatusRules.isValidAdminTransition(currentStatus, newStatus)) {
+            throw InvalidOrderTransitionException(
+              currentStatus: currentStatus,
+              targetStatus: newStatus,
+            );
+          }
         }
 
         // ── Transition: PLACED → ACCEPTED ──
@@ -850,9 +977,14 @@ class OrderService {
             SetOptions(merge: true),
           );
         }
-        // ── Transition: PLACED → CANCELLED (Customer cancellation before accept) ──
+        // ── Transition: PLACED → CANCELLED (Administrative cancellation before accept) ──
         else if (currentStatus == OrderStatusRules.statusPlaced &&
             newStatus == OrderStatusRules.statusCancelled) {
+          if (role != AuthRole.admin) {
+            throw const OrderServiceException(
+              'Unauthorized: Shopkeepers cannot cancel customer orders.',
+            );
+          }
           transaction.update(orderDocRef, {
             'status': OrderStatusRules.statusCancelled,
             'cancelledAt': FieldValue.serverTimestamp(),
@@ -889,17 +1021,31 @@ class OrderService {
         'Unauthorized: Order cancellation requires an authenticated customer session.',
       );
     }
+    final role = _currentAuthRole;
+    if (role == AuthRole.shopkeeper) {
+      throw const OrderServiceException(
+        'Unauthorized: Shopkeepers cannot cancel customer orders.',
+      );
+    }
+    if (role != AuthRole.customer && role != AuthRole.admin) {
+      throw const OrderServiceException(
+        'Unauthorized: Caller does not have permission to cancel orders.',
+      );
+    }
 
     if (_orderLoaderForTesting != null) {
       final data = await _orderLoaderForTesting!(orderId);
       if (data == null) return;
       final orderCustomerId = (data['customerId'] as String?) ?? '';
-      if (orderCustomerId.isNotEmpty && orderCustomerId != authUid) {
+      if (role == AuthRole.customer && orderCustomerId.isNotEmpty && orderCustomerId != authUid) {
         throw OrderServiceException(
           'Unauthorized: Customer "$authUid" cannot cancel order owned by "$orderCustomerId".',
         );
       }
       final status = (data['status'] as String?) ?? 'placed';
+      if (status == OrderStatusRules.statusCancelled) {
+        return; // Idempotent duplicate cancellation is a safe no-op
+      }
       if (status != OrderStatusRules.statusPlaced) {
         throw OrderServiceException(
           'Cannot cancel order in "$status" status. Orders can only be cancelled while in placed status.',
@@ -926,15 +1072,18 @@ class OrderService {
 
         final data = doc.data()!;
 
-        // 2. Security Invariant: Verify order.customerId == authenticated UID
+        // 2. Security Invariant: Verify order.customerId == authenticated UID for customer
         final orderCustomerId = (data['customerId'] as String?) ?? '';
-        if (orderCustomerId.isNotEmpty && orderCustomerId != authUid) {
+        if (role == AuthRole.customer && orderCustomerId.isNotEmpty && orderCustomerId != authUid) {
           throw OrderServiceException(
             'Unauthorized: Customer "$authUid" cannot cancel order owned by "$orderCustomerId".',
           );
         }
 
         final status = (data['status'] as String?) ?? 'placed';
+        if (status == OrderStatusRules.statusCancelled) {
+          return; // Idempotent duplicate cancellation is a safe no-op
+        }
         if (status != OrderStatusRules.statusPlaced) {
           throw OrderServiceException(
             'Cannot cancel order in "$status" status. Orders can only be cancelled while in placed status.',

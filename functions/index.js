@@ -482,46 +482,55 @@ exports.scheduledOrderCleanup = functions.pubsub
 
 /**
  * Callable Cloud Function for Admin manual order cleanup or dry-run execution.
- * Restricted to verified administrator callers.
+ * Restricted strictly to authenticated callers with verified Custom Claim role === 'admin'.
  */
 exports.manualOrderCleanup = functions.https.onCall(async (data, context) => {
-  // Validate admin authorization
-  const callerPhone = context.auth && context.auth.token ? context.auth.token.phone_number : null;
-  const isAdmin = (context.auth && context.auth.token && context.auth.token.admin === true) ||
-                  (callerPhone && SERVER_ADMIN_PHONES.includes(normalizeCanonicalPhone(callerPhone)));
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Authentication is required to run order cleanup."
+    );
+  }
 
-  if (!isAdmin && process.env.FUNCTIONS_EMULATOR !== "true") {
+  const token = context.auth.token || {};
+  if (token.role !== "admin") {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Only authorized administrators can run order cleanup."
+      "Only authorized administrators with role 'admin' can run order cleanup."
     );
   }
 
   const dryRun = data && data.dryRun === true;
-  const batchSize = data && typeof data.batchSize === "number" ? data.batchSize : 400;
+  const rawBatchSize = data && typeof data.batchSize === "number" && Number.isInteger(data.batchSize) ? data.batchSize : 400;
+  const batchSize = Math.max(1, Math.min(rawBatchSize, 500));
   return await cleanupOldOrders(db, { dryRun, batchSize });
 });
 
 /**
  * Callable Cloud Function for Reference-Aware Storage Orphan Audit.
- * Restricted to verified administrator callers.
+ * Restricted strictly to authenticated callers with verified Custom Claim role === 'admin'.
  * Default is dryRun: true (reports orphans without deleting).
  */
 exports.storageOrphanAudit = functions.https.onCall(async (data, context) => {
-  const callerPhone = context.auth && context.auth.token ? context.auth.token.phone_number : null;
-  const isAdmin = (context.auth && context.auth.token && context.auth.token.admin === true) ||
-                  (callerPhone && SERVER_ADMIN_PHONES.includes(normalizeCanonicalPhone(callerPhone)));
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Authentication is required to audit storage orphans."
+    );
+  }
 
-  if (!isAdmin && process.env.FUNCTIONS_EMULATOR !== "true") {
+  const token = context.auth.token || {};
+  if (token.role !== "admin") {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Only authorized administrators can audit storage orphans."
+      "Only authorized administrators with role 'admin' can audit storage orphans."
     );
   }
 
   const bucket = getStorage().bucket();
   const dryRun = data ? data.dryRun !== false : true;
-  const minAgeHours = data && typeof data.minAgeHours === "number" ? data.minAgeHours : 24;
+  const rawMinAge = data && typeof data.minAgeHours === "number" && Number.isInteger(data.minAgeHours) ? data.minAgeHours : 24;
+  const minAgeHours = Math.max(1, Math.min(rawMinAge, 720));
   return await auditAndCleanStorageOrphans(bucket, db, { dryRun, minAgeHours });
 });
 
@@ -632,3 +641,76 @@ exports.orderService = {
   computeRequestFingerprint,
 };
 
+// ─── PART 8: SERVER-AUTHORITATIVE ORDER EXPIRATION & LIFECYCLE (PHASE 5.5) ──
+const {
+  expireStaleOrders,
+  evaluateOrderExpiration,
+  expireOrderTransaction,
+  ACCEPT_WINDOW_MINUTES,
+  ACCEPT_WINDOW_MS,
+  DELIVERY_WINDOW_MINUTES,
+  DELIVERY_WINDOW_MS,
+} = require("./order_expiration");
+
+/**
+ * Scheduled Cloud Function (Runs every 2 minutes).
+ * Evaluates active orders and executes server-authoritative expiration
+ * for placed orders exceeding 20m accept deadline and accepted orders exceeding 90m delivery deadline.
+ */
+exports.scheduledOrderExpiration = functions.pubsub
+  .schedule("every 2 minutes")
+  .onRun(async (context) => {
+    console.log("⏱️ [Scheduled Expiration] Starting order expiration sweep...");
+    try {
+      const summary = await expireStaleOrders(db);
+      console.log("✅ [Scheduled Expiration] Completed successfully:", JSON.stringify(summary));
+      return summary;
+    } catch (err) {
+      console.error("❌ [Scheduled Expiration] Error during order expiration:", err);
+      throw err;
+    }
+  });
+
+/**
+ * Callable Cloud Function for Admin manual expiration sweep or test verification.
+ * Restricted strictly to authenticated callers with verified Custom Claim role === 'admin'.
+ */
+exports.expireOrdersCallable = functions.https.onCall(async (data, context) => {
+  // 1. Mandatory authentication check: Anonymous/unauthenticated callers strictly denied
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Authentication is required to trigger order expiration sweep."
+    );
+  }
+
+  // 2. Authoritative RBAC check: Caller MUST possess canonical custom claim role == 'admin'
+  // Strictly rejects token.admin boolean, phone-number matching, or client-supplied role flags
+  const token = context.auth.token || {};
+  if (token.role !== "admin") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only authorized administrators with role 'admin' can trigger order expiration sweep."
+    );
+  }
+
+  // 3. Strict parameter sanitization and bounds enforcement:
+  // - limit must be an integer strictly bounded between 1 and 100 (default: 50)
+  // - dryRun must be a strict boolean
+  // - Arbitrary fields (admin, role, phone, orderId, shopId, status, timestamps) are completely ignored
+  const rawLimit = data && typeof data.limit === "number" && Number.isInteger(data.limit) ? data.limit : 50;
+  const limit = Math.max(1, Math.min(rawLimit, 100));
+  const dryRun = data && data.dryRun === true;
+
+  return await expireStaleOrders(db, { dryRun, limit });
+});
+
+exports.orderExpiration = {
+  expireStaleOrders,
+  evaluateOrderExpiration,
+  expireOrderTransaction,
+  ACCEPT_WINDOW_MINUTES,
+  ACCEPT_WINDOW_MS,
+  DELIVERY_WINDOW_MINUTES,
+  DELIVERY_WINDOW_MS,
+};
