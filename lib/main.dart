@@ -15,6 +15,7 @@ import 'core/router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/offline_indicator_wrapper.dart';
 import 'firebase_options.dart';
+import 'services/app_check_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/notification_router_bridge.dart';
 import 'services/notification_service.dart';
@@ -63,6 +64,9 @@ void main() async {
     final firebaseApp = results[0] as FirebaseApp;
     localStorageService = results[1] as LocalStorageService;
     debugPrint('🔥 Firebase Initialized Successfully! App Name: ${firebaseApp.name}');
+
+    // Phase 7.1: Initialize Firebase App Check device attestation
+    await AppCheckService.initialize();
 
     if (!kIsWeb) {
       FirebaseFirestore.instance.settings = const Settings(
