@@ -21,11 +21,13 @@ bool isAdminAuthorized(WidgetRef ref) {
     if (currentIdentity.isAuthenticated) {
       return currentIdentity.isAdmin;
     }
-    // In live runtime with Firebase initialized, an unauthenticated session cannot access admin
-    if (Firebase.apps.isNotEmpty) {
-      return false;
-    }
   } catch (_) {}
+
+  // INVARIANT: In RELEASE mode, phone fallback is strictly prohibited.
+  // Privileged admin access requires authenticated custom claims.
+  if (!AppAuthRoles.isPhoneFallbackAllowed) {
+    return false;
+  }
 
   final LocalStorageService localStorage;
   try {

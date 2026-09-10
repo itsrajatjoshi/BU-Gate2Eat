@@ -86,14 +86,14 @@ class OrderDetailScreen extends ConsumerWidget {
       final phone = localStorage.userPhone;
       final cleanPhone = AppAuthRoles.normalizeCleanPhone(phone);
 
-      // In unit/widget tests without Firebase Auth
-      if (AppAuthRoles.isAdminPhone(cleanPhone)) {
+      // In unit/widget tests without Firebase Auth (DEBUG ONLY)
+      if (AppAuthRoles.isPhoneFallbackAllowed && AppAuthRoles.isAdminPhone(cleanPhone)) {
         return true;
       }
 
       // Shopkeeper: strictly authorized ONLY for orders belonging to their assigned shop,
       // or orders they placed personally as a customer.
-      if (AppAuthRoles.isShopkeeperPhone(cleanPhone)) {
+      if (AppAuthRoles.isPhoneFallbackAllowed && AppAuthRoles.isShopkeeperPhone(cleanPhone)) {
         final authorizedShopId = AppAuthRoles.getShopIdForPhone(cleanPhone);
         final isOwnShopOrder = authorizedShopId != null &&
             authorizedShopId.isNotEmpty &&
@@ -426,13 +426,18 @@ class OrderDetailScreen extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        order.shopName,
-                        style: const TextStyle(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w800,
+                      Expanded(
+                        child: Text(
+                          order.shopName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       _buildStatusBadge(order, now, isDark),
                     ],
                   ),

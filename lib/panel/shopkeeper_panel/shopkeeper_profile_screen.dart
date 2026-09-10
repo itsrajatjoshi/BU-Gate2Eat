@@ -136,7 +136,8 @@ class _ShopkeeperProfileScreenState
     final currentIdentity = ref.watch(currentIdentityProvider);
     final isAuthorizedShopkeeper = currentIdentity.isAuthenticated
         ? currentIdentity.isShopkeeper
-        : AppAuthRoles.isShopkeeperPhone(phone);
+        : (AppAuthRoles.isPhoneFallbackAllowed &&
+            AppAuthRoles.isShopkeeperPhone(phone));
 
     if (!isAuthorizedShopkeeper) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

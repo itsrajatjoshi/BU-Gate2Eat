@@ -870,10 +870,10 @@ class _ShopDetailScreenState extends ConsumerState<ShopDetailScreen> {
     final extraTextHeight = (textScale > 1.0) ? (textScale - 1.0) * 36.0 : 0.0;
 
     // Dynamic Body Height Allocation (without description):
-    // - Title Row (up to 2 lines with Veg icon): ~34px
+    // - Title Row (up to 2 lines with Veg icon): ~36px
     // - Bottom Row (Price + Add Button): ~30px
-    // - Padding: 16px (8 top + 8 bottom)
-    final bodyHeight = 82.0 + extraTextHeight;
+    // - Padding: 17px (8 top + 9 bottom)
+    final bodyHeight = 88.0 + extraTextHeight;
     final cardHeight = (cardWidth / 1.25) + bodyHeight;
     final childAspectRatio = cardWidth / cardHeight;
 

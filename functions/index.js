@@ -786,7 +786,9 @@ const {
  * - Executes deletion server-side using privileged Admin SDK credentials.
  * - Safe idempotent response when asset was already deleted / absent.
  */
-exports.deleteStorageAssetCallable = functions.https.onCall(async (data, context) => {
+exports.deleteStorageAssetCallable = functions
+  .runWith({ enforceAppCheck: true })
+  .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -825,7 +827,9 @@ exports.deleteStorageAssetCallable = functions.https.onCall(async (data, context
  * - Prevents cross-shop storage references.
  * - Updates authoritative Firestore document using Admin SDK credentials.
  */
-exports.updateCatalogImagePointerCallable = functions.https.onCall(async (data, context) => {
+exports.updateCatalogImagePointerCallable = functions
+  .runWith({ enforceAppCheck: true })
+  .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",

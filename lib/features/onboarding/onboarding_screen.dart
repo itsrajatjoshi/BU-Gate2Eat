@@ -67,9 +67,28 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
 
     if (!mounted) return;
-    if (AppAuthRoles.isAdminPhone(phone)) {
+
+    // 1. Authoritative: Prioritize canonical Firebase Auth identity
+    CurrentIdentity? currentIdentity;
+    try {
+      currentIdentity = ref.read(currentIdentityProvider);
+    } catch (_) {}
+
+    if (currentIdentity != null && currentIdentity.isAuthenticated) {
+      if (currentIdentity.isAdmin) {
+        context.go(AppRoutes.admin);
+      } else if (currentIdentity.isShopkeeper) {
+        context.go(AppRoutes.shopkeeper);
+      } else {
+        context.go(AppRoutes.home);
+      }
+      return;
+    }
+
+    // 2. Unauthenticated / offline test fallback (DEBUG ONLY)
+    if (AppAuthRoles.isPhoneFallbackAllowed && AppAuthRoles.isAdminPhone(phone)) {
       context.go(AppRoutes.admin);
-    } else if (AppAuthRoles.isShopkeeperPhone(phone)) {
+    } else if (AppAuthRoles.isPhoneFallbackAllowed && AppAuthRoles.isShopkeeperPhone(phone)) {
       context.go(AppRoutes.shopkeeper);
     } else {
       context.go(AppRoutes.home);

@@ -1,8 +1,6 @@
 // BU Gate2Eat — Security Architecture
 // Environment Configuration & Target Definition
 
-import 'package:flutter/foundation.dart';
-
 /// Supported deployment environments for the YummBU platform.
 enum Environment {
   /// Local developer workstation and unit/widget test runs.

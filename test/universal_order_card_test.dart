@@ -4,7 +4,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bugate2eat_app/core/constants/app_constants.dart';
 import 'package:bugate2eat_app/features/orders/widgets/universal_order_card.dart';
 import 'package:bugate2eat_app/models/order_model.dart';
 

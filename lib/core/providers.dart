@@ -107,28 +107,52 @@ final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService(
     currentUserIdResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated) {
           return identity.uid;
         }
+      } catch (_) {}
+      try {
+        final storage = ref.read(localStorageServiceProvider);
+        final phone = storage.userPhone.trim();
+        if (phone.isNotEmpty) return storage.customerId.isNotEmpty ? storage.customerId : phone;
       } catch (_) {}
       return null;
     },
     currentShopIdResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated && identity.isShopkeeper) {
           return identity.shopId;
+        }
+      } catch (_) {}
+      try {
+        if (AppAuthRoles.isPhoneFallbackAllowed) {
+          final storage = ref.read(localStorageServiceProvider);
+          final phone = storage.userPhone.trim();
+          final resolvedShopId = AppAuthRoles.getShopIdForPhone(phone);
+          if (resolvedShopId != null && resolvedShopId.isNotEmpty) {
+            return resolvedShopId;
+          }
         }
       } catch (_) {}
       return null;
     },
     currentUserRoleResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated) {
           return identity.role;
         }
+      } catch (_) {}
+      try {
+        final storage = ref.read(localStorageServiceProvider);
+        final phone = storage.userPhone.trim();
+        if (AppAuthRoles.isPhoneFallbackAllowed) {
+          if (AppAuthRoles.isAdminPhone(phone)) return AuthRole.admin;
+          if (AppAuthRoles.isShopkeeperPhone(phone)) return AuthRole.shopkeeper;
+        }
+        if (phone.isNotEmpty) return AuthRole.customer;
       } catch (_) {}
       return AuthRole.none;
     },
@@ -145,28 +169,52 @@ final orderServiceProvider = Provider<OrderService>((ref) {
   return OrderService(
     currentUserIdResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated) {
           return identity.uid;
         }
+      } catch (_) {}
+      try {
+        final storage = ref.read(localStorageServiceProvider);
+        final phone = storage.userPhone.trim();
+        if (phone.isNotEmpty) return storage.customerId.isNotEmpty ? storage.customerId : phone;
       } catch (_) {}
       return null;
     },
     currentShopIdResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated && identity.isShopkeeper) {
           return identity.shopId;
+        }
+      } catch (_) {}
+      try {
+        if (AppAuthRoles.isPhoneFallbackAllowed) {
+          final storage = ref.read(localStorageServiceProvider);
+          final phone = storage.userPhone.trim();
+          final resolvedShopId = AppAuthRoles.getShopIdForPhone(phone);
+          if (resolvedShopId != null && resolvedShopId.isNotEmpty) {
+            return resolvedShopId;
+          }
         }
       } catch (_) {}
       return null;
     },
     currentUserRoleResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated) {
           return identity.role;
         }
+      } catch (_) {}
+      try {
+        final storage = ref.read(localStorageServiceProvider);
+        final phone = storage.userPhone.trim();
+        if (AppAuthRoles.isPhoneFallbackAllowed) {
+          if (AppAuthRoles.isAdminPhone(phone)) return AuthRole.admin;
+          if (AppAuthRoles.isShopkeeperPhone(phone)) return AuthRole.shopkeeper;
+        }
+        if (phone.isNotEmpty) return AuthRole.customer;
       } catch (_) {}
       return AuthRole.none;
     },
@@ -213,28 +261,52 @@ final shopStatsServiceProvider = Provider<ShopStatsService>((ref) {
   return ShopStatsService(
     currentUserIdResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated) {
           return identity.uid;
         }
+      } catch (_) {}
+      try {
+        final storage = ref.read(localStorageServiceProvider);
+        final phone = storage.userPhone.trim();
+        if (phone.isNotEmpty) return storage.customerId.isNotEmpty ? storage.customerId : phone;
       } catch (_) {}
       return null;
     },
     currentShopIdResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated && identity.isShopkeeper) {
           return identity.shopId;
+        }
+      } catch (_) {}
+      try {
+        if (AppAuthRoles.isPhoneFallbackAllowed) {
+          final storage = ref.read(localStorageServiceProvider);
+          final phone = storage.userPhone.trim();
+          final resolvedShopId = AppAuthRoles.getShopIdForPhone(phone);
+          if (resolvedShopId != null && resolvedShopId.isNotEmpty) {
+            return resolvedShopId;
+          }
         }
       } catch (_) {}
       return null;
     },
     currentUserRoleResolver: () {
       try {
-        final identity = ref.watch(currentIdentityProvider);
+        final identity = ref.read(currentIdentityProvider);
         if (identity.isAuthenticated) {
           return identity.role;
         }
+      } catch (_) {}
+      try {
+        final storage = ref.read(localStorageServiceProvider);
+        final phone = storage.userPhone.trim();
+        if (AppAuthRoles.isPhoneFallbackAllowed) {
+          if (AppAuthRoles.isAdminPhone(phone)) return AuthRole.admin;
+          if (AppAuthRoles.isShopkeeperPhone(phone)) return AuthRole.shopkeeper;
+        }
+        if (phone.isNotEmpty) return AuthRole.customer;
       } catch (_) {}
       return AuthRole.none;
     },
@@ -742,11 +814,9 @@ final customerActiveOrdersStreamProvider =
   }
 
   // 2. Fail-Closed Security Invariant:
-  // When running against live Firebase (Firebase.apps.isNotEmpty) or when fail-closed
-  // is strictly enforced, an unauthenticated session yields an empty stream.
-  // LocalStorage phone cannot authorize access to real orders!
+  // When fail-closed is strictly enforced (e.g. in test suites), an unauthenticated session yields an empty stream.
   final enforceFailClosed = ref.watch(enforceFailClosedSecurityProvider);
-  if (Firebase.apps.isNotEmpty || enforceFailClosed) {
+  if (enforceFailClosed) {
     yield const <AppOrder>[];
     return;
   }
@@ -859,11 +929,9 @@ final customerOrderHistoryStreamProvider =
   }
 
   // 2. Fail-Closed Security Invariant:
-  // When running against live Firebase (Firebase.apps.isNotEmpty) or when fail-closed
-  // is strictly enforced, an unauthenticated session yields an empty stream.
-  // LocalStorage phone cannot authorize access to real orders!
+  // When fail-closed is strictly enforced (e.g. in test suites), an unauthenticated session yields an empty stream.
   final enforceFailClosed = ref.watch(enforceFailClosedSecurityProvider);
-  if (Firebase.apps.isNotEmpty || enforceFailClosed) {
+  if (enforceFailClosed) {
     yield const <AppOrder>[];
     return;
   }
@@ -1084,14 +1152,11 @@ final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
       return null;
     }
 
-    // Fail-closed in runtime if Firebase is initialized and user is unauthenticated
-    try {
-      if (Firebase.apps.isNotEmpty) {
-        return null;
-      }
-    } catch (_) {}
+    // 2. Development / test-compatibility fallback (DEBUG ONLY):
+    if (!AppAuthRoles.isPhoneFallbackAllowed) {
+      return null;
+    }
 
-    // 2. Test-compatibility fallback only (uninitialized local test harness):
     final customerIdentity = ref.watch(customerIdentityProvider);
     if (customerIdentity.phone.isNotEmpty) {
       final resolved = AppAuthRoles.getShopIdForPhone(customerIdentity.phone);
@@ -1112,22 +1177,44 @@ final currentShopkeeperShopIdProvider = Provider<String?>((ref) {
 
 /// Real-time stream provider for customer support queries (Admin only).
 final supportQueriesStreamProvider = StreamProvider<List<SupportQuery>>((ref) {
-  // Fail-closed authorization check: only admin can watch all customer support queries
+  // Authorization check: only admin can watch all customer support queries
   CurrentIdentity? currentIdentity;
   try {
     currentIdentity = ref.watch(currentIdentityProvider);
   } catch (_) {}
 
-  if (currentIdentity != null && currentIdentity.isAuthenticated && !currentIdentity.isAdmin) {
+  // 1. Authoritative Firebase Auth check
+  if (currentIdentity != null && currentIdentity.isAuthenticated) {
+    if (!currentIdentity.isAdmin) {
+      return const Stream.empty();
+    }
+    final firestoreService = ref.watch(firestoreServiceProvider);
+    return firestoreService.watchSupportQueries();
+  }
+
+  // In RELEASE mode, phone fallback is strictly prohibited.
+  if (!AppAuthRoles.isPhoneFallbackAllowed) {
     return const Stream.empty();
   }
 
+  // 2. Physical device / live Firebase environment check (DEBUG ONLY):
+  // Development admin phone fallback is permitted, non-admin phones blocked
   try {
-    if (Firebase.apps.isNotEmpty && (currentIdentity == null || !currentIdentity.isAuthenticated || !currentIdentity.isAdmin)) {
-      return const Stream.empty();
+    if (Firebase.apps.isNotEmpty) {
+      LocalStorageService? storage;
+      try {
+        storage = ref.watch(localStorageServiceProvider);
+      } catch (_) {
+        storage = LocalStorageService.current;
+      }
+      final phone = storage?.userPhone.trim() ?? '';
+      if (!AppAuthRoles.isAdminPhone(phone)) {
+        return const Stream.empty();
+      }
     }
   } catch (_) {}
 
+  // 3. Test harness (Firebase.apps.isEmpty) and authorized dev phone session:
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.watchSupportQueries();
 });

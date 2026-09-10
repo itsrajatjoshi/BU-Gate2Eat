@@ -1,7 +1,6 @@
 // BU Gate2Eat — Router Configuration
 // GoRouter setup with splash → onboarding → home flow
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -91,7 +90,23 @@ String? centralRouteGuard(BuildContext context, GoRouterState state) {
     }
   }
 
-  // 2. Unauthenticated / test mock fallback
+  // 2. Unauthenticated development / test mock fallback (DEBUG ONLY)
+  // INVARIANT: In RELEASE mode, phone fallback is strictly prohibited.
+  // Privileged routes (/admin, /shopkeeper) fail-closed to /home or /onboarding.
+  if (!AppAuthRoles.isPhoneFallbackAllowed) {
+    if (isAdminRoute || isShopkeeperRoute) {
+      LocalStorageService? storage;
+      try {
+        storage = ProviderScope.containerOf(context, listen: false).read(localStorageServiceProvider);
+      } catch (_) {
+        storage = LocalStorageService.current;
+      }
+      final phone = storage?.userPhone.trim() ?? '';
+      final hasSession = storage != null && phone.isNotEmpty && storage.isOnboarded;
+      return hasSession ? AppRoutes.home : AppRoutes.onboarding;
+    }
+  }
+
   LocalStorageService? storage;
   try {
     storage = ProviderScope.containerOf(context, listen: false).read(localStorageServiceProvider);
@@ -103,28 +118,14 @@ String? centralRouteGuard(BuildContext context, GoRouterState state) {
   final hasSession = storage != null && phone.isNotEmpty && storage.isOnboarded;
 
   if (isAdminRoute) {
-    // In live runtime with Firebase initialized, an unauthenticated caller cannot access /admin
-    try {
-      if (Firebase.apps.isNotEmpty) {
-        return hasSession ? AppRoutes.home : AppRoutes.onboarding;
-      }
-    } catch (_) {}
-
-    if (AppAuthRoles.isAdminPhone(phone)) {
+    if (AppAuthRoles.isPhoneFallbackAllowed && AppAuthRoles.isAdminPhone(phone)) {
       return null;
     }
     return hasSession ? AppRoutes.home : AppRoutes.onboarding;
   }
 
   if (isShopkeeperRoute) {
-    // In live runtime with Firebase initialized, an unauthenticated caller cannot access /shopkeeper
-    try {
-      if (Firebase.apps.isNotEmpty) {
-        return hasSession ? AppRoutes.home : AppRoutes.onboarding;
-      }
-    } catch (_) {}
-
-    if (AppAuthRoles.isShopkeeperPhone(phone)) {
+    if (AppAuthRoles.isPhoneFallbackAllowed && AppAuthRoles.isShopkeeperPhone(phone)) {
       return null;
     }
     return hasSession ? AppRoutes.home : AppRoutes.onboarding;

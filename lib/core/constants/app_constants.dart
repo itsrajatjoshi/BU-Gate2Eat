@@ -1,6 +1,7 @@
 // BU Gate2Eat — Core Constants
 // App-wide color palette, spacing, and configuration
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 // ─── Brand Colors ──────────────────────────────────────────────
@@ -98,6 +99,21 @@ class AppConfig {
 // ─── Auth Roles & Phone Mappings ──────────────────────────────
 class AppAuthRoles {
   AppAuthRoles._();
+
+  /// Whether unauthenticated phone-based authorization fallback is permitted.
+  /// INVARIANT:
+  /// - DEBUG / LOCAL DEVELOPMENT: Allowed to support legacy dev hardware testing.
+  /// - RELEASE / PRODUCTION (kReleaseMode): Strictly prohibited. Privileged access
+  ///   (Admin / Shopkeeper) MUST derive exclusively from trusted Firebase Auth Custom Claims.
+  @visibleForTesting
+  static bool? overrideAllowPhoneFallbackForTesting;
+
+  static bool get isPhoneFallbackAllowed {
+    if (overrideAllowPhoneFallbackForTesting != null) {
+      return overrideAllowPhoneFallbackForTesting!;
+    }
+    return !kReleaseMode;
+  }
 
   static const String adminPhone = '8078643910';
 

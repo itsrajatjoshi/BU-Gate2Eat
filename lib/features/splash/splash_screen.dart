@@ -189,12 +189,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return;
     }
 
-    // 2. Unauthenticated / offline test mock fallback
+    // 2. Unauthenticated / offline test mock fallback (DEBUG ONLY)
     if (localStorage.isOnboarded) {
       final phone = localStorage.userPhone;
-      if (AppAuthRoles.isAdminPhone(phone)) {
+      if (AppAuthRoles.isPhoneFallbackAllowed && AppAuthRoles.isAdminPhone(phone)) {
         context.go(AppRoutes.admin);
-      } else if (AppAuthRoles.isShopkeeperPhone(phone)) {
+      } else if (AppAuthRoles.isPhoneFallbackAllowed && AppAuthRoles.isShopkeeperPhone(phone)) {
         context.go(AppRoutes.shopkeeper);
       } else {
         context.go(AppRoutes.home);

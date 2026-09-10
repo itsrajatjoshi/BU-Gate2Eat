@@ -379,55 +379,66 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
                                   const SizedBox(height: 24),
 
-                                  // ─── 6 Individual OTP Boxes (52px Height Target) ───
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: List.generate(_otpLength, (index) {
-                                      final hasError = _errorMessage != null;
-                                      final isFocused = _focusNodes[index].hasFocus;
+                                  // ─── 6 Individual OTP Boxes (52px Height Target, Responsive) ───
+                                  LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final availableWidth = constraints.maxWidth;
+                                      final double horizontalMargin = availableWidth < 330
+                                          ? 2.5
+                                          : (availableWidth < 360 ? 3.0 : 4.0);
+                                      final double totalMargin = _otpLength * (horizontalMargin * 2);
+                                      final double boxWidth = ((availableWidth - totalMargin - 4.0) / _otpLength)
+                                          .floorToDouble()
+                                          .clamp(36.0, 46.0);
 
-                                      return Container(
-                                        width: 46,
-                                        height: 52,
-                                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.surface,
-                                          borderRadius: BorderRadius.circular(14),
-                                          border: Border.all(
-                                            color: hasError
-                                                ? AppColors.error
-                                                : isFocused
-                                                    ? AppColors.primary
-                                                    : const Color(0xFFEBE6E0),
-                                            width: isFocused ? 2.0 : 1.2,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(alpha: 0.03),
-                                              blurRadius: 6,
-                                              offset: const Offset(0, 2),
+                                      return Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: List.generate(_otpLength, (index) {
+                                          final hasError = _errorMessage != null;
+                                          final isFocused = _focusNodes[index].hasFocus;
+
+                                          return Container(
+                                            width: boxWidth,
+                                            height: 52,
+                                            margin: EdgeInsets.symmetric(horizontal: horizontalMargin),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.surface,
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: hasError
+                                                    ? AppColors.error
+                                                    : isFocused
+                                                        ? AppColors.primary
+                                                        : const Color(0xFFEBE6E0),
+                                                width: isFocused ? 2.0 : 1.2,
+                                              ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.03),
+                                                  blurRadius: 6,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ],
                                             ),
-                                          ],
-                                        ),
-                                        child: KeyboardListener(
-                                          focusNode: FocusNode(),
-                                          onKeyEvent: (event) {
-                                            if (event is KeyDownEvent &&
-                                                event.logicalKey ==
-                                                    LogicalKeyboardKey.backspace &&
-                                                _controllers[index].text.isEmpty) {
-                                              _onBackspace(index);
-                                            }
-                                          },
-                                          child: Center(
-                                            child: TextField(
-                                              controller: _controllers[index],
-                                              focusNode: _focusNodes[index],
-                                              textAlign: TextAlign.center,
-                                              keyboardType: TextInputType.number,
-                                              textInputAction: TextInputAction.done,
-                                              onSubmitted: (_) => FocusScope.of(context).unfocus(),
-                                              style: GoogleFonts.outfit(
+                                            child: KeyboardListener(
+                                              focusNode: FocusNode(),
+                                              onKeyEvent: (event) {
+                                                if (event is KeyDownEvent &&
+                                                    event.logicalKey ==
+                                                        LogicalKeyboardKey.backspace &&
+                                                    _controllers[index].text.isEmpty) {
+                                                  _onBackspace(index);
+                                                }
+                                              },
+                                              child: Center(
+                                                child: TextField(
+                                                  controller: _controllers[index],
+                                                  focusNode: _focusNodes[index],
+                                                  textAlign: TextAlign.center,
+                                                  keyboardType: TextInputType.number,
+                                                  textInputAction: TextInputAction.done,
+                                                  onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                                                  style: GoogleFonts.outfit(
                                                 fontSize: 22,
                                                 fontWeight: FontWeight.w700,
                                                 color: AppColors.textPrimary,
@@ -451,7 +462,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                                         ),
                                       );
                                     }),
-                                  ),
+                                  );
+                                },
+                              ),
 
                                   if (_errorMessage != null) ...[
                                     const SizedBox(height: 8),
